@@ -3,6 +3,8 @@ extern crate pest_derive;
 
 mod parser;
 
+pub use parser::{parse, RExp};
+
 #[cfg(test)]
 mod tests {
     use crate::parser::{parse, RExp};
