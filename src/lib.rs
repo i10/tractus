@@ -21,4 +21,16 @@ mod tests {
             .collect();
         assert_eq!(Ok(expected), result);
     }
+
+    #[test]
+    fn parses_assignments() {
+        let code = "a <- 1
+b = 2";
+        let result = parse(code);
+        let expected = vec![
+            RExp::Assignment("a".into(), "1".into()),
+            RExp::Assignment("b".into(), "2".into()),
+        ];
+        assert_eq!(Ok(expected), result);
+    }
 }
