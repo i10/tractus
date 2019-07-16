@@ -2,7 +2,11 @@ WHITESPACE = _{ " " | "\t" }
 file = { SOI ~ row ~ (NEWLINE ~ row?)* ~ EOI }
 row = _{ WHITESPACE* ~ line ~ WHITESPACE* }
 line = { comment | empty }
+
 comment = @{ "#" ~ character* }
 empty = @{ "" }
 
-character = @{ !NEWLINE ~ ANY }
+identifier = @{ !(ASCII_DIGIT | "_" | "." ~ ASCII_DIGIT) ~ identifier_character+ }
+
+character = _@{ !NEWLINE ~ ANY }
+identifier_character = _@{ ASCII_ALPHANUMERIC | "." | "_" }
