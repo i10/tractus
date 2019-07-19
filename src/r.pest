@@ -1,7 +1,7 @@
 WHITESPACE = _{ " " | "\t" }
 file = { SOI ~ row ~ (NEWLINE ~ row?)* ~ EOI }
 row = _{ WHITESPACE* ~ line ~ WHITESPACE* }
-line = { (assignment | function)? ~ comment? }
+line = { (assignment | library | function )? ~ comment? }
 
 assignment = { identifier ~ ("<-" | "=") ~ expression}
 comment = @{ "#" ~ character* }
@@ -18,6 +18,8 @@ arguments = { argument? ~ ("," ~ argument)* }
 argument = _{ named_argument | unnamed_argument }
 named_argument = { identifier ~ "=" ~ expression }
 unnamed_argument = { expression }
+
+library = { "library(" ~ identifier ~ ")"}
 
 character = _{ !NEWLINE ~ ANY }
 identifier_character = _{ ASCII_ALPHANUMERIC | "." | "_" }

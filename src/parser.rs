@@ -9,6 +9,7 @@ pub enum RExp {
     Comment(String),
     Assignment(String, String),
     Call(String, Vec<(Option<String>, String)>),
+    Library(String),
 }
 
 type Error = pest::error::Error<Rule>;
@@ -67,6 +68,10 @@ pub fn parse(code: &'static str) -> Result<Vec<RExp>, Error> {
                                     None => vec![],
                                 };
                                 Some(RExp::Call(name.as_str().to_string(), args))
+                            }
+                            Rule::library => {
+                                let name = line.into_inner().next().unwrap(); // Library name always exists.
+                                Some(RExp::Library(name.as_str().to_string()))
                             }
                             _ => None,
                         }

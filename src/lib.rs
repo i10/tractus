@@ -71,4 +71,17 @@ b <- \"second\"";
         ];
         assert_eq!(Ok(expected), result);
     }
+
+    #[test]
+    fn parses_library_calls() {
+        let code = "\
+library(plyr)
+library(MASS)";
+        let result = parse(code);
+        let expected= vec![
+            RExp::Library("plyr".into()),
+            RExp::Library("MASS".into())
+        ];
+        assert_eq!(Ok(expected), result);
+    }
 }
