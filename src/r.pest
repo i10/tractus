@@ -11,7 +11,7 @@ expression = { identifier | constant | function }
 identifier = @{ !(ASCII_DIGIT | "_" | "." ~ ASCII_DIGIT) ~ identifier_character+ }
 constant = @{ number | "NULL" | "NA" | "Inf" | "NaN" | "TRUE" | "FALSE" | string }
 number = @{ ASCII_DIGIT+ }
-string = @{ "\"" ~ ( "\\\"" | !"\"" ~ ANY ) ~ "\"" | "'" ~ ( "\\'" | !"\\'" ~ ANY ) ~ "'"}
+string = @{ "\"" ~ ( "\\\"" | !"\"" ~ ANY )* ~ "\"" | "'" ~ ( "\\'" | !"'" ~ ANY )* ~ "'"}
 
 function = { identifier ~ "(" ~ arguments ~ ")" }
 arguments = { argument? ~ ("," ~ argument)* }

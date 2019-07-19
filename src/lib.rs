@@ -58,4 +58,17 @@ with_args(1, x, name = value)";
         ];
         assert_eq!(Ok(expected), result);
     }
+
+    #[test]
+    fn parses_strings() {
+        let code = "\
+a <- 'first'
+b <- \"second\"";
+        let result = parse(code);
+        let expected = vec![
+            RExp::Assignment("a".into(), "'first'".into()),
+            RExp::Assignment("b".into(), "\"second\"".into()),
+        ];
+        assert_eq!(Ok(expected), result);
+    }
 }
