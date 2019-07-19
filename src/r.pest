@@ -1,14 +1,23 @@
 WHITESPACE = _{ " " | "\t" }
 file = { SOI ~ row ~ (NEWLINE ~ row?)* ~ EOI }
 row = _{ WHITESPACE* ~ line ~ WHITESPACE* }
-line = { (assignment)? ~ comment? }
+line = { (assignment | function)? ~ comment? }
 
-assignment = { identifier ~ ("<-" | "=") ~ value }
+assignment = { identifier ~ ("<-" | "=") ~ expression}
 comment = @{ "#" ~ character* }
 empty = @{ "" }
 
-value = @{ ASCII_DIGIT+ | identifier }
+expression = { identifier | constant | function }
 identifier = @{ !(ASCII_DIGIT | "_" | "." ~ ASCII_DIGIT) ~ identifier_character+ }
+constant = @{ number | "NULL" | "NA" | "Inf" | "NaN" | "TRUE" | "FALSE" | string }
+number = @{ ASCII_DIGIT+ }
+string = @{ "\"" ~ ( "\\\"" | !"\"" ~ ANY ) ~ "\"" | "'" ~ ( "\\'" | !"\\'" ~ ANY ) ~ "'"}
+
+function = { identifier ~ "(" ~ arguments ~ ")" }
+arguments = { argument? ~ ("," ~ argument)* }
+argument = _{ named_argument | unnamed_argument }
+named_argument = { identifier ~ "=" ~ expression }
+unnamed_argument = { expression }
 
 character = _{ !NEWLINE ~ ANY }
 identifier_character = _{ ASCII_ALPHANUMERIC | "." | "_" }

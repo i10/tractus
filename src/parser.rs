@@ -8,6 +8,7 @@ struct RParser;
 pub enum RExp {
     Comment(String),
     Assignment(String, String),
+    Call(String, Vec<(Option<String>, String)>),
 }
 
 type Error = pest::error::Error<Rule>;
@@ -34,6 +35,38 @@ pub fn parse(code: &'static str) -> Result<Vec<RExp>, Error> {
                                     left.as_str().to_string(),
                                     right.as_str().to_string(),
                                 ))
+                            }
+                            Rule::function => {
+                                let mut function = line.into_inner();
+                                let name = function.next().unwrap(); // Function name always exists.
+                                let maybe_arguments = function.next();
+                                let args = match maybe_arguments {
+                                    Some(args) => {
+                                        args.into_inner()
+                                            .map(|arg| {
+                                                match arg.as_rule() {
+                                                    Rule::named_argument => {
+                                                        let mut argument = arg.into_inner();
+                                                        let key = argument.next().unwrap(); // Key always exists.
+                                                        let value = argument.next().unwrap(); // Value always exists.
+                                                        (
+                                                            Some(key.as_str().to_string()),
+                                                            value.as_str().to_string(),
+                                                        )
+                                                    }
+                                                    Rule::unnamed_argument => {
+                                                        let value =
+                                                            arg.into_inner().next().unwrap(); // Argument's value always exists.
+                                                        (None, value.as_str().to_string())
+                                                    }
+                                                    _ => unreachable!(),
+                                                }
+                                            })
+                                            .collect()
+                                    }
+                                    None => vec![],
+                                };
+                                Some(RExp::Call(name.as_str().to_string(), args))
                             }
                             _ => None,
                         }
