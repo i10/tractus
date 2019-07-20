@@ -1,5 +1,6 @@
-use pest::Parser;
 
+use itertools::Itertools;
+use pest::Parser;
 #[derive(Parser)]
 #[grammar = "r.pest"]
 struct RParser;
@@ -20,6 +21,7 @@ pub enum RExp {
     Call(RIdentifier, Vec<(Option<RIdentifier>, RExp)>),
     Column(Box<RExp>, Box<RExp>),
     Index(Box<RExp>, Vec<RExp>),
+    Formula(RFormula),
 }
 
 impl RExp {
@@ -30,6 +32,23 @@ impl RExp {
     pub fn variable(content: &'static str) -> RExp {
         RExp::Variable(content.to_string())
     }
+}
+
+#[derive(PartialEq, Debug)]
+pub enum RFormula {
+    OneSided(RFormulaExpression),
+    TwoSided(RIdentifier, RFormulaExpression),
+}
+
+#[derive(PartialEq, Debug)]
+pub enum RFormulaExpression {
+    Variable(RIdentifier),
+    Plus(Box<RFormulaExpression>, RIdentifier),
+    Minus(Box<RFormulaExpression>, RIdentifier),
+    Colon(Box<RFormulaExpression>, RIdentifier),
+    Star(Box<RFormulaExpression>, RIdentifier),
+    In(Box<RFormulaExpression>, RIdentifier),
+    Hat(Box<RFormulaExpression>, RIdentifier),
 }
 
 pub type RIdentifier = String;
@@ -77,7 +96,6 @@ pub fn parse(code: &'static str) -> Result<Vec<RStmt>, Error> {
 }
 
 fn parse_expression(expression_pair: pest::iterators::Pair<'_, Rule>) -> RExp {
-    println!("{:?}", expression_pair);
     let mut whole_expression = expression_pair.into_inner();
     let expression = whole_expression.next().unwrap(); // Expression is always non-empty.
     let mut rexp = match expression.as_rule() {
@@ -113,6 +131,25 @@ fn parse_expression(expression_pair: pest::iterators::Pair<'_, Rule>) -> RExp {
             };
             RExp::Call(name.as_str().into(), args)
         }
+        Rule::formula => {
+            let formula_kind = expression.into_inner().next().unwrap(); // Formula always has a kind.
+            println!("{:?}", formula_kind);
+            match formula_kind.as_rule() {
+                Rule::one_sided => {
+                    let right = formula_kind.into_inner();
+                    RExp::Formula(RFormula::OneSided(parse_formula_expression(right)))
+                }
+                Rule::two_sided => {
+                    let mut formula = formula_kind.into_inner();
+                    let left = formula.next().unwrap(); // Two-sided formula always has left side.
+                    RExp::Formula(RFormula::TwoSided(
+                        left.as_str().into(),
+                        parse_formula_expression(formula),
+                    ))
+                }
+                _ => unreachable!(),
+            }
+        }
         _ => unreachable!(),
     };
 
@@ -129,4 +166,18 @@ fn parse_expression(expression_pair: pest::iterators::Pair<'_, Rule>) -> RExp {
     }
 
     rexp
+}
+
+fn parse_formula_expression(
+    mut expression: pest::iterators::Pairs<'_, Rule>,
+) -> RFormulaExpression {
+    let first = expression.next().unwrap();
+    let mut result = RFormulaExpression::Variable(first.as_str().into()); // Right-hand side of formula always has at least one element.
+    for (operator, right) in expression.tuples() {
+        match operator.as_str() {
+            "+" => result = RFormulaExpression::Plus(Box::new(result), right.as_str().into()),
+            _ => unreachable!(),
+        }
+    }
+    result
 }

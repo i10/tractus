@@ -10,7 +10,7 @@ empty = @{ "" }
 
 // Take care to prevent left recursion. See https://math.stackexchange.com/a/140049
 expression = ${ non_indexing ~ indexing* }
-non_indexing = _{ function | identifier | constant  } // Terminates
+non_indexing = _{ function | formula | identifier | constant  } // Terminates
 indexing = _{ (column | index) } // Recursive
 column = !{ "$" ~ identifier }
 index = !{ "[" ~ expression? ~ ("," ~ expression)* ~ "]" }
@@ -29,3 +29,9 @@ named_argument = { identifier ~ "=" ~ expression }
 unnamed_argument = { expression }
 
 library = { "library(" ~ identifier ~ ")"}
+
+formula = !{ one_sided | two_sided }
+one_sided = { "~" ~ formula_right_side }
+two_sided = { identifier? ~ "~" ~ formula_right_side }
+formula_right_side = _{ identifier ~ (formula_operator ~ identifier)* }
+formula_operator = { "+" }

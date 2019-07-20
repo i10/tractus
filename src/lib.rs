@@ -3,11 +3,11 @@ extern crate pest_derive;
 
 mod parser;
 
-pub use parser::{parse, RExp, RStmt};
+pub use parser::{parse, RExp, RFormula, RFormulaExpression, RStmt};
 
 #[cfg(test)]
 mod tests {
-    use crate::parser::{parse, RExp, RStmt};
+    use crate::parser::{parse, RExp, RFormula, RFormulaExpression, RStmt};
 
     fn test_parse(code: &'static str) -> Vec<RStmt> {
         parse(code).unwrap_or_else(|e| panic!("{}", e))
@@ -125,6 +125,40 @@ get_matrix()$column[1]";
                 )),
                 vec![RExp::constant("1")],
             )),
+        ];
+        assert_eq!(expected, result);
+    }
+
+    #[test]
+    fn parses_formulae() {
+        let code = "\
+~ one_sided
+two ~ sided
+~ one + sided + multiple
+two ~ sided + multiple";
+        let result = test_parse(code);
+        let expected = vec![
+            RStmt::Expression(RExp::Formula(RFormula::OneSided(
+                RFormulaExpression::Variable("one_sided".into()),
+            ))),
+            RStmt::Expression(RExp::Formula(RFormula::TwoSided(
+                "two".into(),
+                RFormulaExpression::Variable("sided".into()),
+            ))),
+            RStmt::Expression(RExp::Formula(RFormula::OneSided(RFormulaExpression::Plus(
+                Box::new(RFormulaExpression::Plus(
+                    Box::new(RFormulaExpression::Variable("one".into())),
+                    "sided".into(),
+                )),
+                "multiple".into(),
+            )))),
+            RStmt::Expression(RExp::Formula(RFormula::TwoSided(
+                "two".into(),
+                RFormulaExpression::Plus(
+                    Box::new(RFormulaExpression::Variable("sided".into())),
+                    "multiple".into(),
+                ),
+            ))),
         ];
         assert_eq!(expected, result);
     }
