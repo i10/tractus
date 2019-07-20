@@ -3,11 +3,15 @@ extern crate pest_derive;
 
 mod parser;
 
-pub use parser::{parse, RExp};
+pub use parser::{parse, RExp, RStmt};
 
 #[cfg(test)]
 mod tests {
-    use crate::parser::{parse, RExp};
+    use crate::parser::{parse, RExp, RStmt};
+
+    fn test_parse(code: &'static str) -> Vec<RStmt> {
+        parse(code).unwrap_or_else(|e| panic!("{}", e))
+    }
 
     #[test]
     fn parses_comments() {
@@ -16,12 +20,12 @@ mod tests {
 #hello
 
 # another thing   ";
-        let result = parse(code);
-        let expected = vec!["#123", "#hello", "# another thing   "]
+        let result = test_parse(code);
+        let expected: Vec<RStmt> = vec!["#123", "#hello", "# another thing   "]
             .iter()
-            .map(|text| RExp::Comment(text.to_string()))
+            .map(|text| RStmt::Comment(text.to_string()))
             .collect();
-        assert_eq!(Ok(expected), result);
+        assert_eq!(expected, result);
     }
 
     #[test]
@@ -29,12 +33,12 @@ mod tests {
         let code = "\
 a <- 1
 b = 2";
-        let result = parse(code);
+        let result = test_parse(code);
         let expected = vec![
-            RExp::Assignment("a".into(), "1".into()),
-            RExp::Assignment("b".into(), "2".into()),
+            RStmt::Assignment(RExp::variable("a"), RExp::constant("1")),
+            RStmt::Assignment(RExp::variable("b"), RExp::constant("2")),
         ];
-        assert_eq!(Ok(expected), result);
+        assert_eq!(expected, result);
     }
 
     #[test]
@@ -43,33 +47,37 @@ b = 2";
 empty()
 single(1)
 with_args(1, x, name = value)";
-        let result = parse(code);
+        let result = test_parse(code);
         let expected = vec![
-            RExp::Call("empty".into(), vec![]),
-            RExp::Call("single".into(), vec![(None, "1".into())]),
-            RExp::Call(
+            RStmt::Expression(RExp::Call("empty".into(), vec![])),
+
+            RStmt::Expression(RExp::Call(
+                "single".into(),
+                vec![(None, RExp::constant("1"))],
+            )),
+            RStmt::Expression(RExp::Call(
                 "with_args".into(),
                 vec![
-                    (None, "1".into()),
-                    (None, "x".into()),
-                    (Some("name".into()), "value".into()),
+                    (None, RExp::constant("1")),
+                    (None, RExp::variable("x")),
+                    (Some("name".to_string()), RExp::variable("value")),
                 ],
-            ),
+            )),
         ];
-        assert_eq!(Ok(expected), result);
+        assert_eq!(expected, result);
     }
 
     #[test]
     fn parses_strings() {
         let code = "\
-a <- 'first'
-b <- \"second\"";
-        let result = parse(code);
+'first'
+\"second\"";
+        let result = test_parse(code);
         let expected = vec![
-            RExp::Assignment("a".into(), "'first'".into()),
-            RExp::Assignment("b".into(), "\"second\"".into()),
+            RStmt::Expression(RExp::constant("'first'")),
+            RStmt::Expression(RExp::constant("\"second\"")),
         ];
-        assert_eq!(Ok(expected), result);
+        assert_eq!(expected, result);
     }
 
     #[test]
@@ -77,11 +85,47 @@ b <- \"second\"";
         let code = "\
 library(plyr)
 library(MASS)";
-        let result = parse(code);
-        let expected= vec![
-            RExp::Library("plyr".into()),
-            RExp::Library("MASS".into())
+        let result = test_parse(code);
+        let expected = vec![RStmt::Library("plyr".into()), RStmt::Library("MASS".into())];
+        assert_eq!(expected, result);
+    }
+
+    #[test]
+    fn parses_indexing() {
+        let code = "\
+item$column
+item[other$thing]
+other[multiple, index, arguments]
+get_matrix()$column[1]";
+        let result = test_parse(code);
+        let expected = vec![
+            RStmt::Expression(RExp::Column(
+                Box::new(RExp::variable("item")),
+                Box::new(RExp::variable("column")),
+            )),
+            RStmt::Expression(RExp::Index(
+                Box::new(RExp::variable("item")),
+                vec![RExp::Column(
+                    Box::new(RExp::variable("other")),
+                    Box::new(RExp::variable("thing")),
+                )],
+            )),
+            RStmt::Expression(RExp::Index(
+                Box::new(RExp::variable("other")),
+                vec![
+                    RExp::variable("multiple"),
+                    RExp::variable("index"),
+                    RExp::variable("arguments"),
+                ],
+            )),
+            RStmt::Expression(RExp::Index(
+                Box::new(RExp::Column(
+                    Box::new(RExp::Call("get_matrix".into(), vec![])),
+                    Box::new(RExp::variable("column")),
+                )),
+                vec![RExp::constant("1")],
+            )),
         ];
-        assert_eq!(Ok(expected), result);
+        assert_eq!(expected, result);
     }
 }

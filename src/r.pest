@@ -1,25 +1,31 @@
 WHITESPACE = _{ " " | "\t" }
 file = { SOI ~ row ~ (NEWLINE ~ row?)* ~ EOI }
-row = _{ WHITESPACE* ~ line ~ WHITESPACE* }
-line = { (assignment | library | function )? ~ comment? }
+row = _{ WHITESPACE* ~ statement ~ WHITESPACE* }
+statement = { (assignment | library | expression)? ~ comment? }
 
-assignment = { identifier ~ ("<-" | "=") ~ expression}
+assignment = { expression ~ ("<-" | "=") ~ expression}
 comment = @{ "#" ~ character* }
+character = _{ !NEWLINE ~ ANY }
 empty = @{ "" }
 
-expression = { identifier | constant | function }
+// Take care to prevent left recursion. See https://math.stackexchange.com/a/140049
+expression = ${ non_indexing ~ indexing* }
+non_indexing = _{ function | identifier | constant  } // Terminates
+indexing = _{ (column | index) } // Recursive
+column = !{ "$" ~ identifier }
+index = !{ "[" ~ expression? ~ ("," ~ expression)* ~ "]" }
+
 identifier = @{ !(ASCII_DIGIT | "_" | "." ~ ASCII_DIGIT) ~ identifier_character+ }
-constant = @{ number | "NULL" | "NA" | "Inf" | "NaN" | "TRUE" | "FALSE" | string }
+identifier_character = _{ ASCII_ALPHANUMERIC | "." | "_" }
+
+constant = ${ number | string }
 number = @{ ASCII_DIGIT+ }
 string = @{ "\"" ~ ( "\\\"" | !"\"" ~ ANY )* ~ "\"" | "'" ~ ( "\\'" | !"'" ~ ANY )* ~ "'"}
 
-function = { identifier ~ "(" ~ arguments ~ ")" }
+function = !{ identifier ~ "(" ~ arguments ~ ")" }
 arguments = { argument? ~ ("," ~ argument)* }
 argument = _{ named_argument | unnamed_argument }
 named_argument = { identifier ~ "=" ~ expression }
 unnamed_argument = { expression }
 
 library = { "library(" ~ identifier ~ ")"}
-
-character = _{ !NEWLINE ~ ANY }
-identifier_character = _{ ASCII_ALPHANUMERIC | "." | "_" }
