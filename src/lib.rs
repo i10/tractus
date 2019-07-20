@@ -162,4 +162,25 @@ two ~ sided + multiple";
         ];
         assert_eq!(expected, result);
     }
+
+    #[test]
+    fn parses_function_definition() {
+        let code = "\
+func1 <- function () 1
+func2 <- function (with, arguments) 2
+func3 <- function (with, default = 'arguments') 3 ";
+        let result = test_parse(code);
+        let expected = vec![
+            RStmt::Assignment(RExp::variable("func1"), RExp::Function(
+                vec![], "1".into()
+            )),
+            RStmt::Assignment(RExp::variable("func2"), RExp::Function(
+                vec![("with".into(), None), ("arguments".into(), None)], "2".into()
+            )),
+            RStmt::Assignment(RExp::variable("func3"), RExp::Function(
+                vec![("with".into(), None), ("default".into(), Some(RExp::constant("'arguments'")))], "3".into()
+            )),
+        ];
+        assert_eq!(expected, result);
+    }
 }

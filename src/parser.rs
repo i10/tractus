@@ -22,6 +22,7 @@ pub enum RExp {
     Column(Box<RExp>, Box<RExp>),
     Index(Box<RExp>, Vec<RExp>),
     Formula(RFormula),
+    Function(Vec<(RIdentifier, Option<RExp>)>, String),
 }
 
 impl RExp {
@@ -101,7 +102,7 @@ fn parse_expression(expression_pair: pest::iterators::Pair<'_, Rule>) -> RExp {
     let mut rexp = match expression.as_rule() {
         Rule::constant => RExp::Constant(expression.as_str().to_string()),
         Rule::identifier => RExp::Variable(expression.as_str().to_string()),
-        Rule::function => {
+        Rule::function_call => {
             let mut function = expression.into_inner();
             let name = function.next().unwrap(); // Function name always exists.
             let maybe_arguments = function.next();
@@ -149,6 +150,25 @@ fn parse_expression(expression_pair: pest::iterators::Pair<'_, Rule>) -> RExp {
                 }
                 _ => unreachable!(),
             }
+        }
+        Rule::function_definition => {
+            let mut function = expression.into_inner();
+            let args = function.next().unwrap(); // Function always has (possibly empty) arguments.
+            let args: Vec<(RIdentifier, Option<RExp>)> = args
+                .into_inner()
+                .map(|arg| {
+                    match arg.as_rule() {
+                        Rule::required_parameter => (arg.as_str().into(), None),
+                        Rule::parameter_with_default => {
+                            let (arg, expression) = arg.into_inner().next_tuple().unwrap(); // Parameter with default always has name and default value.
+                            (arg.as_str().into(), Some(parse_expression(expression)))
+                        }
+                        _ => unreachable!(),
+                    }
+                })
+                .collect();
+            let body = function.next().unwrap(); // Function always has a body.
+            RExp::Function(args, body.as_str().into())
         }
         _ => unreachable!(),
     };

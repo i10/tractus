@@ -1,6 +1,5 @@
 WHITESPACE = _{ " " | "\t" }
-file = { SOI ~ row ~ (NEWLINE ~ row?)* ~ EOI }
-row = _{ WHITESPACE* ~ statement ~ WHITESPACE* }
+file = { SOI ~ statement ~ (NEWLINE ~ statement?)* ~ EOI }
 statement = { (assignment | library | expression)? ~ comment? }
 
 assignment = { expression ~ ("<-" | "=") ~ expression}
@@ -10,8 +9,8 @@ empty = @{ "" }
 
 // Take care to prevent left recursion. See https://math.stackexchange.com/a/140049
 expression = ${ non_indexing ~ indexing* }
-non_indexing = _{ function | formula | identifier | constant  } // Terminates
-indexing = _{ (column | index) } // Recursive
+non_indexing = _{ function_definition | function_call | formula | identifier | constant  }
+indexing = _{ (column | index) }
 column = !{ "$" ~ identifier }
 index = !{ "[" ~ expression? ~ ("," ~ expression)* ~ "]" }
 
@@ -22,7 +21,13 @@ constant = ${ number | string }
 number = @{ ASCII_DIGIT+ }
 string = @{ "\"" ~ ( "\\\"" | !"\"" ~ ANY )* ~ "\"" | "'" ~ ( "\\'" | !"'" ~ ANY )* ~ "'"}
 
-function = !{ identifier ~ "(" ~ arguments ~ ")" }
+function_definition = !{ "function" ~ "(" ~ parameters ~ ")" ~ expression }
+parameters = { parameter? ~ ("," ~ parameter)* }
+parameter = _{ parameter_with_default | required_parameter }
+required_parameter = { identifier }
+parameter_with_default = { identifier ~ "=" ~ expression }
+
+function_call = !{ identifier ~ "(" ~ arguments ~ ")" }
 arguments = { argument? ~ ("," ~ argument)* }
 argument = _{ named_argument | unnamed_argument }
 named_argument = { identifier ~ "=" ~ expression }
