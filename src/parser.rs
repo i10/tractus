@@ -55,7 +55,7 @@ pub type RIdentifier = String;
 
 type Error = pest::error::Error<Rule>;
 
-pub fn parse(code: &'static str) -> Result<Vec<RStmt>, Error> {
+pub fn parse(code: &str) -> Result<Vec<RStmt>, Error> {
     let mut parse_result = RParser::parse(Rule::file, code)?;
 
     let file = parse_result.next().unwrap();
