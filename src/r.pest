@@ -12,7 +12,7 @@ expression = ${ non_recursive ~ ( infix | indexing )* }
 non_recursive = _{ function_definition | function_call | formula | constant | identifier }
 indexing = _{ (column | index) }
 column = !{ "$" ~ identifier }
-index = !{ "[" ~ expression? ~ ("," ~ expression)* ~ "]" }
+index = !{ "[" ~ (expression | empty) ~ ("," ~ (expression | empty))* ~ "]" }
 infix = !{ WHITESPACE* ~ infix_operator ~ expression }
 infix_operator = { "<" | "<=" | ">" | ">=" | "==" | "!=" | "+" | "-" | "*" | "/" | "^" | "&&" | "||" | custom_infix_operator }
 custom_infix_operator = { "%" ~ (!("%" | WHITESPACE | NEWLINE) ~ ANY)* ~ "%" }

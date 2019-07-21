@@ -20,7 +20,7 @@ pub enum RExp {
     Variable(RIdentifier),
     Call(RIdentifier, Vec<(Option<RIdentifier>, RExp)>),
     Column(Box<RExp>, Box<RExp>),
-    Index(Box<RExp>, Vec<RExp>),
+    Index(Box<RExp>, Vec<Option<RExp>>),
     Formula(RFormula),
     Function(Vec<(RIdentifier, Option<RExp>)>, String),
     Infix(String, Box<RExp>, Box<RExp>),
@@ -179,14 +179,25 @@ fn parse_expression(expression_pair: pest::iterators::Pair<'_, Rule>) -> RExp {
         match infix.as_rule() {
             Rule::column => rexp = RExp::Column(Box::new(rexp), Box::new(parse_expression(infix))),
             Rule::index => {
-                let indices = infix.into_inner().map(parse_expression).collect();
+                let indices = infix
+                    .into_inner()
+                    .map(|maybe_expression| match maybe_expression.as_rule() {
+                        Rule::expression => Some(parse_expression(maybe_expression)),
+                        Rule::empty => None,
+                        _ => unreachable!(),
+                    })
+                    .collect();
                 rexp = RExp::Index(Box::new(rexp), indices)
             }
             Rule::infix => {
                 let mut infix_operator = infix.into_inner();
                 let operator = infix_operator.next().unwrap(); // Operator is always present.
                 let right = infix_operator.next().unwrap(); // Infix operator always has right-hand side.
-                rexp = RExp::Infix(operator.as_str().into(), Box::new(rexp), Box::new(parse_expression(right)));
+                rexp = RExp::Infix(
+                    operator.as_str().into(),
+                    Box::new(rexp),
+                    Box::new(parse_expression(right)),
+                );
             }
             _ => unreachable!(),
         }

@@ -96,7 +96,8 @@ library(MASS)";
 item$column
 item[other$thing]
 other[multiple, index, arguments]
-get_matrix()$column[1]";
+get_matrix()$column[1]
+item[empty,]";
         let result = test_parse(code);
         let expected = vec![
             RStmt::Expression(RExp::Column(
@@ -105,17 +106,17 @@ get_matrix()$column[1]";
             )),
             RStmt::Expression(RExp::Index(
                 Box::new(RExp::variable("item")),
-                vec![RExp::Column(
+                vec![Some(RExp::Column(
                     Box::new(RExp::variable("other")),
                     Box::new(RExp::variable("thing")),
-                )],
+                ))],
             )),
             RStmt::Expression(RExp::Index(
                 Box::new(RExp::variable("other")),
                 vec![
-                    RExp::variable("multiple"),
-                    RExp::variable("index"),
-                    RExp::variable("arguments"),
+                    Some(RExp::variable("multiple")),
+                    Some(RExp::variable("index")),
+                    Some(RExp::variable("arguments")),
                 ],
             )),
             RStmt::Expression(RExp::Index(
@@ -123,7 +124,11 @@ get_matrix()$column[1]";
                     Box::new(RExp::Call("get_matrix".into(), vec![])),
                     Box::new(RExp::variable("column")),
                 )),
-                vec![RExp::constant("1")],
+                vec![Some(RExp::constant("1"))],
+            )),
+            RStmt::Expression(RExp::Index(
+                Box::new(RExp::variable("item")),
+                vec![Some(RExp::variable("empty")), None],
             )),
         ];
         assert_eq!(expected, result);
