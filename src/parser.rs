@@ -23,6 +23,7 @@ pub enum RExp {
     Index(Box<RExp>, Vec<RExp>),
     Formula(RFormula),
     Function(Vec<(RIdentifier, Option<RExp>)>, String),
+    Infix(String, Box<RExp>, Box<RExp>),
 }
 
 impl RExp {
@@ -174,12 +175,18 @@ fn parse_expression(expression_pair: pest::iterators::Pair<'_, Rule>) -> RExp {
     };
 
     // Process all indexing expressions that follow.
-    for index in whole_expression {
-        match index.as_rule() {
-            Rule::column => rexp = RExp::Column(Box::new(rexp), Box::new(parse_expression(index))),
+    for infix in whole_expression {
+        match infix.as_rule() {
+            Rule::column => rexp = RExp::Column(Box::new(rexp), Box::new(parse_expression(infix))),
             Rule::index => {
-                let indices = index.into_inner().map(parse_expression).collect();
+                let indices = infix.into_inner().map(parse_expression).collect();
                 rexp = RExp::Index(Box::new(rexp), indices)
+            }
+            Rule::infix => {
+                let mut infix_operator = infix.into_inner();
+                let operator = infix_operator.next().unwrap(); // Operator is always present.
+                let right = infix_operator.next().unwrap(); // Infix operator always has right-hand side.
+                rexp = RExp::Infix(operator.as_str().into(), Box::new(rexp), Box::new(parse_expression(right)));
             }
             _ => unreachable!(),
         }

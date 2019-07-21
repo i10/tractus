@@ -8,16 +8,19 @@ character = _{ !NEWLINE ~ ANY }
 empty = @{ "" }
 
 // Take care to prevent left recursion. See https://math.stackexchange.com/a/140049
-expression = ${ non_indexing ~ indexing* }
-non_indexing = _{ function_definition | function_call | formula | identifier | constant  }
+expression = ${ non_recursive ~ ( infix | indexing )* }
+non_recursive = _{ function_definition | function_call | formula | constant | identifier }
 indexing = _{ (column | index) }
 column = !{ "$" ~ identifier }
 index = !{ "[" ~ expression? ~ ("," ~ expression)* ~ "]" }
+infix = !{ WHITESPACE* ~ infix_operator ~ expression }
+infix_operator = { "<" | "<=" | ">" | ">=" | "==" | "!=" | "+" | "-" | "*" | "/" | "^" | "&&" | "||" | custom_infix_operator }
+custom_infix_operator = { "%" ~ (!("%" | WHITESPACE | NEWLINE) ~ ANY)* ~ "%" }
 
 identifier = @{ !(ASCII_DIGIT | "_" | "." ~ ASCII_DIGIT) ~ identifier_character+ }
 identifier_character = _{ ASCII_ALPHANUMERIC | "." | "_" }
 
-constant = ${ number | string }
+constant = ${ number | string | ^"TRUE" | ^"FALSE" }
 number = @{ ASCII_DIGIT+ }
 string = @{ "\"" ~ ( "\\\"" | !"\"" ~ ANY )* ~ "\"" | "'" ~ ( "\\'" | !"'" ~ ANY )* ~ "'"}
 

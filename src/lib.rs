@@ -171,14 +171,50 @@ func2 <- function (with, arguments) 2
 func3 <- function (with, default = 'arguments') 3 ";
         let result = test_parse(code);
         let expected = vec![
-            RStmt::Assignment(RExp::variable("func1"), RExp::Function(
-                vec![], "1".into()
+            RStmt::Assignment(RExp::variable("func1"), RExp::Function(vec![], "1".into())),
+            RStmt::Assignment(
+                RExp::variable("func2"),
+                RExp::Function(
+                    vec![("with".into(), None), ("arguments".into(), None)],
+                    "2".into(),
+                ),
+            ),
+            RStmt::Assignment(
+                RExp::variable("func3"),
+                RExp::Function(
+                    vec![
+                        ("with".into(), None),
+                        ("default".into(), Some(RExp::constant("'arguments'"))),
+                    ],
+                    "3".into(),
+                ),
+            ),
+        ];
+        assert_eq!(expected, result);
+    }
+
+    #[test]
+    fn parses_infix_operators() {
+        let code = "\
+1 < 3
+TRUE && FALSE
+'a' %custom% 'infix'";
+        let result = test_parse(code);
+        let expected = vec![
+            RStmt::Expression(RExp::Infix(
+                "<".into(),
+                Box::new(RExp::constant("1")),
+                Box::new(RExp::constant("3")),
             )),
-            RStmt::Assignment(RExp::variable("func2"), RExp::Function(
-                vec![("with".into(), None), ("arguments".into(), None)], "2".into()
+            RStmt::Expression(RExp::Infix(
+                "&&".into(),
+                Box::new(RExp::constant("TRUE")),
+                Box::new(RExp::constant("FALSE")),
             )),
-            RStmt::Assignment(RExp::variable("func3"), RExp::Function(
-                vec![("with".into(), None), ("default".into(), Some(RExp::constant("'arguments'")))], "3".into()
+            RStmt::Expression(RExp::Infix(
+                "%custom%".into(),
+                Box::new(RExp::constant("'a'")),
+                Box::new(RExp::constant("'infix'")),
             )),
         ];
         assert_eq!(expected, result);
