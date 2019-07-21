@@ -67,7 +67,7 @@ pub fn parse(code: &str) -> Result<Vec<RStmt>, Error> {
             Rule::statement => {
                 let maybe_line = token.into_inner().next();
                 match maybe_line {
-                    None => None, // empty line
+                    None => Some(RStmt::Empty), // empty line
                     Some(line) => {
                         match line.as_rule() {
                             Rule::comment => Some(RStmt::Comment(line.as_str().to_string())),
@@ -236,10 +236,12 @@ mod tests {
 
 # another thing   ";
         let result = test_parse(code);
-        let expected: Vec<RStmt> = vec!["#123", "#hello", "# another thing   "]
-            .iter()
-            .map(|text| RStmt::Comment(text.to_string()))
-            .collect();
+        let expected = vec![
+            RStmt::Comment("#123".into()),
+            RStmt::Comment("#hello".into()),
+            RStmt::Empty,
+            RStmt::Comment("# another thing   ".into()),
+        ];
         assert_eq!(expected, result);
     }
 

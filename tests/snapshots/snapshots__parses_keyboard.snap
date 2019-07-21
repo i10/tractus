@@ -1,5 +1,5 @@
 ---
-created: "2019-07-21T12:33:17.614130200Z"
+created: "2019-07-21T12:38:33.941145100Z"
 creator: insta@0.8.2
 source: tests/snapshots.rs
 expression: result
@@ -15,9 +15,11 @@ Ok(
         Comment(
             "##",
         ),
+        Empty,
         Comment(
             "## One-way ANOVA",
         ),
+        Empty,
         Comment(
             "# read in a data file with task completion Speeds (min) now from 3 tools",
         ),
@@ -89,6 +91,7 @@ Ok(
                 ],
             ),
         ),
+        Empty,
         Comment(
             "# view descriptive statistics by Speed",
         ),
@@ -191,6 +194,7 @@ Ok(
                 ],
             ),
         ),
+        Empty,
         Comment(
             "# explore new response distribution",
         ),
@@ -337,6 +341,7 @@ Ok(
                 ],
             ),
         ),
+        Empty,
         Comment(
             "# test normality for new Layout",
         ),
@@ -549,6 +554,7 @@ Ok(
                 ],
             ),
         ),
+        Empty,
         Comment(
             "# test log-normality of new Layout",
         ),
@@ -695,6 +701,7 @@ Ok(
                 ],
             ),
         ),
+        Empty,
         Comment(
             "# compute new log(Speed) column and re-test",
         ),
@@ -868,6 +875,7 @@ Ok(
                 ],
             ),
         ),
+        Empty,
         Comment(
             "# test homoscedasticity",
         ),
@@ -908,6 +916,7 @@ Ok(
                 ],
             ),
         ),
+        Empty,
         Comment(
             "# one-way ANOVA, suitable now to logSpeed",
         ),
@@ -953,6 +962,7 @@ Ok(
                 ],
             ),
         ),
+        Empty,
         Comment(
             "# post hoc independent-samples t-tests",
         ),
@@ -1104,9 +1114,12 @@ Ok(
                 ],
             ),
         ),
+        Empty,
+        Empty,
         Comment(
             "## Nonparametric equivalent of one-way ANOVA",
         ),
+        Empty,
         Comment(
             "# Kruskal-Wallis test",
         ),
@@ -1184,6 +1197,7 @@ Ok(
         Comment(
             "# for reporting Kruskal-Wallis as chi-square, we can get N with nrow(kbd)",
         ),
+        Empty,
         Comment(
             "# manual post hoc Mann-Whitney U pairwise comparisons",
         ),
@@ -1492,6 +1506,7 @@ Ok(
                 ],
             ),
         ),
+        Empty,
         Comment(
             "# alternative approach is using PMCMR for nonparam pairwise comparisons",
         ),
@@ -1532,5 +1547,6 @@ Ok(
                 ],
             ),
         ),
+        Empty,
     ],
 )
