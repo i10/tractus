@@ -1,5 +1,5 @@
 WHITESPACE = _{ " " | "\t" }
-file = { SOI ~ statement ~ (NEWLINE ~ statement?)* ~ EOI }
+file = { SOI ~ statement ~ ((";" ~ NEWLINE | ";" | NEWLINE) ~ statement?)* ~ EOI }
 statement = { (assignment | library | expression)? ~ comment? }
 
 assignment = { expression ~ ("<-" | "=") ~ expression}
