@@ -1,8 +1,8 @@
 extern crate tractus;
 
-
 use std::fs::File;
 use std::io::prelude::*;
+
 use insta::assert_debug_snapshot_matches;
 
 use tractus::parse;

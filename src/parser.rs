@@ -1,6 +1,6 @@
-
 use itertools::Itertools;
 use pest::Parser;
+
 #[derive(Parser)]
 #[grammar = "r.pest"]
 struct RParser;
@@ -267,7 +267,6 @@ with_args(1, x, name = value)";
         let result = test_parse(code);
         let expected = vec![
             RStmt::Expression(RExp::Call("empty".into(), vec![])),
-
             RStmt::Expression(RExp::Call(
                 "single".into(),
                 vec![(None, RExp::constant("1"))],
