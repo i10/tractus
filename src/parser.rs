@@ -5,7 +5,7 @@ use pest::Parser;
 #[grammar = "r.pest"]
 struct RParser;
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum RStmt {
     Empty,
     Comment(String),
@@ -14,7 +14,7 @@ pub enum RStmt {
     Expression(RExp),
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum RExp {
     Constant(String),
     Variable(RIdentifier),
@@ -36,13 +36,13 @@ impl RExp {
     }
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum RFormula {
     OneSided(RFormulaExpression),
     TwoSided(RIdentifier, RFormulaExpression),
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum RFormulaExpression {
     Variable(RIdentifier),
     Plus(Box<RFormulaExpression>, RIdentifier),
@@ -222,7 +222,7 @@ fn parse_formula_expression(
 
 #[cfg(test)]
 mod tests {
-    use crate::parser::{parse, RExp, RFormula, RFormulaExpression, RStmt};
+    use super::{parse, RExp, RFormula, RFormulaExpression, RStmt};
 
     fn test_parse(code: &'static str) -> Vec<RStmt> {
         parse(code).unwrap_or_else(|e| panic!("{}", e))
