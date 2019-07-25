@@ -8,6 +8,7 @@ edition = "2018"
 pest = "2.0"
 pest_derive = "2.0"
 itertools = "0.8.0"
+petgraph = "0.4.13"
 
 [dev-dependencies]
 insta = "0.8.2"

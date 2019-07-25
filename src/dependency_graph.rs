@@ -1,33 +1,60 @@
 use std::collections::HashMap;
 
+use petgraph::Graph;
+
 use crate::parser::{RExp, RIdentifier, RStmt};
 
-#[derive(PartialEq, Debug, Clone)]
-pub enum DependencyGraph {
-    Node(RExp, Vec<DependencyGraph>),
-}
+type NodeIndexType = petgraph::graph::DefaultIx;
+type NodeIndex = petgraph::graph::NodeIndex<NodeIndexType>;
 
-pub fn parse_dependency_graph<'a>(input: Vec<RStmt>) -> Vec<DependencyGraph> {
-    let mut result = vec![];
-    let mut variables: HashMap<String, Box<DependencyGraph>> = HashMap::new();
+pub type DependencyGraph = Graph<RExp, (), petgraph::Directed, NodeIndexType>;
+
+pub fn parse_dependency_graph(input: Vec<RStmt>) -> DependencyGraph {
+    let mut dependency_graph: DependencyGraph = Graph::new();
+    let mut variables: HashMap<String, NodeIndex> = HashMap::new();
+
     for statement in input.into_iter() {
         use RStmt::*;
-        match statement {
+        let maybe_node_id = match statement {
+            Expression(expression) => Some(dependency_graph.add_node(expression)),
             Assignment(left, right) => {
                 let maybe_name = extract_variable_name(left);
-                if let Some(name) = maybe_name {
-                    let node = Box::new(DependencyGraph::Node(right, vec![]));
-                    result.push(node.clone());
-                    variables.insert(name, node);
-                }
+                maybe_name.map(|name| {
+                    let node_id = dependency_graph.add_node(right);
+                    variables.insert(name, node_id);
+                    node_id
+                })
             }
-            Expression(expression) => {
-                result.push(Box::new(DependencyGraph::Node(expression, vec![])))
+            _ => None,
+        };
+
+        if let Some(node_id) = maybe_node_id {
+            let expression = dependency_graph.node_weight(node_id).unwrap(); // Just created that id.
+            let dependencies = extract_dependencies(expression);
+            for dependency in dependencies {
+                let parent = variables
+                    .get(&dependency)
+                    .unwrap_or_else(|| panic!("Use of undeclared variable {}.", dependency));
+                dependency_graph.add_edge(*parent, node_id, ());
             }
-            _ => (),
         }
     }
-    result.into_iter().map(|graph_box| *graph_box).collect()
+
+    dependency_graph
+}
+
+fn extract_dependencies(expression: &RExp) -> Vec<RIdentifier> {
+    use RExp::*;
+    match expression {
+        Variable(name) => vec![name.clone()],
+        Call(_, arguments) => arguments
+            .iter()
+            .flat_map(|(_, exp)| extract_dependencies(exp))
+            .collect(),
+        Column(left, _) => extract_dependencies(left),
+        Index(left, _) => extract_dependencies(left),
+        _ => vec![],
+    }
 }
 
 fn extract_variable_name(exp: RExp) -> Option<RIdentifier> {
@@ -45,7 +72,19 @@ mod tests {
     use crate::parser::{RExp, RStmt};
 
     use super::{parse_dependency_graph, DependencyGraph};
-    use DependencyGraph::*;
+
+    fn compare_graphs(expected: &DependencyGraph, actual: &DependencyGraph) {
+        let mut walk_expected = petgraph::visit::Topo::new(expected);
+        let mut walk_actual = petgraph::visit::Topo::new(actual);
+        while let (Some(expected_id), Some(actual_id)) =
+            (walk_expected.next(expected), walk_actual.next(actual))
+        {
+            assert_eq!(
+                expected.node_weight(expected_id),
+                actual.node_weight(actual_id)
+            );
+        }
+    }
 
     #[test]
     fn detects_linear_graph() {
@@ -65,23 +104,26 @@ mod tests {
             )),
         ];
         let graph = parse_dependency_graph(input);
-        let expected = vec![Node(
-            RExp::constant("1"),
-            vec![Node(
-                RExp::Call("transform".into(), vec![(None, RExp::variable("x"))]),
-                vec![
-                    Node(
-                        RExp::Call("modify".into(), vec![(None, RExp::variable("y"))]),
-                        vec![],
-                    ),
-                    Node(
-                        RExp::Call("change".into(), vec![(None, RExp::variable("y"))]),
-                        vec![],
-                    ),
-                ],
-            )],
-        )];
-        assert_eq!(expected, graph);
+
+        let mut expected = DependencyGraph::new();
+        let n1 = expected.add_node(RExp::constant("1"));
+        let n2 = expected.add_node(RExp::Call(
+            "transform".into(),
+            vec![(None, RExp::variable("x"))],
+        ));
+        expected.add_edge(n1, n2, ());
+        let n3 = expected.add_node(RExp::Call(
+            "modify".into(),
+            vec![(None, RExp::variable("y"))],
+        ));
+        expected.add_edge(n2, n3, ());
+        let n4 = expected.add_node(RExp::Call(
+            "change".into(),
+            vec![(None, RExp::variable("y"))],
+        ));
+        expected.add_edge(n2, n4, ());
+
+        compare_graphs(&expected, &graph);
     }
 
     mod extracts_variable_name {
@@ -126,6 +168,53 @@ mod tests {
                 Box::new(RExp::variable("a")),
             ));
             assert_eq!(None, name);
+        }
+    }
+
+    mod dependencies {
+        use crate::parser::RExp;
+
+        use super::super::extract_dependencies;
+
+        #[test]
+        fn finds_variables() {
+            let expression = RExp::variable("x");
+            let result = extract_dependencies(&expression);
+            assert_eq!(vec!["x".to_string()], result);
+        }
+
+        #[test]
+        fn finds_call_args() {
+            let expression = RExp::Call(
+                "func".into(),
+                vec![
+                    (None, RExp::constant("1")),
+                    (None, RExp::variable("x")),
+                    (None, RExp::variable("y")),
+                ],
+            );
+            let result = extract_dependencies(&expression);
+            assert_eq!(vec!["x".to_string(), "y".to_string()], result);
+        }
+
+        #[test]
+        fn finds_column() {
+            let expression = RExp::Column(
+                Box::new(RExp::variable("x")),
+                Box::new(RExp::constant("test")),
+            );
+            let result = extract_dependencies(&expression);
+            assert_eq!(vec!["x".to_string()], result);
+        }
+
+        #[test]
+        fn finds_index() {
+            let expression = RExp::Index(
+                Box::new(RExp::variable("x")),
+                vec![Some(RExp::constant("1"))],
+            );
+            let result = extract_dependencies(&expression);
+            assert_eq!(vec!["x".to_string()], result);
         }
     }
 }
