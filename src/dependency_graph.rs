@@ -42,10 +42,11 @@ fn register_dependencies(
     let dependencies = extract_dependencies(&expression);
     let node_id = dependency_graph.add_node(expression);
     for dependency in dependencies {
-        let parent = variables
-            .get(&dependency)
-            .unwrap_or_else(|| panic!("Use of undeclared variable {}.", dependency));
-        dependency_graph.add_edge(*parent, node_id, ());
+        if let Some(parent) = variables.get(&dependency) {
+            dependency_graph.add_edge(*parent, node_id, ());
+        }
+        // Else, the variable might still be valid, e. g. library function that sits in global scope.
+        // We will simply not track this usage in the dependency graph.
     }
     node_id
 }
