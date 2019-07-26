@@ -71,14 +71,14 @@ fn extract_variable_name(exp: RExp) -> Option<RIdentifier> {
 mod tests {
     use crate::parser::{RExp, RStmt};
 
+    use petgraph::visit::Walker;
+
     use super::{parse_dependency_graph, DependencyGraph};
 
     fn compare_graphs(expected: &DependencyGraph, actual: &DependencyGraph) {
-        let mut walk_expected = petgraph::visit::Topo::new(expected);
-        let mut walk_actual = petgraph::visit::Topo::new(actual);
-        while let (Some(expected_id), Some(actual_id)) =
-            (walk_expected.next(expected), walk_actual.next(actual))
-        {
+        let walk_expected = petgraph::visit::Topo::new(expected);
+        let walk_actual = petgraph::visit::Topo::new(actual);
+        for (expected_id, actual_id) in walk_expected.iter(expected).zip(walk_actual.iter(actual)) {
             assert_eq!(
                 expected.node_weight(expected_id),
                 actual.node_weight(actual_id)
