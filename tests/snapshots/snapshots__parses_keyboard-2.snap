@@ -1,32 +1,16 @@
 ---
-created: "2019-07-26T14:16:17.829143900Z"
+created: "2019-07-26T14:21:19.802175200Z"
 creator: insta@0.8.2
 source: tests/snapshots.rs
-expression: parsed
+expression: parse_dependency_graph(parsed)
 ---
-[
-    Comment(
-        "###",
-    ),
-    Comment(
-        "## Comparing keyboard layouts: QWERTY, Dvorak, and Colemak",
-    ),
-    Comment(
-        "##",
-    ),
-    Empty,
-    Comment(
-        "## One-way ANOVA",
-    ),
-    Empty,
-    Comment(
-        "# read in a data file with task completion Speeds (min) now from 3 tools",
-    ),
-    Assignment(
-        Variable(
-            "kbd",
-        ),
-        Call(
+Graph {
+    Ty: "Directed",
+    node_count: 39,
+    edge_count: 45,
+    edges: (0, 1), (0, 2), (2, 3), (2, 4), (2, 5), (2, 6), (2, 7), (2, 8), (2, 9), (2, 10), (2, 11), (2, 12), (2, 13), (13, 14), (13, 15), (13, 16), (2, 17), (2, 18), (17, 18), (17, 18), (2, 19), (19, 20), (19, 21), (19, 22), (22, 23), (22, 24), (22, 25), (19, 26), (19, 27), (27, 28), (19, 29), (27, 30), (27, 31), (19, 32), (19, 33), (19, 34), (19, 34), (19, 35), (19, 35), (19, 36), (19, 36), (34, 37), (35, 37), (36, 37), (19, 38),
+    node weights: {
+        0: Call(
             "read.csv",
             [
                 (
@@ -37,9 +21,7 @@ expression: parsed
                 ),
             ],
         ),
-    ),
-    Expression(
-        Call(
+        1: Call(
             "View",
             [
                 (
@@ -50,17 +32,7 @@ expression: parsed
                 ),
             ],
         ),
-    ),
-    Assignment(
-        Column(
-            Variable(
-                "kbd",
-            ),
-            Variable(
-                "ParticipantID",
-            ),
-        ),
-        Call(
+        2: Call(
             "factor",
             [
                 (
@@ -76,9 +48,7 @@ expression: parsed
                 ),
             ],
         ),
-    ),
-    Expression(
-        Call(
+        3: Call(
             "summary",
             [
                 (
@@ -89,16 +59,7 @@ expression: parsed
                 ),
             ],
         ),
-    ),
-    Empty,
-    Comment(
-        "# view descriptive statistics by Speed",
-    ),
-    Library(
-        "plyr",
-    ),
-    Expression(
-        Call(
+        4: Call(
             "ddply",
             [
                 (
@@ -131,9 +92,7 @@ expression: parsed
                 ),
             ],
         ),
-    ),
-    Expression(
-        Call(
+        5: Call(
             "ddply",
             [
                 (
@@ -192,13 +151,7 @@ expression: parsed
                 ),
             ],
         ),
-    ),
-    Empty,
-    Comment(
-        "# explore new response distribution",
-    ),
-    Expression(
-        Call(
+        6: Call(
             "hist",
             [
                 (
@@ -235,9 +188,7 @@ expression: parsed
                 ),
             ],
         ),
-    ),
-    Expression(
-        Call(
+        7: Call(
             "hist",
             [
                 (
@@ -274,9 +225,7 @@ expression: parsed
                 ),
             ],
         ),
-    ),
-    Expression(
-        Call(
+        8: Call(
             "hist",
             [
                 (
@@ -313,9 +262,7 @@ expression: parsed
                 ),
             ],
         ),
-    ),
-    Expression(
-        Call(
+        9: Call(
             "plot",
             [
                 (
@@ -339,13 +286,7 @@ expression: parsed
                 ),
             ],
         ),
-    ),
-    Empty,
-    Comment(
-        "# test normality for new Layout",
-    ),
-    Expression(
-        Call(
+        10: Call(
             "shapiro.test",
             [
                 (
@@ -382,9 +323,7 @@ expression: parsed
                 ),
             ],
         ),
-    ),
-    Expression(
-        Call(
+        11: Call(
             "shapiro.test",
             [
                 (
@@ -421,9 +360,7 @@ expression: parsed
                 ),
             ],
         ),
-    ),
-    Expression(
-        Call(
+        12: Call(
             "shapiro.test",
             [
                 (
@@ -460,12 +397,7 @@ expression: parsed
                 ),
             ],
         ),
-    ),
-    Assignment(
-        Variable(
-            "m",
-        ),
-        Call(
+        13: Call(
             "aov",
             [
                 (
@@ -489,9 +421,7 @@ expression: parsed
                 ),
             ],
         ),
-    ),
-    Expression(
-        Call(
+        14: Call(
             "shapiro.test",
             [
                 (
@@ -510,9 +440,7 @@ expression: parsed
                 ),
             ],
         ),
-    ),
-    Expression(
-        Call(
+        15: Call(
             "qqnorm",
             [
                 (
@@ -531,9 +459,7 @@ expression: parsed
                 ),
             ],
         ),
-    ),
-    Expression(
-        Call(
+        16: Call(
             "qqline",
             [
                 (
@@ -552,19 +478,7 @@ expression: parsed
                 ),
             ],
         ),
-    ),
-    Empty,
-    Comment(
-        "# test log-normality of new Layout",
-    ),
-    Library(
-        "MASS",
-    ),
-    Assignment(
-        Variable(
-            "fit",
-        ),
-        Column(
+        17: Column(
             Call(
                 "fitdistr",
                 [
@@ -612,9 +526,7 @@ expression: parsed
                 "estimate",
             ),
         ),
-    ),
-    Expression(
-        Call(
+        18: Call(
             "ks.test",
             [
                 (
@@ -699,21 +611,7 @@ expression: parsed
                 ),
             ],
         ),
-    ),
-    Empty,
-    Comment(
-        "# compute new log(Speed) column and re-test",
-    ),
-    Assignment(
-        Column(
-            Variable(
-                "kbd",
-            ),
-            Variable(
-                "logSpeed",
-            ),
-        ),
-        Call(
+        19: Call(
             "log",
             [
                 (
@@ -729,9 +627,7 @@ expression: parsed
                 ),
             ],
         ),
-    ),
-    Expression(
-        Call(
+        20: Call(
             "View",
             [
                 (
@@ -742,9 +638,7 @@ expression: parsed
                 ),
             ],
         ),
-    ),
-    Expression(
-        Call(
+        21: Call(
             "shapiro.test",
             [
                 (
@@ -781,12 +675,7 @@ expression: parsed
                 ),
             ],
         ),
-    ),
-    Assignment(
-        Variable(
-            "m",
-        ),
-        Call(
+        22: Call(
             "aov",
             [
                 (
@@ -810,9 +699,7 @@ expression: parsed
                 ),
             ],
         ),
-    ),
-    Expression(
-        Call(
+        23: Call(
             "shapiro.test",
             [
                 (
@@ -831,9 +718,7 @@ expression: parsed
                 ),
             ],
         ),
-    ),
-    Expression(
-        Call(
+        24: Call(
             "qqnorm",
             [
                 (
@@ -852,9 +737,7 @@ expression: parsed
                 ),
             ],
         ),
-    ),
-    Expression(
-        Call(
+        25: Call(
             "qqline",
             [
                 (
@@ -873,16 +756,7 @@ expression: parsed
                 ),
             ],
         ),
-    ),
-    Empty,
-    Comment(
-        "# test homoscedasticity",
-    ),
-    Library(
-        "car",
-    ),
-    Expression(
-        Call(
+        26: Call(
             "leveneTest",
             [
                 (
@@ -914,16 +788,7 @@ expression: parsed
                 ),
             ],
         ),
-    ),
-    Empty,
-    Comment(
-        "# one-way ANOVA, suitable now to logSpeed",
-    ),
-    Assignment(
-        Variable(
-            "m",
-        ),
-        Call(
+        27: Call(
             "aov",
             [
                 (
@@ -947,9 +812,7 @@ expression: parsed
                 ),
             ],
         ),
-    ),
-    Expression(
-        Call(
+        28: Call(
             "anova",
             [
                 (
@@ -960,13 +823,7 @@ expression: parsed
                 ),
             ],
         ),
-    ),
-    Empty,
-    Comment(
-        "# post hoc independent-samples t-tests",
-    ),
-    Expression(
-        Call(
+        29: Call(
             "plot",
             [
                 (
@@ -990,12 +847,7 @@ expression: parsed
                 ),
             ],
         ),
-    ),
-    Library(
-        "multcomp",
-    ),
-    Expression(
-        Call(
+        30: Call(
             "summary",
             [
                 (
@@ -1048,15 +900,7 @@ expression: parsed
                 ),
             ],
         ),
-    ),
-    Comment(
-        "# note: equivalent to this using lsm instead of mcp",
-    ),
-    Library(
-        "lsmeans",
-    ),
-    Expression(
-        Call(
+        31: Call(
             "summary",
             [
                 (
@@ -1112,21 +956,7 @@ expression: parsed
                 ),
             ],
         ),
-    ),
-    Empty,
-    Empty,
-    Comment(
-        "## Nonparametric equivalent of one-way ANOVA",
-    ),
-    Empty,
-    Comment(
-        "# Kruskal-Wallis test",
-    ),
-    Library(
-        "coin",
-    ),
-    Expression(
-        Call(
+        32: Call(
             "kruskal_test",
             [
                 (
@@ -1158,9 +988,7 @@ expression: parsed
                 ),
             ],
         ),
-    ),
-    Expression(
-        Call(
+        33: Call(
             "kruskal_test",
             [
                 (
@@ -1192,22 +1020,7 @@ expression: parsed
                 ),
             ],
         ),
-    ),
-    Comment(
-        "# for reporting Kruskal-Wallis as chi-square, we can get N with nrow(kbd)",
-    ),
-    Empty,
-    Comment(
-        "# manual post hoc Mann-Whitney U pairwise comparisons",
-    ),
-    Comment(
-        "# note: wilcox_test we used above doesn\'t take two data vectors, so use wilcox.test",
-    ),
-    Assignment(
-        Variable(
-            "vs.ec",
-        ),
-        Call(
+        34: Call(
             "wilcox.test",
             [
                 (
@@ -1284,12 +1097,7 @@ expression: parsed
                 ),
             ],
         ),
-    ),
-    Assignment(
-        Variable(
-            "vs.py",
-        ),
-        Call(
+        35: Call(
             "wilcox.test",
             [
                 (
@@ -1366,12 +1174,7 @@ expression: parsed
                 ),
             ],
         ),
-    ),
-    Assignment(
-        Variable(
-            "ec.py",
-        ),
-        Call(
+        36: Call(
             "wilcox.test",
             [
                 (
@@ -1448,9 +1251,7 @@ expression: parsed
                 ),
             ],
         ),
-    ),
-    Expression(
-        Call(
+        37: Call(
             "p.adjust",
             [
                 (
@@ -1504,16 +1305,7 @@ expression: parsed
                 ),
             ],
         ),
-    ),
-    Empty,
-    Comment(
-        "# alternative approach is using PMCMR for nonparam pairwise comparisons",
-    ),
-    Library(
-        "PMCMR",
-    ),
-    Expression(
-        Call(
+        38: Call(
             "posthoc.kruskal.conover.test",
             [
                 (
@@ -1545,6 +1337,5 @@ expression: parsed
                 ),
             ],
         ),
-    ),
-    Empty,
-]
+    },
+}
