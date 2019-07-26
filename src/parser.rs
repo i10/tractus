@@ -5,7 +5,7 @@ use pest::Parser;
 #[grammar = "r.pest"]
 struct RParser;
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone, Hash)]
 pub enum RStmt {
     Empty,
     Comment(String),
@@ -14,7 +14,7 @@ pub enum RStmt {
     Expression(RExp),
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone, Hash)]
 pub enum RExp {
     Constant(String),
     Variable(RIdentifier),
@@ -36,13 +36,13 @@ impl RExp {
     }
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone, Hash)]
 pub enum RFormula {
     OneSided(RFormulaExpression),
     TwoSided(RIdentifier, RFormulaExpression),
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone, Hash)]
 pub enum RFormulaExpression {
     Variable(RIdentifier),
     Plus(Box<RFormulaExpression>, RIdentifier),
