@@ -19,5 +19,5 @@ fn parses_keyboard() {
 
     let parsed = parse(&code).expect("Parsing should not fail.");
     assert_debug_snapshot_matches!(parsed);
-    assert_debug_snapshot_matches!(parse_dependency_graph(parsed));
+    assert_debug_snapshot_matches!(parse_dependency_graph(&parsed));
 }
