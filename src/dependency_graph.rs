@@ -7,9 +7,9 @@ use crate::parser::{RExp, RIdentifier, RStmt};
 type NodeIndexType = petgraph::graph::DefaultIx;
 type NodeIndex = petgraph::graph::NodeIndex<NodeIndexType>;
 
-pub type DependencyGraph = Graph<RExp, (), petgraph::Directed, NodeIndexType>;
+pub type DependencyGraph<'a> = Graph<&'a RExp, (), petgraph::Directed, NodeIndexType>;
 
-pub fn parse_dependency_graph(input: Vec<RStmt>) -> DependencyGraph {
+pub fn parse_dependency_graph(input: &[RStmt]) -> DependencyGraph {
     let mut dependency_graph: DependencyGraph = Graph::new();
     let mut variables: HashMap<String, NodeIndex> = HashMap::new();
 
@@ -28,15 +28,14 @@ pub fn parse_dependency_graph(input: Vec<RStmt>) -> DependencyGraph {
             }
             _ => (),
         };
-
     }
 
     dependency_graph
 }
 
-fn register_dependencies(
-    expression: RExp,
-    dependency_graph: &mut DependencyGraph,
+fn register_dependencies<'a>(
+    expression: &'a RExp,
+    dependency_graph: &mut DependencyGraph<'a>,
     variables: &mut HashMap<String, NodeIndex>,
 ) -> NodeIndex {
     let dependencies = extract_dependencies(&expression);
@@ -65,12 +64,12 @@ fn extract_dependencies(expression: &RExp) -> Vec<RIdentifier> {
     }
 }
 
-fn extract_variable_name(exp: RExp) -> Option<RIdentifier> {
+fn extract_variable_name(exp: &RExp) -> Option<RIdentifier> {
     use RExp::*;
     match exp {
-        Variable(name) => Some(name),
-        Column(left, _) => extract_variable_name(*left),
-        Index(left, _) => extract_variable_name(*left),
+        Variable(name) => Some(name.to_string()),
+        Column(left, _) => extract_variable_name(&*left),
+        Index(left, _) => extract_variable_name(&*left),
         _ => None,
     }
 }
@@ -80,7 +79,6 @@ mod tests {
     use std::collections::HashSet;
 
     use petgraph::visit::Walker;
-
 
     use super::{parse_dependency_graph, DependencyGraph};
     use crate::parser::{RExp, RStmt};
@@ -92,10 +90,12 @@ mod tests {
                 expected
                     .neighbors(expected_id)
                     .flat_map(|n_id| expected.node_weight(n_id))
+                    .map(|n| *n)
                     .collect::<HashSet<&RExp>>(),
                 actual
                     .neighbors(actual_id)
                     .flat_map(|n_id| actual.node_weight(n_id))
+                    .map(|n| *n)
                     .collect::<HashSet<&RExp>>(),
                 "Nodes {:?} and {:?} have different neighbors.",
                 expected.node_weight(expected_id),
@@ -121,24 +121,19 @@ mod tests {
                 vec![(None, RExp::variable("y"))],
             )),
         ];
-        let graph = parse_dependency_graph(input);
+        let graph = parse_dependency_graph(&input);
 
         let mut expected = DependencyGraph::new();
-        let n1 = expected.add_node(RExp::constant("1"));
-        let n2 = expected.add_node(RExp::Call(
-            "transform".into(),
-            vec![(None, RExp::variable("x"))],
-        ));
+        let e1 = RExp::constant("1");
+        let n1 = expected.add_node(&e1);
+        let e2 = RExp::Call("transform".into(), vec![(None, RExp::variable("x"))]);
+        let n2 = expected.add_node(&e2);
         expected.add_edge(n1, n2, ());
-        let n3 = expected.add_node(RExp::Call(
-            "modify".into(),
-            vec![(None, RExp::variable("y"))],
-        ));
+        let e3 = RExp::Call("modify".into(), vec![(None, RExp::variable("y"))]);
+        let n3 = expected.add_node(&e3);
         expected.add_edge(n2, n3, ());
-        let n4 = expected.add_node(RExp::Call(
-            "change".into(),
-            vec![(None, RExp::variable("y"))],
-        ));
+        let e4 = RExp::Call("change".into(), vec![(None, RExp::variable("y"))]);
+        let n4 = expected.add_node(&e4);
         expected.add_edge(n2, n4, ());
 
         compare_graphs(&expected, &graph);
@@ -169,11 +164,12 @@ mod tests {
                 vec![(None, RExp::variable("x"))],
             )),
         ];
-        let graph = parse_dependency_graph(input);
+        let graph = parse_dependency_graph(&input);
 
         let mut expected = DependencyGraph::new();
-        let n1 = expected.add_node(RExp::constant("data frame"));
-        let n2 = expected.add_node(RExp::Call(
+        let e1 = RExp::constant("data frame");
+        let n1 = expected.add_node(&e1);
+        let e2 = RExp::Call(
             "factor".into(),
             vec![(
                 None,
@@ -182,12 +178,11 @@ mod tests {
                     Box::new(RExp::constant("column")),
                 ),
             )],
-        ));
+        );
+        let n2 = expected.add_node(&e2);
         expected.add_edge(n1, n2, ());
-        let n3 = expected.add_node(RExp::Call(
-            "summary".into(),
-            vec![(None, RExp::variable("x"))],
-        ));
+        let e3 = RExp::Call("summary".into(), vec![(None, RExp::variable("x"))]);
+        let n3 = expected.add_node(&e3);
         expected.add_edge(n2, n3, ());
 
         compare_graphs(&expected, &graph);
@@ -200,13 +195,13 @@ mod tests {
 
         #[test]
         fn from_variable() {
-            let name = extract_variable_name(RExp::variable("x"));
+            let name = extract_variable_name(&RExp::variable("x"));
             assert_eq!(Some("x".to_string()), name);
         }
 
         #[test]
         fn from_column() {
-            let name = extract_variable_name(RExp::Column(
+            let name = extract_variable_name(&RExp::Column(
                 Box::new(RExp::variable("x")),
                 Box::new(RExp::variable("a")),
             ));
@@ -215,7 +210,7 @@ mod tests {
 
         #[test]
         fn from_index() {
-            let name = extract_variable_name(RExp::Index(
+            let name = extract_variable_name(&RExp::Index(
                 Box::new(RExp::variable("x")),
                 vec![Some(RExp::variable("a"))],
             ));
@@ -224,13 +219,13 @@ mod tests {
 
         #[test]
         fn rejects_constants() {
-            let name = extract_variable_name(RExp::constant("x"));
+            let name = extract_variable_name(&RExp::constant("x"));
             assert_eq!(None, name);
         }
 
         #[test]
         fn rejects_constant_in_column() {
-            let name = extract_variable_name(RExp::Column(
+            let name = extract_variable_name(&RExp::Column(
                 Box::new(RExp::constant("x")),
                 Box::new(RExp::variable("a")),
             ));
