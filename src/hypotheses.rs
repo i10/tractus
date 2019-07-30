@@ -13,6 +13,7 @@ pub fn detect_hypothesis(expression: &RExp) -> Option<Vec<Hypothesis>> {
             left: left.clone(),
             right: right.clone(),
         }]),
+
         // variable[variable$independent == "level",]$dependent
         // |----------------left--------------------| |-right-|
         //          |-----------inner--------------|
@@ -63,6 +64,7 @@ pub fn detect_hypothesis(expression: &RExp) -> Option<Vec<Hypothesis>> {
                 Some(hypotheses)
             }
         }
+
         _ => None,
     }
 }
