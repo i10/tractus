@@ -14,6 +14,17 @@ pub enum RStmt {
     Expression(RExp),
 }
 
+impl RStmt {
+    pub fn expression(&self) -> Option<&RExp> {
+        use RStmt::*;
+        match self {
+            Assignment(_, expression) => Some(expression),
+            Expression(expression) => Some(expression),
+            _ => None,
+        }
+    }
+}
+
 #[derive(PartialEq, Eq, Debug, Clone, Hash)]
 pub enum RExp {
     Constant(String),

@@ -1,8 +1,8 @@
 ---
-created: "2019-07-26T14:21:19.802175200Z"
+created: "2019-07-30T14:06:27.680216800Z"
 creator: insta@0.8.2
 source: tests/snapshots.rs
-expression: parse_dependency_graph(parsed)
+expression: parse_dependency_graph(&parsed).graph()
 ---
 Graph {
     Ty: "Directed",
