@@ -44,8 +44,9 @@ fn register_dependencies<'a>(
         if let Some(parent) = variables.get(&dependency) {
             dependency_graph.add_edge(*parent, node_id, ());
         }
-        // Else, the variable might still be valid, e. g. library function that sits in global scope.
-        // We will simply not track this usage in the dependency graph.
+        // Else, we do not know the variable. But this might still be valid,
+        // e. g. if it is a library function that wasn't explicitly declared in the code.
+        // Therefore, we simply ignore this in the dependency graph.
     }
     node_id
 }
