@@ -90,12 +90,12 @@ mod tests {
                 expected
                     .neighbors(expected_id)
                     .flat_map(|n_id| expected.node_weight(n_id))
-                    .map(|n| *n)
+                    .cloned()
                     .collect::<HashSet<&RExp>>(),
                 actual
                     .neighbors(actual_id)
                     .flat_map(|n_id| actual.node_weight(n_id))
-                    .map(|n| *n)
+                    .cloned()
                     .collect::<HashSet<&RExp>>(),
                 "Nodes {:?} and {:?} have different neighbors.",
                 expected.node_weight(expected_id),
