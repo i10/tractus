@@ -2,6 +2,7 @@
 extern crate pest_derive;
 
 mod dependency_graph;
+mod hypotheses;
 mod parser;
 
 pub use crate::dependency_graph::{parse_dependency_graph, DependencyGraph};
