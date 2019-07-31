@@ -49,8 +49,8 @@ pub type HypothesisTree<'a> = HashMap<Option<Hypothesis>, Vec<Node<'a>>>;
 
 #[derive(Debug, PartialEq)]
 pub struct Node<'a> {
-    expression: &'a RExp,
-    children: HypothesisTree<'a>,
+    pub expression: &'a RExp,
+    pub children: HypothesisTree<'a>,
 }
 
 pub fn hypothesis_tree_from_nodes<'a>(
