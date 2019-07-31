@@ -13,22 +13,22 @@ use crate::hypotheses::{detect_hypotheses, Hypothesis};
 use crate::parser::{RExp, RStmt};
 
 #[derive(Debug)]
-pub struct Ast(Vec<RStmt>);
+pub struct Tractus(Vec<RStmt>);
 
-impl Ast {
+impl Tractus {
     pub fn parse(code: &str) -> Result<Self, parser::Error> {
-        parser::parse(code).map(Ast)
+        parser::parse(code).map(Tractus)
     }
 
     pub fn from(parsed: Vec<RStmt>) -> Self {
-        Ast(parsed)
+        Tractus(parsed)
     }
 
     pub fn get_statement(&self, index: usize) -> Option<&RStmt> {
         self.0.get(index)
     }
 
-    pub fn hypothesis_tree(&self) -> HypothesisTree {
+    pub fn generate_hypothesis_tree(&self) -> HypothesisTree {
         let hypotheses_map: HashMap<&RExp, HashSet<Hypothesis>> = self
             .0
             .iter()
@@ -126,15 +126,15 @@ mod tests {
             )),
         ];
 
-        let ast = Ast::from(input);
-        let tree = ast.hypothesis_tree();
+        let tractus = Tractus::from(input);
+        let tree = tractus.generate_hypothesis_tree();
         // Need to build from the inside out.
         let n4 = Node {
-            expression: ast.get_statement(3).unwrap().expression().unwrap(),
+            expression: tractus.get_statement(3).unwrap().expression().unwrap(),
             children: HashMap::new(),
         };
         let n3 = Node {
-            expression: ast.get_statement(2).unwrap().expression().unwrap(),
+            expression: tractus.get_statement(2).unwrap().expression().unwrap(),
             children: HashMap::new(),
         };
         let hyp = Hypothesis {
@@ -142,11 +142,11 @@ mod tests {
             right: RFormulaExpression::Variable("Layout".into()),
         };
         let n2 = Node {
-            expression: ast.get_statement(1).unwrap().expression().unwrap(),
+            expression: tractus.get_statement(1).unwrap().expression().unwrap(),
             children: HashMap::from_iter(vec![(Some(hyp), vec![n3]), (None, vec![n4])]),
         };
         let n1 = Node {
-            expression: ast.get_statement(0).unwrap().expression().unwrap(),
+            expression: tractus.get_statement(0).unwrap().expression().unwrap(),
             children: HashMap::from_iter(vec![(None, vec![n2])]),
         };
         let mut expected = HashMap::new();

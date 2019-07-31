@@ -1,10 +1,10 @@
 ---
-created: "2019-07-31T12:27:17.109101500Z"
+created: "2019-07-31T13:46:43.849667900Z"
 creator: insta@0.8.2
 source: tests/snapshots.rs
 expression: parsed
 ---
-Ast(
+Tractus(
     [
         Comment(
             "###",
