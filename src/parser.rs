@@ -1,3 +1,5 @@
+use std::fmt::Write;
+
 use itertools::Itertools;
 use pest::Parser;
 
@@ -47,21 +49,95 @@ impl RExp {
     }
 }
 
+impl std::fmt::Display for RExp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use RExp::*;
+        match self {
+            Constant(constant) => write!(f, "{}", constant),
+            Variable(name) => write!(f, "{}", name),
+            Call(name, args) => {
+                let arguments = args
+                    .iter()
+                    .map(|(maybe_name, expression)| {
+                        let mut s = String::new();
+                        if let Some(name) = maybe_name {
+                            write!(s, "{} = ", name);
+                        }
+                        write!(s, "{}", expression);
+                        s
+                    })
+                    .collect::<Vec<String>>()
+                    .join(", ");
+                write!(f, "{}({})", name, arguments)
+            }
+            Column(left, right) => write!(f, "{}${}", left, right),
+            Index(left, right) => {
+                let indices = right
+                    .iter()
+                    .map(|maybe_expression| match maybe_expression {
+                        Some(expression) => format!("{}", expression),
+                        None => "".to_string(),
+                    })
+                    .collect::<Vec<String>>()
+                    .join(", ");
+                write!(f, "{}[{}]", left, indices)
+            }
+            Formula(formula) => write!(f, "{}", formula),
+            Function(params, body) => {
+                let parameters = params
+                    .iter()
+                    .map(|(name, maybe_default)| {
+                        let mut s = String::new();
+                        write!(s, "{}", name);
+                        if let Some(default) = maybe_default {
+                            write!(s, " = {}", default);
+                        }
+                        s
+                    })
+                    .collect::<Vec<String>>()
+                    .join(", ");
+                write!(f, "function ({}) {{\n{}\n}}", parameters, body)
+            }
+            Infix(op, left, right) => write!(f, "{} {} {}", left, op, right),
+        }
+    }
+}
+
 #[derive(PartialEq, Eq, Debug, Clone, Hash)]
 pub enum RFormula {
     OneSided(RFormulaExpression),
     TwoSided(RIdentifier, RFormulaExpression),
 }
 
+impl std::fmt::Display for RFormula{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use RFormula::*;
+        match self {
+            OneSided(right) => write!(f, "~ {}", right),
+            TwoSided(left, right) => write!(f, "{} ~ {}", left, right),
+        }
+    }
+}
+
 #[derive(PartialEq, Eq, Debug, Clone, Hash)]
 pub enum RFormulaExpression {
     Variable(RIdentifier),
     Plus(Box<RFormulaExpression>, RIdentifier),
-    Minus(Box<RFormulaExpression>, RIdentifier),
+    /*Minus(Box<RFormulaExpression>, RIdentifier),
     Colon(Box<RFormulaExpression>, RIdentifier),
     Star(Box<RFormulaExpression>, RIdentifier),
     In(Box<RFormulaExpression>, RIdentifier),
-    Hat(Box<RFormulaExpression>, RIdentifier),
+    Hat(Box<RFormulaExpression>, RIdentifier),*/
+}
+
+impl std::fmt::Display for RFormulaExpression{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use RFormulaExpression::*;
+        match self {
+            Variable(name) => write!(f, "{}", name),
+            Plus(left, right) => write!(f, "{} + {}", left, right),
+        }
+    }
 }
 
 pub type RIdentifier = String;

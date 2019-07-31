@@ -10,7 +10,7 @@ use horrorshow::helper::doctype;
 use horrorshow::prelude::*;
 use structopt::StructOpt;
 
-use tractus::{HypothesisTree, Tractus};
+use tractus::{HypothesisTree, RExp, Tractus};
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "tractus")]
@@ -68,7 +68,6 @@ fn render<'a>(tree: &'a HypothesisTree) -> Box<Render + 'a> {
                     : Raw("
                     .hypotheses {
                         display: flex;
-                        margin-top: 1em;
                     }
 
                     ol {
@@ -76,12 +75,48 @@ fn render<'a>(tree: &'a HypothesisTree) -> Box<Render + 'a> {
                         list-style: none;
                     }
 
+                    ol.nodes {
+                        padding-left: 1em;
+                    }
+
                     .hypothesis {
                         font-style: italic;
                     }
 
                     .expression {
+                        font-family: monospace;
                         font-weight: bold;
+                    }
+
+                    /*
+                     * Directory lines inspired by https://two-wrongs.com/draw-a-tree-structure-with-only-css.
+                     */
+                    .nodes {
+                        position: relative;
+                    }
+
+                    ol.nodes > li::before, ol.nodes > li::after {
+                        content: \"\";
+                        position: absolute;
+                        left: 0;
+                    }
+
+                    ol.nodes > li::before {
+                        border-top: 1px solid #000;
+                        width: 8px;
+                        height: 0;
+                        transform: translateY(10px);
+                    }
+
+                    ol.nodes > li::after {
+                        border-left: 1px solid #000;
+                        height: 100%;
+                        width: 0px;
+                        top: 2px;
+                    }
+
+                    ol.nodes > li:last-child::after {
+                        height: 8px;
                     }
                     ") ;
                 }
@@ -96,13 +131,16 @@ fn render<'a>(tree: &'a HypothesisTree) -> Box<Render + 'a> {
 fn render_hypothesis_tree<'a>(tree: &'a HypothesisTree) -> Box<Render + 'a> {
     box_html! {
         ol(class="hypotheses") {
-            @ for (hypothesis, nodes) in tree.iter() { // TODO: Consider sorting.
+            @ for (maybe_hypothesis, nodes) in tree.iter() { // TODO: Consider sorting.
                 li {
-                    span(class="hypothesis") { : format!("{:?}", hypothesis) ; }
+                    span(class="hypothesis") { : match maybe_hypothesis {
+                        Some(hypothesis) => format!("{}", hypothesis),
+                        None => "No hypothesis.".to_string()
+                    } ; }
                     ol(class="nodes") {
                         @ for node in nodes.iter() {
                             li {
-                                span(class="expression") { : format!("{:?}", node.expression) ; }
+                                span(class="expression") { : short_function_name(node.expression) ; }
                                 : render_hypothesis_tree(&node.children) ;
                             }
                         }
@@ -110,5 +148,12 @@ fn render_hypothesis_tree<'a>(tree: &'a HypothesisTree) -> Box<Render + 'a> {
                 }
             }
         }
+    }
+}
+
+fn short_function_name(expression: &RExp) -> String {
+    match expression {
+        RExp::Call(name, _) => name.clone(),
+        _ => format!("{}", expression),
     }
 }

@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::iter::FromIterator;
+use std::cmp::Ordering;
 
 use crate::parser::{RExp, RFormula, RFormulaExpression, RIdentifier};
 
@@ -7,6 +8,24 @@ use crate::parser::{RExp, RFormula, RFormulaExpression, RIdentifier};
 pub struct Hypothesis {
     pub left: RIdentifier,
     pub right: RFormulaExpression,
+}
+
+impl std::fmt::Display for Hypothesis {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} ~ {}", self.left, self.right)
+    }
+}
+
+impl Ord for Hypothesis {
+    fn cmp(&self, other: &Self) -> Ordering {
+        format!("{}", self).cmp(&format!("{}", other))
+    }
+}
+
+impl PartialOrd for Hypothesis {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 pub fn detect_hypotheses(expression: &RExp) -> HashSet<Hypothesis> {

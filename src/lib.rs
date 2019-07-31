@@ -5,12 +5,12 @@ mod dependency_graph;
 mod hypotheses;
 mod parser;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, BTreeMap};
 
 use crate::dependency_graph::{parse_dependency_graph, DependencyGraph};
 
 use crate::hypotheses::{detect_hypotheses, Hypothesis};
-use crate::parser::{RExp, RStmt};
+pub use crate::parser::{RExp, RFormula, RFormulaExpression, RStmt};
 
 #[derive(Debug)]
 pub struct Tractus(Vec<RStmt>);
@@ -45,7 +45,7 @@ impl Tractus {
     }
 }
 
-pub type HypothesisTree<'a> = HashMap<Option<Hypothesis>, Vec<Node<'a>>>;
+pub type HypothesisTree<'a> = BTreeMap<Option<Hypothesis>, Vec<Node<'a>>>;
 
 #[derive(Debug, PartialEq)]
 pub struct Node<'a> {
@@ -58,11 +58,12 @@ pub fn hypothesis_tree_from_nodes<'a>(
     dependency_graph: &DependencyGraph<'a>,
     hypotheses_map: &HashMap<&'a RExp, HashSet<Hypothesis>>,
 ) -> HypothesisTree<'a> {
-    let mut tree = HashMap::new();
+    let mut tree = BTreeMap::new();
     for node_id in nodes.iter() {
         let graph = dependency_graph.graph();
         let expression = graph.node_weight(*node_id).unwrap(); // Node id is valid.
-        let dependents = graph.neighbors(*node_id).collect();
+        let mut dependents: Vec<dependency_graph::NodeIndex> = graph.neighbors(*node_id).collect();
+        dependents.sort_unstable(); // Sort by id, which sorts by line number.
 
         let register_under = |hypothesis: Option<Hypothesis>| {
             tree.entry(hypothesis).or_insert_with(|| vec![]).push(Node {
@@ -131,11 +132,11 @@ mod tests {
         // Need to build from the inside out.
         let n4 = Node {
             expression: tractus.get_statement(3).unwrap().expression().unwrap(),
-            children: HashMap::new(),
+            children: BTreeMap::new(),
         };
         let n3 = Node {
             expression: tractus.get_statement(2).unwrap().expression().unwrap(),
-            children: HashMap::new(),
+            children: BTreeMap::new(),
         };
         let hyp = Hypothesis {
             left: "Speed".into(),
@@ -143,13 +144,13 @@ mod tests {
         };
         let n2 = Node {
             expression: tractus.get_statement(1).unwrap().expression().unwrap(),
-            children: HashMap::from_iter(vec![(Some(hyp), vec![n3]), (None, vec![n4])]),
+            children: BTreeMap::from_iter(vec![(Some(hyp), vec![n3]), (None, vec![n4])]),
         };
         let n1 = Node {
             expression: tractus.get_statement(0).unwrap().expression().unwrap(),
-            children: HashMap::from_iter(vec![(None, vec![n2])]),
+            children: BTreeMap::from_iter(vec![(None, vec![n2])]),
         };
-        let mut expected = HashMap::new();
+        let mut expected = BTreeMap::new();
         expected.insert(None, vec![n1]);
 
         assert_eq!(expected, tree);
