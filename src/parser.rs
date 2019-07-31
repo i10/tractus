@@ -66,7 +66,7 @@ pub enum RFormulaExpression {
 
 pub type RIdentifier = String;
 
-type Error = pest::error::Error<Rule>;
+pub type Error = pest::error::Error<Rule>;
 
 pub fn parse(code: &str) -> Result<Vec<RStmt>, Error> {
     let mut parse_result = RParser::parse(Rule::file, code)?;
@@ -146,7 +146,6 @@ fn parse_expression(expression_pair: pest::iterators::Pair<'_, Rule>) -> RExp {
         }
         Rule::formula => {
             let formula_kind = expression.into_inner().next().unwrap(); // Formula always has a kind.
-            println!("{:?}", formula_kind);
             match formula_kind.as_rule() {
                 Rule::one_sided => {
                     let right = formula_kind.into_inner();
@@ -225,6 +224,7 @@ fn parse_formula_expression(
     for (operator, right) in expression.tuples() {
         match operator.as_str() {
             "+" => result = RFormulaExpression::Plus(Box::new(result), right.as_str().into()),
+            // TODO: Implement missing operators.
             _ => unreachable!(),
         }
     }

@@ -5,7 +5,7 @@ use petgraph::Graph;
 use crate::parser::{RExp, RIdentifier, RStmt};
 
 type NodeIndexType = petgraph::graph::DefaultIx;
-type NodeIndex = petgraph::graph::NodeIndex<NodeIndexType>;
+pub type NodeIndex = petgraph::graph::NodeIndex<NodeIndexType>;
 
 #[derive(Default, Debug)]
 pub struct DependencyGraph<'a> {
@@ -46,10 +46,13 @@ pub fn parse_dependency_graph(input: &[RStmt]) -> DependencyGraph {
             }
             Assignment(left, right) => {
                 let node_id = register_dependencies(right, &mut dependency_graph, &mut variables);
-                extract_variable_name(left).map(|name| {
-                    variables.insert(name, node_id);
-                    node_id
-                });
+                match extract_variable_name(left) {
+                    Some(name) => variables.insert(name, node_id),
+                    None => panic!(
+                        "Could not find a variable in the left side of the assignment {:?}.",
+                        statement
+                    ),
+                };
             }
             _ => (),
         };
@@ -219,6 +222,50 @@ mod tests {
         compare_graphs(&expected, &graph);
     }
 
+    #[test]
+    fn detects_sibling_dependencies() {
+        let input = vec![
+            RStmt::Assignment(RExp::variable("x"), RExp::constant("data frame")),
+            RStmt::Expression(RExp::Call(
+                "factor".into(),
+                vec![(
+                    None,
+                    RExp::Column(
+                        Box::new(RExp::variable("x")),
+                        Box::new(RExp::constant("column")),
+                    ),
+                )],
+            )),
+            RStmt::Expression(RExp::Call(
+                "summary".into(),
+                vec![(None, RExp::variable("x"))],
+            )),
+        ];
+        let graph = parse_dependency_graph(&input);
+
+        let mut expected = DependencyGraph::new();
+        let expected_graph = expected.graph_mut();
+        let e1 = RExp::constant("data frame");
+        let n1 = expected_graph.add_node(&e1);
+        let e2 = RExp::Call(
+            "factor".into(),
+            vec![(
+                None,
+                RExp::Column(
+                    Box::new(RExp::variable("x")),
+                    Box::new(RExp::constant("column")),
+                ),
+            )],
+        );
+        let n2 = expected_graph.add_node(&e2);
+        expected_graph.add_edge(n1, n2, ());
+        let e3 = RExp::Call("summary".into(), vec![(None, RExp::variable("x"))]);
+        let n3 = expected_graph.add_node(&e3);
+        expected_graph.add_edge(n1, n3, ());
+
+        compare_graphs(&expected, &graph);
+    }
+
     mod extracts_variable_name {
         use crate::parser::RExp;
 
@@ -295,6 +342,22 @@ mod tests {
             let expression = RExp::Column(
                 Box::new(RExp::variable("x")),
                 Box::new(RExp::constant("test")),
+            );
+            let result = extract_dependencies(&expression);
+            assert_eq!(vec!["x".to_string()], result);
+        }
+
+        #[test]
+        fn finds_column_in_call() {
+            let expression = RExp::Call(
+                "factor".into(),
+                vec![(
+                    None,
+                    RExp::Column(
+                        Box::new(RExp::variable("x")),
+                        Box::new(RExp::constant("column")),
+                    ),
+                )],
             );
             let result = extract_dependencies(&expression);
             assert_eq!(vec!["x".to_string()], result);

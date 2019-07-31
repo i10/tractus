@@ -1,18 +1,21 @@
+use std::collections::HashSet;
+use std::iter::FromIterator;
+
 use crate::parser::{RExp, RFormula, RFormulaExpression, RIdentifier};
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Eq, Hash, Debug, Clone)]
 pub struct Hypothesis {
-    left: RIdentifier,
-    right: RFormulaExpression,
+    pub left: RIdentifier,
+    pub right: RFormulaExpression,
 }
 
-pub fn detect_hypothesis(expression: &RExp) -> Option<Vec<Hypothesis>> {
+pub fn detect_hypotheses(expression: &RExp) -> HashSet<Hypothesis> {
     use RExp::*;
-    match expression {
-        Formula(RFormula::TwoSided(left, right)) => Some(vec![Hypothesis {
+    HashSet::from_iter(match expression {
+        Formula(RFormula::TwoSided(left, right)) => vec![Hypothesis {
             left: left.clone(),
             right: right.clone(),
-        }]),
+        }],
 
         // variable[variable$independent == "level",]$dependent
         // |----------------left--------------------| |-right-|
@@ -27,46 +30,38 @@ pub fn detect_hypothesis(expression: &RExp) -> Option<Vec<Hypothesis>> {
                             Column(inner_variable, independent) => {
                                 if let Variable(independent_name) = &**independent {
                                     if inner_variable == variable {
-                                        Some(vec![Hypothesis {
+                                        vec![Hypothesis {
                                             left: dependent_name.clone(),
                                             right: RFormulaExpression::Variable(
                                                 independent_name.to_string(),
                                             ),
-                                        }])
+                                        }]
                                     } else {
-                                        None
+                                        vec![]
                                     }
                                 } else {
-                                    None
+                                    vec![]
                                 }
                             }
-                            _ => None,
+                            _ => vec![],
                         }
                     } else {
-                        None
+                        vec![]
                     }
                 }
-                _ => None,
+                _ => vec![],
             },
 
-            _ => None,
+            _ => vec![],
         },
 
-        Call(_, args) => {
-            let hypotheses: Vec<Hypothesis> = args
-                .iter()
-                .filter_map(|(_, exp)| detect_hypothesis(exp))
-                .flatten()
-                .collect();
-            if hypotheses.is_empty() {
-                None
-            } else {
-                Some(hypotheses)
-            }
-        }
-
-        _ => None,
-    }
+        Call(_, args) => args
+            .iter()
+            .map(|(_, exp)| detect_hypotheses(exp))
+            .flatten()
+            .collect(),
+        _ => vec![],
+    })
 }
 
 #[cfg(test)]
@@ -81,12 +76,12 @@ mod tests {
             "dependent".into(),
             RFormulaExpression::Variable("independent".into()),
         ));
-        let result = detect_hypothesis(&expression);
-        let expected = vec![Hypothesis {
+        let result = detect_hypotheses(&expression);
+        let expected = HashSet::from_iter(vec![Hypothesis {
             left: "dependent".into(),
             right: RFormulaExpression::Variable("independent".into()),
-        }];
-        assert_eq!(Some(expected), result);
+        }]);
+        assert_eq!(expected, result);
     }
 
     #[test]
@@ -104,15 +99,15 @@ mod tests {
                 )),
             )],
         );
-        let result = detect_hypothesis(&expression);
-        let expected = vec![Hypothesis {
+        let result = detect_hypotheses(&expression);
+        let expected = HashSet::from_iter(vec![Hypothesis {
             left: "speed".into(),
             right: RFormulaExpression::Plus(
                 Box::new(RFormulaExpression::Variable("layout".into())),
                 "age".into(),
             ),
-        }];
-        assert_eq!(Some(expected), result);
+        }]);
+        assert_eq!(expected, result);
     }
 
     #[test]
@@ -135,11 +130,11 @@ mod tests {
             )),
             Box::new(RExp::variable("dependent")),
         );
-        let result = detect_hypothesis(&expression);
-        let expected = vec![Hypothesis {
+        let result = detect_hypotheses(&expression);
+        let expected = HashSet::from_iter(vec![Hypothesis {
             left: "dependent".into(),
             right: RFormulaExpression::Variable("independent".into()),
-        }];
-        assert_eq!(Some(expected), result);
+        }]);
+        assert_eq!(expected, result);
     }
 }
