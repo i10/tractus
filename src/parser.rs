@@ -124,6 +124,7 @@ impl std::fmt::Display for RFormula {
 #[derive(PartialEq, Eq, Debug, Clone, Hash)]
 pub enum RFormulaExpression {
     Variable(RIdentifier),
+    Call(RIdentifier, Vec<(Option<RIdentifier>, RExp)>),
     Plus(Box<RFormulaExpression>, RIdentifier),
     /*Minus(Box<RFormulaExpression>, RIdentifier),
     Colon(Box<RFormulaExpression>, RIdentifier),
@@ -137,6 +138,21 @@ impl std::fmt::Display for RFormulaExpression {
         use RFormulaExpression::*;
         match self {
             Variable(name) => write!(f, "{}", name),
+            Call(name, args) => {
+                let arguments = args
+                    .iter()
+                    .map(|(maybe_name, expression)| {
+                        let mut s = String::new();
+                        if let Some(name) = maybe_name {
+                            write!(s, "{} = ", name)?;
+                        }
+                        write!(s, "{}", expression)?;
+                        Ok(s)
+                    })
+                    .collect::<Result<Vec<String>, std::fmt::Error>>()?
+                    .join(", ");
+                write!(f, "{}({})", name, arguments)
+            }
             Plus(left, right) => write!(f, "{} + {}", left, right),
         }
     }
@@ -186,41 +202,14 @@ pub fn parse(code: &str) -> Result<Vec<RStmt>, Error> {
         .collect())
 }
 
-fn parse_expression(expression_pair: pest::iterators::Pair<'_, Rule>) -> RExp {
+fn parse_expression(expression_pair: pest::iterators::Pair<Rule>) -> RExp {
     let mut whole_expression = expression_pair.into_inner();
     let expression = whole_expression.next().unwrap(); // Expression is always non-empty.
     let mut rexp = match expression.as_rule() {
         Rule::constant => RExp::Constant(expression.as_str().to_string()),
         Rule::identifier => RExp::Variable(expression.as_str().to_string()),
         Rule::function_call => {
-            let mut function = expression.into_inner();
-            let name = function.next().unwrap(); // Function name always exists.
-            let maybe_arguments = function.next();
-            let args: Vec<(Option<RIdentifier>, RExp)> = match maybe_arguments {
-                Some(args) => {
-                    args.into_inner()
-                        .map(|arg| {
-                            match arg.as_rule() {
-                                Rule::named_argument => {
-                                    let mut argument = arg.into_inner();
-                                    let key = argument.next().unwrap(); // Key always exists.
-                                    let value = argument.next().unwrap(); // Value always exists.
-                                    let value = parse_expression(value);
-                                    (Some(key.as_str().to_string()), value)
-                                }
-                                Rule::unnamed_argument => {
-                                    let value = arg.into_inner().next().unwrap(); // Argument's value always exists.
-                                    let value = parse_expression(value);
-                                    (None, value)
-                                }
-                                _ => unreachable!(),
-                            }
-                        })
-                        .collect()
-                }
-                None => vec![],
-            };
-            RExp::Call(name.as_str().into(), args)
+            parse_function_expression(expression)
         }
         Rule::prefix => {
             let mut prefix_expression = expression.into_inner();
@@ -303,11 +292,53 @@ fn parse_expression(expression_pair: pest::iterators::Pair<'_, Rule>) -> RExp {
     rexp
 }
 
+fn parse_function_expression(function_pair: pest::iterators::Pair<Rule>) -> RExp {
+    let mut function = function_pair.into_inner();
+    let name = function.next().unwrap(); // Function name always exists.
+    let maybe_arguments = function.next();
+    let args: Vec<(Option<RIdentifier>, RExp)> = match maybe_arguments {
+        Some(args) => {
+            args.into_inner()
+                .map(|arg| {
+                    match arg.as_rule() {
+                        Rule::named_argument => {
+                            let mut argument = arg.into_inner();
+                            let key = argument.next().unwrap(); // Key always exists.
+                            let value = argument.next().unwrap(); // Value always exists.
+                            let value = parse_expression(value);
+                            (Some(key.as_str().to_string()), value)
+                        }
+                        Rule::unnamed_argument => {
+                            let value = arg.into_inner().next().unwrap(); // Argument's value always exists.
+                            let value = parse_expression(value);
+                            (None, value)
+                        }
+                        _ => unreachable!(),
+                    }
+                })
+                .collect()
+        }
+        None => vec![],
+    };
+    RExp::Call(name.as_str().into(), args)
+}
+
 fn parse_formula_expression(
-    mut expression: pest::iterators::Pairs<'_, Rule>,
+    mut expression: pest::iterators::Pairs<Rule>,
 ) -> RFormulaExpression {
-    let first = expression.next().unwrap();
-    let mut result = RFormulaExpression::Variable(first.as_str().into()); // Right-hand side of formula always has at least one element.
+    let first_expression = expression.next().unwrap(); // Expression always has at least one element.
+    let mut result = match first_expression.as_rule() {
+        Rule::identifier => RFormulaExpression::Variable(first_expression.as_str().to_string()),
+        Rule::function_call => {
+            let function_call = parse_function_expression(first_expression);
+            if let RExp::Call(name, args) = function_call {
+                RFormulaExpression::Call(name, args)
+            } else {
+                panic!("Expected functional call, found {}.", function_call);
+            }
+        }
+        _ => unreachable!(),
+    };
     for (operator, right) in expression.tuples() {
         match operator.as_str() {
             "+" => result = RFormulaExpression::Plus(Box::new(result), right.as_str().into()),
@@ -454,7 +485,9 @@ item[empty,]";
 ~ one_sided
 two ~ sided
 ~ one + sided + multiple
-two ~ sided + multiple";
+two ~ sided + multiple
+~ transform(x)
+other ~ transform(x)";
         let result = test_parse(code);
         let expected = vec![
             RStmt::Expression(RExp::Formula(RFormula::OneSided(
@@ -476,6 +509,17 @@ two ~ sided + multiple";
                 RFormulaExpression::Plus(
                     Box::new(RFormulaExpression::Variable("sided".into())),
                     "multiple".into(),
+                ),
+            ))),
+            RStmt::Expression(RExp::Formula(RFormula::OneSided(RFormulaExpression::Call(
+                "transform".into(),
+                vec![(None, RExp::Variable("x".into()))],
+            )))),
+            RStmt::Expression(RExp::Formula(RFormula::TwoSided(
+                "other".into(),
+                RFormulaExpression::Call(
+                    "transform".into(),
+                    vec![(None, RExp::Variable("x".into()))],
                 ),
             ))),
         ];

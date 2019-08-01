@@ -44,5 +44,6 @@ library = { "library(" ~ identifier ~ ")"}
 formula = !{ one_sided | two_sided }
 one_sided = { "~" ~ formula_right_side }
 two_sided = { identifier? ~ "~" ~ formula_right_side }
-formula_right_side = _{ identifier ~ (formula_operator ~ identifier)* }
+formula_right_side = _{ formula_expression ~ (formula_operator ~ formula_expression)* }
+formula_expression = _{ function_call | identifier }
 formula_operator = { "+" }
