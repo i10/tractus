@@ -1,6 +1,6 @@
+use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::iter::FromIterator;
-use std::cmp::Ordering;
 
 use crate::parser::{RExp, RFormula, RFormulaExpression, RIdentifier};
 
@@ -30,11 +30,11 @@ impl PartialOrd for Hypothesis {
 
 pub fn detect_hypotheses(expression: &RExp) -> HashSet<Hypothesis> {
     use RExp::*;
-    HashSet::from_iter(match expression {
-        Formula(RFormula::TwoSided(left, right)) => vec![Hypothesis {
+    match expression {
+        Formula(RFormula::TwoSided(left, right)) => HashSet::from_iter(vec![Hypothesis {
             left: left.clone(),
             right: right.clone(),
-        }],
+        }]),
 
         // variable[variable$independent == "level",]$dependent
         // |----------------left--------------------| |-right-|
@@ -49,29 +49,29 @@ pub fn detect_hypotheses(expression: &RExp) -> HashSet<Hypothesis> {
                             Column(inner_variable, independent) => {
                                 if let Variable(independent_name) = &**independent {
                                     if inner_variable == variable {
-                                        vec![Hypothesis {
+                                        HashSet::from_iter(vec![Hypothesis {
                                             left: dependent_name.clone(),
                                             right: RFormulaExpression::Variable(
                                                 independent_name.to_string(),
                                             ),
-                                        }]
+                                        }])
                                     } else {
-                                        vec![]
+                                        HashSet::new()
                                     }
                                 } else {
-                                    vec![]
+                                    HashSet::new()
                                 }
                             }
-                            _ => vec![],
+                            _ => HashSet::new(),
                         }
                     } else {
-                        vec![]
+                        HashSet::new()
                     }
                 }
-                _ => vec![],
+                _ => HashSet::new(),
             },
 
-            _ => vec![],
+            (left, _) => detect_hypotheses(left),
         },
 
         Call(_, args) => args
@@ -79,8 +79,8 @@ pub fn detect_hypotheses(expression: &RExp) -> HashSet<Hypothesis> {
             .map(|(_, exp)| detect_hypotheses(exp))
             .flatten()
             .collect(),
-        _ => vec![],
-    })
+        _ => HashSet::new(),
+    }
 }
 
 #[cfg(test)]
@@ -153,6 +153,46 @@ mod tests {
         let expected = HashSet::from_iter(vec![Hypothesis {
             left: "dependent".into(),
             right: RFormulaExpression::Variable("independent".into()),
+        }]);
+        assert_eq!(expected, result);
+    }
+
+    #[test]
+    fn parses_column_hypothesis_in_call() {
+        // fitdistr(kbd[kbd$Layout == "QWERTY",]$Speed, "lognormal")$estimate
+        let expression = RExp::Column(
+            Box::new(RExp::Call(
+                "fitdistr".into(),
+                vec![
+                    (
+                        None,
+                        RExp::Column(
+                            Box::new(RExp::Index(
+                                Box::new(RExp::variable("kbd")),
+                                vec![
+                                    Some(RExp::Infix(
+                                        "==".into(),
+                                        Box::new(RExp::Column(
+                                            Box::new(RExp::variable("kbd")),
+                                            Box::new(RExp::variable("Layout")),
+                                        )),
+                                        Box::new(RExp::constant("\"QWERTY\"")),
+                                    )),
+                                    None,
+                                ],
+                            )),
+                            Box::new(RExp::variable("Speed")),
+                        ),
+                    ),
+                    (None, RExp::constant("\"lognormal\"")),
+                ],
+            )),
+            Box::new(RExp::variable("estimate")),
+        );
+        let result = detect_hypotheses(&expression);
+        let expected = HashSet::from_iter(vec![Hypothesis {
+            left: "Speed".into(),
+            right: RFormulaExpression::Variable("Layout".into()),
         }]);
         assert_eq!(expected, result);
     }
