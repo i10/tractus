@@ -2,7 +2,7 @@ WHITESPACE = _{ " " | "\t" }
 file = { SOI ~ statement ~ ((";" ~ NEWLINE | ";" | NEWLINE) ~ statement?)* ~ EOI }
 statement = { (assignment | library | expression)? ~ comment? }
 
-assignment = { expression ~ ("<-" | "=") ~ expression}
+assignment = { (expression ~ ("<-" | "="))+ ~ expression}
 comment = @{ "#" ~ character* }
 character = _{ !NEWLINE ~ ANY }
 empty = @{ "" }

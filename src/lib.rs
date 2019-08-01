@@ -95,12 +95,13 @@ mod tests {
     #[test]
     fn simple_hypothesis_tree() {
         let input = vec![
-            RStmt::Assignment(RExp::variable("kbd"), RExp::constant("data frame")),
+            RStmt::Assignment(RExp::variable("kbd"), vec![], RExp::constant("data frame")),
             RStmt::Assignment(
                 RExp::Column(
                     Box::new(RExp::variable("kbd")),
                     Box::new(RExp::constant("ParticipantID")),
                 ),
+                vec![],
                 RExp::Call(
                     "factor".into(),
                     vec![(

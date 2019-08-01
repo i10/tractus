@@ -44,15 +44,20 @@ pub fn parse_dependency_graph(input: &[RStmt]) -> DependencyGraph {
             Expression(expression) => {
                 register_dependencies(expression, &mut dependency_graph, &mut variables);
             }
-            Assignment(left, right) => {
-                let node_id = register_dependencies(right, &mut dependency_graph, &mut variables);
-                match extract_variable_name(left) {
-                    Some(name) => variables.insert(name, node_id),
-                    None => panic!(
-                        "Could not find a variable in the left side of the assignment {:?}.",
-                        statement
-                    ),
-                };
+            Assignment(left, additional, right) => {
+                let mut assigned = vec![left];
+                assigned.append(&mut additional.iter().collect());
+                for variable in assigned {
+                    let node_id = register_dependencies(right, &mut dependency_graph, &mut variables);
+                    match extract_variable_name(variable) {
+                        Some(name) => variables.insert(name, node_id),
+                        None => panic!(
+                            "Could not find a variable in {}, in the left side of the assignment {}.",
+                            variable,
+                            statement
+                        ),
+                    };
+                }
             }
             _ => (),
         };
@@ -139,9 +144,10 @@ mod tests {
     #[test]
     fn detects_linear_graph() {
         let input = vec![
-            RStmt::Assignment(RExp::variable("x"), RExp::constant("1")),
+            RStmt::Assignment(RExp::variable("x"), vec![], RExp::constant("1")),
             RStmt::Assignment(
                 RExp::variable("y"),
+                 vec![],
                 RExp::Call("transform".into(), vec![(None, RExp::variable("x"))]),
             ),
             RStmt::Expression(RExp::Call(
@@ -175,12 +181,13 @@ mod tests {
     #[test]
     fn detects_mutations() {
         let input = vec![
-            RStmt::Assignment(RExp::variable("x"), RExp::constant("data frame")),
+            RStmt::Assignment(RExp::variable("x"),  vec![],RExp::constant("data frame")),
             RStmt::Assignment(
                 RExp::Column(
                     Box::new(RExp::variable("x")),
                     Box::new(RExp::constant("column")),
                 ),
+                 vec![],
                 RExp::Call(
                     "factor".into(),
                     vec![(
@@ -225,7 +232,7 @@ mod tests {
     #[test]
     fn detects_sibling_dependencies() {
         let input = vec![
-            RStmt::Assignment(RExp::variable("x"), RExp::constant("data frame")),
+            RStmt::Assignment(RExp::variable("x"),  vec![],RExp::constant("data frame")),
             RStmt::Expression(RExp::Call(
                 "factor".into(),
                 vec![(
@@ -377,12 +384,13 @@ mod tests {
     #[test]
     fn gives_index_for_expression() {
         let input = vec![
-            RStmt::Assignment(RExp::variable("x"), RExp::constant("data frame")),
+            RStmt::Assignment(RExp::variable("x"),  vec![],RExp::constant("data frame")),
             RStmt::Assignment(
                 RExp::Column(
                     Box::new(RExp::variable("x")),
                     Box::new(RExp::constant("column")),
                 ),
+                 vec![],
                 RExp::Call(
                     "factor".into(),
                     vec![(

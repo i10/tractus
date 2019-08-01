@@ -11,7 +11,7 @@ struct RParser;
 pub enum RStmt {
     Empty,
     Comment(String),
-    Assignment(RExp, RExp),
+    Assignment(RExp, Vec<RExp>, RExp),
     Library(RIdentifier),
     Expression(RExp),
 }
@@ -20,12 +20,30 @@ impl RStmt {
     pub fn expression(&self) -> Option<&RExp> {
         use RStmt::*;
         match self {
-            Assignment(_, expression) => Some(expression),
+            Assignment(_, _, expression) => Some(expression),
             Expression(expression) => Some(expression),
             _ => None,
         }
     }
 }
+
+impl std::fmt::Display for RStmt{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use RStmt::*;
+        match self {
+            Empty => writeln!(f),
+            Comment(text) => write!(f, "{}", text),
+            Assignment(left, additional, right) => {
+                let mut assigned = vec![left];
+                assigned.append(&mut additional.iter().collect());
+                for variable in assigned.iter() {
+                    write!(f, "{} <- ", variable)?
+                }
+                write!(f, "{}", right)
+            }
+            Library(name) => write!(f, "{}", name),
+            Expression(exp) => write!(f, "{}", exp)
+        }}}
 
 #[derive(PartialEq, Eq, Debug, Clone, Hash)]
 pub enum RExp {
@@ -180,12 +198,18 @@ pub fn parse(code: &str) -> Result<Vec<RStmt>, Error> {
                                 Some(RStmt::Expression(parse_expression(line))) // Expression is always non-empty.
                             }
                             Rule::assignment => {
-                                let mut assignment = line.into_inner();
-                                let left = assignment.next().unwrap(); // Left-hand side always exists.
-                                let right = assignment.next().unwrap(); // Righ-hand side always exists.
-                                let left = parse_expression(left);
-                                let right = parse_expression(right);
-                                Some(RStmt::Assignment(left, right))
+                                // Can be multiple assignment, e. g. a=b=c=1. We want to extract the right-most expression,
+                                // wich is assigned to all others, and the left-most one, which prevents an empty left side.
+                                let mut elements: Vec<RExp> = line.into_inner().map(|exp| parse_expression(exp)).collect();
+                                let error = "Assignment did not have enough elements.";
+                                let right = elements.pop().expect(error);
+                                if elements.len() < 1 {
+                                    panic!(error);
+                                }
+                                let left = elements.remove(0);
+                                let additional = elements;
+                                
+                                Some(RStmt::Assignment(left, additional, right))
                             }
                             Rule::library => {
                                 let name = line.into_inner().next().unwrap(); // Library name always exists.
@@ -378,11 +402,13 @@ mod tests {
     fn parses_assignments() {
         let code = "\
 a <- 1
-b = 2";
+b = 2
+a=b=c=1";
         let result = test_parse(code);
         let expected = vec![
-            RStmt::Assignment(RExp::variable("a"), RExp::constant("1")),
-            RStmt::Assignment(RExp::variable("b"), RExp::constant("2")),
+            RStmt::Assignment(RExp::variable("a"), vec![], RExp::constant("1")),
+            RStmt::Assignment(RExp::variable("b"), vec![], RExp::constant("2")),
+            RStmt::Assignment(RExp::variable("a"), vec![RExp::variable("b"), RExp::variable("c")], RExp::constant("1"))
         ];
         assert_eq!(expected, result);
     }
@@ -534,9 +560,10 @@ func2 <- function (with, arguments) 2
 func3 <- function (with, default = 'arguments') 3 ";
         let result = test_parse(code);
         let expected = vec![
-            RStmt::Assignment(RExp::variable("func1"), RExp::Function(vec![], "1".into())),
+            RStmt::Assignment(RExp::variable("func1"), vec![], RExp::Function(vec![], "1".into())),
             RStmt::Assignment(
                 RExp::variable("func2"),
+                 vec![],
                 RExp::Function(
                     vec![("with".into(), None), ("arguments".into(), None)],
                     "2".into(),
@@ -544,6 +571,7 @@ func3 <- function (with, default = 'arguments') 3 ";
             ),
             RStmt::Assignment(
                 RExp::variable("func3"),
+                 vec![],
                 RExp::Function(
                     vec![
                         ("with".into(), None),
@@ -565,10 +593,12 @@ y <- negate(!x)";
         let expected = vec![
             RStmt::Assignment(
                 RExp::variable("x"),
+                 vec![],
                 RExp::Prefix("!".into(), Box::new(RExp::constant("TRUE"))),
             ),
             RStmt::Assignment(
                 RExp::variable("y"),
+                 vec![],
                 RExp::Call(
                     "negate".into(),
                     vec![(
