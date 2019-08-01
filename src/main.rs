@@ -76,12 +76,12 @@ fn render<'a>(tree: &'a HypothesisTree) -> Box<Render + 'a> {
                     }
 
                     ol.nodes {
-                        padding-left: 1em;
+                        padding-left: 12px;
                     }
 
                     .hypotheses > li {
-                        margin-top: 1em;
-                        padding-left: 1em;
+                        margin-top: 0.5em;
+                        padding-right: 12px;
                     }
 
                     .hypothesis {
@@ -97,14 +97,14 @@ fn render<'a>(tree: &'a HypothesisTree) -> Box<Render + 'a> {
                     /*
                      * Directory lines inspired by https://two-wrongs.com/draw-a-tree-structure-with-only-css.
                      */
-                    .nodes {
+                    ol.nodes > li {
                         position: relative;
                     }
 
                     ol.nodes > li::before, ol.nodes > li::after {
                         content: \"\";
                         position: absolute;
-                        left: 0;
+                        left: -12px;
                     }
 
                     ol.nodes > li::before {
@@ -117,7 +117,7 @@ fn render<'a>(tree: &'a HypothesisTree) -> Box<Render + 'a> {
                     ol.nodes > li::after {
                         border-left: 1px solid #000;
                         height: 100%;
-                        width: 0px;
+                        width: 0;
                         top: 2px;
                     }
 
@@ -125,14 +125,14 @@ fn render<'a>(tree: &'a HypothesisTree) -> Box<Render + 'a> {
                         height: 8px;
                     }
 
-                    .hypotheses {
+                    .hypotheses > li {
                         position: relative;
                     }
 
                     ol.hypotheses > li::before, ol.hypotheses > li::after {
                         content: \"\";
                         position: absolute;
-                        top: 8px;
+                        top: 0;
                     }
 
                     ol.hypotheses > li::before {
@@ -145,7 +145,12 @@ fn render<'a>(tree: &'a HypothesisTree) -> Box<Render + 'a> {
                         border-top: 1px solid #000;
                         width: 100%;
                         height: 0;
-                        left: 2px;
+                        left: 0;
+                    }
+
+                    ol.hypotheses > li:first-child::before {
+                        height: 38px;
+                        transform: translateY(-8px);
                     }
 
                     ol.hypotheses > li:last-child::after {
@@ -173,7 +178,7 @@ fn render_hypothesis_tree<'a>(tree: &'a HypothesisTree) -> Box<Render + 'a> {
                     ol(class="nodes") {
                         @ for node in nodes.iter() {
                             li {
-                                span(class="expression") { : short_function_name(node.expression) ; }
+                                span(class="expression") { : render_preferrably_as_function(node.expression) ; }
                                 : render_hypothesis_tree(&node.children) ;
                             }
                         }
@@ -184,9 +189,14 @@ fn render_hypothesis_tree<'a>(tree: &'a HypothesisTree) -> Box<Render + 'a> {
     }
 }
 
-fn short_function_name(expression: &RExp) -> String {
+fn render_preferrably_as_function(expression: &RExp) -> String {
+    extract_function_name(expression).unwrap_or_else(|| format!("{}", expression))
+}
+
+fn extract_function_name(expression: &RExp) -> Option<String> {
     match expression {
-        RExp::Call(name, _) => name.clone(),
-        _ => format!("{}", expression),
+        RExp::Call(name, _) => Some(name.clone()),
+        RExp::Column(left, _) => extract_function_name(left),
+        _ => None,
     }
 }
