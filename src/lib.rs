@@ -5,7 +5,7 @@ mod dependency_graph;
 mod hypotheses;
 mod parser;
 
-use std::collections::{HashMap, HashSet, BTreeMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use crate::dependency_graph::{parse_dependency_graph, DependencyGraph};
 

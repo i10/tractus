@@ -109,7 +109,7 @@ pub enum RFormula {
     TwoSided(RIdentifier, RFormulaExpression),
 }
 
-impl std::fmt::Display for RFormula{
+impl std::fmt::Display for RFormula {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use RFormula::*;
         match self {
@@ -130,7 +130,7 @@ pub enum RFormulaExpression {
     Hat(Box<RFormulaExpression>, RIdentifier),*/
 }
 
-impl std::fmt::Display for RFormulaExpression{
+impl std::fmt::Display for RFormulaExpression {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use RFormulaExpression::*;
         match self {
