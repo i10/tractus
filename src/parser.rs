@@ -160,7 +160,7 @@ pub fn parse(code: &str) -> Result<Vec<RStmt>, Error> {
                     Some(line) => {
                         match line.as_rule() {
                             Rule::comment => Some(RStmt::Comment(line.as_str().to_string())),
-                            Rule::expression => {
+                            Rule::raw_expression => {
                                 Some(RStmt::Expression(parse_expression(line))) // Expression is always non-empty.
                             }
                             Rule::assignment => {
@@ -279,7 +279,7 @@ fn parse_expression(expression_pair: pest::iterators::Pair<'_, Rule>) -> RExp {
                 let indices = infix
                     .into_inner()
                     .map(|maybe_expression| match maybe_expression.as_rule() {
-                        Rule::expression => Some(parse_expression(maybe_expression)),
+                        Rule::raw_expression => Some(parse_expression(maybe_expression)),
                         Rule::empty => None,
                         _ => unreachable!(),
                     })
@@ -560,6 +560,19 @@ TRUE && FALSE
                 Box::new(RExp::constant("'a'")),
                 Box::new(RExp::constant("'infix'")),
             )),
+        ];
+        assert_eq!(expected, result);
+    }
+
+    #[test]
+    fn parses_expression_in_parens() {
+        let code = "\
+1
+(2)";
+        let result = test_parse(code);
+        let expected = vec![
+            RStmt::Expression(RExp::constant("1")),
+            RStmt::Expression(RExp::constant("2")),
         ];
         assert_eq!(expected, result);
     }
