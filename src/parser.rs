@@ -200,10 +200,10 @@ pub fn parse(code: &str) -> Result<Vec<RStmt>, Error> {
                             Rule::assignment => {
                                 // Can be multiple assignment, e. g. a=b=c=1. We want to extract the right-most expression,
                                 // wich is assigned to all others, and the left-most one, which prevents an empty left side.
-                                let mut elements: Vec<RExp> = line.into_inner().map(|exp| parse_expression(exp)).collect();
+                                let mut elements: Vec<RExp> = line.into_inner().map(parse_expression).collect();
                                 let error = "Assignment did not have enough elements.";
                                 let right = elements.pop().expect(error);
-                                if elements.len() < 1 {
+                                if elements.is_empty() {
                                     panic!(error);
                                 }
                                 let left = elements.remove(0);
