@@ -27,7 +27,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let opt = Opt::from_args();
     let code = read(opt.input)?;
 
-    let tractus = Tractus::parse(&code)?;
+    let tractus = Tractus::parse(&code).unwrap_or_else(|e| panic!("{}", e));
     let hypotheses = tractus.generate_hypothesis_tree();
 
     let html = render(&hypotheses).into_string()?;
