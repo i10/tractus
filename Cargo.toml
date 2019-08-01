@@ -4,11 +4,21 @@ version = "0.1.0"
 authors = ["Y0hy0h <Y0hy0h@users.noreply.github.com>"]
 edition = "2018"
 
+[lib]
+name = "tractus"
+path = "src/lib.rs"
+
+[[bin]]
+name = "tractus"
+path = "src/main.rs"
+
 [dependencies]
 pest = "2.0"
 pest_derive = "2.0"
 itertools = "0.8.0"
 petgraph = "0.4.13"
+structopt = "0.2.18"
+horrorshow = "0.6.6"
 
 [dev-dependencies]
 insta = "0.8.2"

@@ -5,7 +5,7 @@ use std::io::prelude::*;
 
 use insta::assert_debug_snapshot_matches;
 
-use tractus::{parse, parse_dependency_graph};
+use tractus::Tractus;
 
 #[test]
 fn parses_keyboard() {
@@ -17,7 +17,7 @@ fn parses_keyboard() {
     let mut code = String::new();
     file.read_to_string(&mut code).unwrap();
 
-    let parsed = parse(&code).expect("Parsing should not fail.");
+    let parsed = Tractus::parse(&code).expect("Parsing should not fail.");
     assert_debug_snapshot_matches!(parsed);
-    assert_debug_snapshot_matches!(parse_dependency_graph(&parsed));
+    assert_debug_snapshot_matches!(parsed.generate_hypothesis_tree());
 }

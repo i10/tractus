@@ -1,3 +1,5 @@
+use std::fmt::Write;
+
 use itertools::Itertools;
 use pest::Parser;
 
@@ -12,6 +14,17 @@ pub enum RStmt {
     Assignment(RExp, RExp),
     Library(RIdentifier),
     Expression(RExp),
+}
+
+impl RStmt {
+    pub fn expression(&self) -> Option<&RExp> {
+        use RStmt::*;
+        match self {
+            Assignment(_, expression) => Some(expression),
+            Expression(expression) => Some(expression),
+            _ => None,
+        }
+    }
 }
 
 #[derive(PartialEq, Eq, Debug, Clone, Hash)]
@@ -36,26 +49,100 @@ impl RExp {
     }
 }
 
+impl std::fmt::Display for RExp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use RExp::*;
+        match self {
+            Constant(constant) => write!(f, "{}", constant),
+            Variable(name) => write!(f, "{}", name),
+            Call(name, args) => {
+                let arguments = args
+                    .iter()
+                    .map(|(maybe_name, expression)| {
+                        let mut s = String::new();
+                        if let Some(name) = maybe_name {
+                            write!(s, "{} = ", name)?;
+                        }
+                        write!(s, "{}", expression)?;
+                        Ok(s)
+                    })
+                    .collect::<Result<Vec<String>, std::fmt::Error>>()?
+                    .join(", ");
+                write!(f, "{}({})", name, arguments)
+            }
+            Column(left, right) => write!(f, "{}${}", left, right),
+            Index(left, right) => {
+                let indices = right
+                    .iter()
+                    .map(|maybe_expression| match maybe_expression {
+                        Some(expression) => format!("{}", expression),
+                        None => "".to_string(),
+                    })
+                    .collect::<Vec<String>>()
+                    .join(", ");
+                write!(f, "{}[{}]", left, indices)
+            }
+            Formula(formula) => write!(f, "{}", formula),
+            Function(params, body) => {
+                let parameters = params
+                    .iter()
+                    .map(|(name, maybe_default)| {
+                        let mut s = String::new();
+                        write!(s, "{}", name)?;
+                        if let Some(default) = maybe_default {
+                            write!(s, " = {}", default)?;
+                        }
+                        Ok(s)
+                    })
+                    .collect::<Result<Vec<String>, std::fmt::Error>>()?
+                    .join(", ");
+                write!(f, "function ({}) {{\n{}\n}}", parameters, body)
+            }
+            Infix(op, left, right) => write!(f, "{} {} {}", left, op, right),
+        }
+    }
+}
+
 #[derive(PartialEq, Eq, Debug, Clone, Hash)]
 pub enum RFormula {
     OneSided(RFormulaExpression),
     TwoSided(RIdentifier, RFormulaExpression),
 }
 
+impl std::fmt::Display for RFormula {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use RFormula::*;
+        match self {
+            OneSided(right) => write!(f, "~ {}", right),
+            TwoSided(left, right) => write!(f, "{} ~ {}", left, right),
+        }
+    }
+}
+
 #[derive(PartialEq, Eq, Debug, Clone, Hash)]
 pub enum RFormulaExpression {
     Variable(RIdentifier),
     Plus(Box<RFormulaExpression>, RIdentifier),
-    Minus(Box<RFormulaExpression>, RIdentifier),
+    /*Minus(Box<RFormulaExpression>, RIdentifier),
     Colon(Box<RFormulaExpression>, RIdentifier),
     Star(Box<RFormulaExpression>, RIdentifier),
     In(Box<RFormulaExpression>, RIdentifier),
-    Hat(Box<RFormulaExpression>, RIdentifier),
+    Hat(Box<RFormulaExpression>, RIdentifier),*/
+}
+
+impl std::fmt::Display for RFormulaExpression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use RFormulaExpression::*;
+        match self {
+            Variable(name) => write!(f, "{}", name),
+            Plus(left, right) => write!(f, "{} + {}", left, right),
+        }
+    }
 }
 
 pub type RIdentifier = String;
 
-type Error = pest::error::Error<Rule>;
+pub type Error = pest::error::Error<Rule>;
 
 pub fn parse(code: &str) -> Result<Vec<RStmt>, Error> {
     let mut parse_result = RParser::parse(Rule::file, code)?;
@@ -135,7 +222,6 @@ fn parse_expression(expression_pair: pest::iterators::Pair<'_, Rule>) -> RExp {
         }
         Rule::formula => {
             let formula_kind = expression.into_inner().next().unwrap(); // Formula always has a kind.
-            println!("{:?}", formula_kind);
             match formula_kind.as_rule() {
                 Rule::one_sided => {
                     let right = formula_kind.into_inner();
@@ -214,6 +300,7 @@ fn parse_formula_expression(
     for (operator, right) in expression.tuples() {
         match operator.as_str() {
             "+" => result = RFormulaExpression::Plus(Box::new(result), right.as_str().into()),
+            // TODO: Implement missing operators.
             _ => unreachable!(),
         }
     }
