@@ -68,6 +68,7 @@ fn render<'a>(tree: &'a HypothesisTree) -> Box<Render + 'a> {
                     : Raw("
                     .hypotheses {
                         display: flex;
+                        align-items: flex-start;
                     }
 
                     ol {
@@ -138,7 +139,7 @@ fn render<'a>(tree: &'a HypothesisTree) -> Box<Render + 'a> {
                     ol.hypotheses > li::before {
                         border-left: 1px solid #000;
                         width: 0;
-                        height: 30px;
+                        height: 100%;
                     }
 
                     ol.hypotheses > li::after {
@@ -149,7 +150,6 @@ fn render<'a>(tree: &'a HypothesisTree) -> Box<Render + 'a> {
                     }
 
                     ol.hypotheses > li:first-child::before {
-                        height: 38px;
                         transform: translateY(-8px);
                     }
 
