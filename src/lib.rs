@@ -53,11 +53,15 @@ pub struct Node<'a> {
     pub children: HypothesisTree<'a>,
 }
 
-pub fn hypothesis_tree_from_nodes<'a>(
+pub fn hypothesis_tree_from_nodes<'a, S, T>(
     nodes: Vec<dependency_graph::NodeIndex>,
     dependency_graph: &DependencyGraph<'a>,
-    hypotheses_map: &HashMap<&'a RExp, HashSet<Hypothesis>>,
-) -> HypothesisTree<'a> {
+    hypotheses_map: &HashMap<&'a RExp, HashSet<Hypothesis, T>, S>,
+) -> HypothesisTree<'a>
+where
+    S: std::hash::BuildHasher,
+    T: std::hash::BuildHasher,
+{
     let mut tree = BTreeMap::new();
     for node_id in nodes.iter() {
         let graph = dependency_graph.graph();

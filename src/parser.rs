@@ -61,12 +61,12 @@ impl std::fmt::Display for RExp {
                     .map(|(maybe_name, expression)| {
                         let mut s = String::new();
                         if let Some(name) = maybe_name {
-                            write!(s, "{} = ", name);
+                            write!(s, "{} = ", name)?;
                         }
-                        write!(s, "{}", expression);
-                        s
+                        write!(s, "{}", expression)?;
+                        Ok(s)
                     })
-                    .collect::<Vec<String>>()
+                    .collect::<Result<Vec<String>, std::fmt::Error>>()?
                     .join(", ");
                 write!(f, "{}({})", name, arguments)
             }
@@ -88,13 +88,13 @@ impl std::fmt::Display for RExp {
                     .iter()
                     .map(|(name, maybe_default)| {
                         let mut s = String::new();
-                        write!(s, "{}", name);
+                        write!(s, "{}", name)?;
                         if let Some(default) = maybe_default {
-                            write!(s, " = {}", default);
+                            write!(s, " = {}", default)?;
                         }
-                        s
+                        Ok(s)
                     })
-                    .collect::<Vec<String>>()
+                    .collect::<Result<Vec<String>, std::fmt::Error>>()?
                     .join(", ");
                 write!(f, "function ({}) {{\n{}\n}}", parameters, body)
             }
