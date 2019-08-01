@@ -79,7 +79,13 @@ fn render<'a>(tree: &'a HypothesisTree) -> Box<Render + 'a> {
                         padding-left: 1em;
                     }
 
+                    .hypotheses > li {
+                        margin-top: 1em;
+                        padding-left: 1em;
+                    }
+
                     .hypothesis {
+                        margin-left: 0.5em;
                         font-style: italic;
                     }
 
@@ -118,6 +124,33 @@ fn render<'a>(tree: &'a HypothesisTree) -> Box<Render + 'a> {
                     ol.nodes > li:last-child::after {
                         height: 8px;
                     }
+
+                    .hypotheses {
+                        position: relative;
+                    }
+
+                    ol.hypotheses > li::before, ol.hypotheses > li::after {
+                        content: \"\";
+                        position: absolute;
+                        top: 8px;
+                    }
+
+                    ol.hypotheses > li::before {
+                        border-left: 1px solid #000;
+                        width: 0;
+                        height: 30px;
+                    }
+
+                    ol.hypotheses > li::after {
+                        border-top: 1px solid #000;
+                        width: 100%;
+                        height: 0;
+                        left: 2px;
+                    }
+
+                    ol.hypotheses > li:last-child::after {
+                        width: 0;
+                    }
                     ") ;
                 }
             }
@@ -135,7 +168,7 @@ fn render_hypothesis_tree<'a>(tree: &'a HypothesisTree) -> Box<Render + 'a> {
                 li {
                     span(class="hypothesis") { : match maybe_hypothesis {
                         Some(hypothesis) => format!("{}", hypothesis),
-                        None => "No hypothesis.".to_string()
+                        None => "No hypothesis".to_string()
                     } ; }
                     ol(class="nodes") {
                         @ for node in nodes.iter() {
