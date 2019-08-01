@@ -36,6 +36,7 @@ pub enum RExp {
     Index(Box<RExp>, Vec<Option<RExp>>),
     Formula(RFormula),
     Function(Vec<(RIdentifier, Option<RExp>)>, String),
+    Prefix(String, Box<RExp>),
     Infix(String, Box<RExp>, Box<RExp>),
 }
 
@@ -98,6 +99,7 @@ impl std::fmt::Display for RExp {
                     .join(", ");
                 write!(f, "function ({}) {{\n{}\n}}", parameters, body)
             }
+            Prefix(op, exp) => write!(f, "{}{}", op, exp),
             Infix(op, left, right) => write!(f, "{} {} {}", left, op, right),
         }
     }
@@ -219,6 +221,15 @@ fn parse_expression(expression_pair: pest::iterators::Pair<'_, Rule>) -> RExp {
                 None => vec![],
             };
             RExp::Call(name.as_str().into(), args)
+        }
+        Rule::prefix => {
+            let mut prefix_expression = expression.into_inner();
+            let operator = prefix_expression.next().unwrap(); // Prefix always has operator.
+            let exp = prefix_expression.next().unwrap(); // Prefix always has expression.
+            RExp::Prefix(
+                operator.as_str().to_string(),
+                Box::new(parse_expression(exp)),
+            )
         }
         Rule::formula => {
             let formula_kind = expression.into_inner().next().unwrap(); // Formula always has a kind.
@@ -495,6 +506,31 @@ func3 <- function (with, default = 'arguments') 3 ";
                         ("default".into(), Some(RExp::constant("'arguments'"))),
                     ],
                     "3".into(),
+                ),
+            ),
+        ];
+        assert_eq!(expected, result);
+    }
+
+    #[test]
+    fn parses_prefix_operators() {
+        let code = "\
+x <- !TRUE
+y <- negate(!x)";
+        let result = test_parse(code);
+        let expected = vec![
+            RStmt::Assignment(
+                RExp::variable("x"),
+                RExp::Prefix("!".into(), Box::new(RExp::constant("TRUE"))),
+            ),
+            RStmt::Assignment(
+                RExp::variable("y"),
+                RExp::Call(
+                    "negate".into(),
+                    vec![(
+                        None,
+                        RExp::Prefix("!".into(), Box::new(RExp::variable("x"))),
+                    )],
                 ),
             ),
         ];

@@ -9,10 +9,12 @@ empty = @{ "" }
 
 // Take care to prevent left recursion. See https://math.stackexchange.com/a/140049
 expression = ${ non_recursive ~ ( infix | indexing )* }
-non_recursive = _{ function_definition | function_call | formula | constant | identifier }
+non_recursive = _{ function_definition | function_call | prefix | formula | constant | identifier }
 indexing = _{ (column | index) }
 column = !{ "$" ~ identifier }
 index = !{ "[" ~ (expression | empty) ~ ("," ~ (expression | empty))* ~ "]" }
+prefix = !{ prefix_character ~ expression }
+prefix_character = { "!" }
 infix = !{ WHITESPACE* ~ infix_operator ~ expression }
 infix_operator = { "<" | "<=" | ">" | ">=" | "==" | "!=" | "+" | "-" | "*" | "/" | "^" | "&&" | "||" | custom_infix_operator }
 custom_infix_operator = { "%" ~ (!("%" | WHITESPACE | NEWLINE) ~ ANY)* ~ "%" }
