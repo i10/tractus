@@ -1,5 +1,5 @@
 ---
-created: "2019-08-01T08:38:55.710174500Z"
+created: "2019-08-11T18:36:30.181043813Z"
 creator: insta@0.8.2
 source: tests/snapshots.rs
 expression: parsed.generate_hypothesis_tree()
