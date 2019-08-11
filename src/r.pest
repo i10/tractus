@@ -17,7 +17,7 @@ index = !{ "[" ~ (expression | empty) ~ ("," ~ (expression | empty))* ~ "]" }
 prefix = !{ prefix_character ~ expression }
 prefix_character = { "!" }
 infix = !{ WHITESPACE* ~ infix_operator ~ expression }
-infix_operator = { "<" | "<=" | ">" | ">=" | "==" | "!=" | "+" | "-" | "*" | "/" | "^" | "&&" | "||" | custom_infix_operator }
+infix_operator = { "<" | "<=" | ">" | ">=" | "==" | "!=" | "+" | "-" | "*" | "/" | "^" | "&&" | "||" | "&" | "|" | ":" | custom_infix_operator }
 custom_infix_operator = { "%" ~ (!("%" | WHITESPACE | NEWLINE) ~ ANY)* ~ "%" }
 
 identifier = @{ !(ASCII_DIGIT | "_" | "." ~ ASCII_DIGIT) ~ identifier_character+ }
