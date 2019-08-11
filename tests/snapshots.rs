@@ -12,9 +12,11 @@ use tractus::Tractus;
 fn snapshots() {
     let snapshot_dirs = ["tests/snapshots", "tests/snapshots/hidden"]
         .iter()
-        .map(|relative_path| path::Path::new(env!("CARGO_MANIFEST_DIR")).join(relative_path));
-    let snapshot_files = snapshot_dirs
-        .flat_map(|snapshot_dir| fs::read_dir(snapshot_dir).unwrap())
+        .map(get_dir);
+
+    let snapshot_files: Vec<path::PathBuf> = snapshot_dirs
+        .filter_map(|snapshot_dir| fs::read_dir(snapshot_dir).ok())
+        .flatten()
         .filter_map(|maybe_entry| {
             maybe_entry
                 .map(|entry| {
@@ -26,7 +28,8 @@ fn snapshots() {
                     }
                 })
                 .unwrap_or(None)
-        });
+        }).collect();
+    assert!(!snapshot_files.is_empty(), "No snapshot files were found!");
 
     for snapshot_path in snapshot_files {
         let mut file = fs::File::open(&snapshot_path).unwrap();
@@ -51,4 +54,8 @@ fn snapshots() {
             parsed.generate_hypothesis_tree()
         );
     }
+}
+
+fn get_dir<P: std::convert::AsRef<std::path::Path>>(relative_path: P) -> path::PathBuf {
+    path::Path::new(env!("CARGO_MANIFEST_DIR")).join(relative_path)
 }
