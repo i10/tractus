@@ -14,10 +14,6 @@ impl Lines {
     fn vec(&self) -> &Vec<RStmt> {
         &self.0
     }
-
-    fn into(self) -> Vec<RStmt> {
-        self.0
-    }
 }
 
 impl std::fmt::Display for Lines {
@@ -210,7 +206,7 @@ pub type RIdentifier = String;
 pub type Error = pest::error::Error<Rule>;
 
 pub fn parse(code: &str) -> Result<Vec<RStmt>, Error> {
-    let mut parse_result = RParser::parse(Rule::file, code)?;
+    let parse_result = RParser::parse(Rule::file, code)?;
 
     Ok(parse_result
         .filter_map(|token| match token.as_rule() {
@@ -417,7 +413,7 @@ fn parse_formula_expression(mut expression: pest::iterators::Pairs<Rule>) -> RFo
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pretty_assertions::{assert_eq, assert_ne};
+    use pretty_assertions::assert_eq;
 
     fn test_parse(code: &'static str) -> Vec<RStmt> {
         parse(code).unwrap_or_else(|e| panic!("{}", e))
