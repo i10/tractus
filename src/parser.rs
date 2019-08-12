@@ -32,6 +32,7 @@ impl From<Vec<RStmt>> for Lines {
 pub enum RStmt {
     Empty,
     Comment(String),
+    TailComment(Box<RStmt>, String),
     Assignment(RExp, Vec<RExp>, RExp),
     If(RExp, Lines),
     Library(RIdentifier),
@@ -44,7 +45,11 @@ impl RStmt {
         match self {
             Assignment(_, _, expression) => Some(expression),
             Expression(expression) => Some(expression),
-            _ => None,
+            TailComment(statement, _) => statement.expression(),
+            Empty => None,
+            Comment(_) => None,
+            If(_, _) => None,
+            Library(_) => None,
         }
     }
 }
@@ -55,6 +60,7 @@ impl std::fmt::Display for RStmt {
         match self {
             Empty => writeln!(f),
             Comment(text) => write!(f, "{}", text),
+            TailComment(expression, text) => write!(f, "{} {}", expression, text),
             Assignment(left, additional, right) => {
                 let mut assigned = vec![left];
                 assigned.append(&mut additional.iter().collect());
@@ -220,10 +226,11 @@ fn parse_line(line_pair: pest::iterators::Pair<Rule>) -> RStmt {
     match line_pair.as_rule() {
         Rule::empty => RStmt::Empty,
         Rule::line => {
-            let line = line_pair.into_inner().next().unwrap(); // A line always contains at least a statement or a comment.
-            match line.as_rule() {
+            let mut line = line_pair.into_inner();
+            let first_pair = line.next().unwrap(); // A line always contains at least a statement or a comment.
+            let first = match first_pair.as_rule() {
                 Rule::statement => {
-                    let statement = line.into_inner().next().unwrap(); // Take statement out of line.
+                    let statement = first_pair.into_inner().next().unwrap(); // Take statement out of line.
                     match statement.as_rule() {
                         Rule::raw_expression => {
                             RStmt::Expression(parse_expression(statement)) // Expression is always non-empty.
@@ -259,8 +266,15 @@ fn parse_line(line_pair: pest::iterators::Pair<Rule>) -> RStmt {
                         _ => unreachable!(),
                     }
                 }
-                Rule::comment => RStmt::Comment(line.as_str().to_string()),
-                e => panic!("Rule: {:?}", e),
+                Rule::comment => RStmt::Comment(first_pair.as_str().to_string()),
+                _ => unreachable!(),
+            };
+
+            if let Some(comment) = line.next() {
+                // Second line component has to be a comment.
+                RStmt::TailComment(Box::new(first), comment.as_str().to_string())
+            } else {
+                first
             }
         }
         _ => unreachable!(),
@@ -423,12 +437,15 @@ mod tests {
     fn parses_comments() {
         let code = "\
 #123
-#hello
+hello() # world
 # another thing   ";
         let result = test_parse(code);
         let expected = vec![
             RStmt::Comment("#123".into()),
-            RStmt::Comment("#hello".into()),
+            RStmt::TailComment(
+                Box::new(RStmt::Expression(RExp::Call("hello".into(), vec![]))),
+                "# world".into(),
+            ),
             RStmt::Comment("# another thing   ".into()),
         ];
         assert_eq!(expected, result);
@@ -447,6 +464,7 @@ c <- 2
 
 # Third block
 d <- 1
+
 
 ";
         let result = test_parse(code);

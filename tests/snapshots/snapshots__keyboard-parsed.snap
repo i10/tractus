@@ -1,5 +1,5 @@
 ---
-created: "2019-08-11T18:36:21.188086177Z"
+created: "2019-08-12T15:46:47.820345200Z"
 creator: insta@0.8.2
 source: tests/snapshots.rs
 expression: parsed
@@ -53,32 +53,35 @@ Tractus(
                 ],
             ),
         ),
-        Assignment(
-            Column(
-                Variable(
-                    "kbd",
+        TailComment(
+            Assignment(
+                Column(
+                    Variable(
+                        "kbd",
+                    ),
+                    Variable(
+                        "ParticipantID",
+                    ),
                 ),
-                Variable(
-                    "ParticipantID",
-                ),
-            ),
-            [],
-            Call(
-                "factor",
-                [
-                    (
-                        None,
-                        Column(
-                            Variable(
-                                "kbd",
-                            ),
-                            Variable(
-                                "ParticipantID",
+                [],
+                Call(
+                    "factor",
+                    [
+                        (
+                            None,
+                            Column(
+                                Variable(
+                                    "kbd",
+                                ),
+                                Variable(
+                                    "ParticipantID",
+                                ),
                             ),
                         ),
-                    ),
-                ],
+                    ],
+                ),
             ),
+            "# convert to nominal factor",
         ),
         Expression(
             Call(
@@ -278,70 +281,76 @@ Tractus(
                 ],
             ),
         ),
-        Expression(
-            Call(
-                "hist",
-                [
-                    (
-                        None,
-                        Column(
-                            Index(
-                                Variable(
-                                    "kbd",
-                                ),
-                                [
-                                    Some(
-                                        Infix(
-                                            "==",
-                                            Column(
-                                                Variable(
-                                                    "kbd",
+        TailComment(
+            Expression(
+                Call(
+                    "hist",
+                    [
+                        (
+                            None,
+                            Column(
+                                Index(
+                                    Variable(
+                                        "kbd",
+                                    ),
+                                    [
+                                        Some(
+                                            Infix(
+                                                "==",
+                                                Column(
+                                                    Variable(
+                                                        "kbd",
+                                                    ),
+                                                    Variable(
+                                                        "Layout",
+                                                    ),
                                                 ),
-                                                Variable(
-                                                    "Layout",
+                                                Constant(
+                                                    "\"Colemak\"",
                                                 ),
-                                            ),
-                                            Constant(
-                                                "\"Colemak\"",
                                             ),
                                         ),
-                                    ),
-                                    None,
-                                ],
-                            ),
-                            Variable(
-                                "Speed",
-                            ),
-                        ),
-                    ),
-                ],
-            ),
-        ),
-        Expression(
-            Call(
-                "plot",
-                [
-                    (
-                        None,
-                        Formula(
-                            TwoSided(
-                                "Speed",
+                                        None,
+                                    ],
+                                ),
                                 Variable(
-                                    "Layout",
+                                    "Speed",
                                 ),
                             ),
                         ),
-                    ),
-                    (
-                        Some(
-                            "data",
-                        ),
-                        Variable(
-                            "kbd",
-                        ),
-                    ),
-                ],
+                    ],
+                ),
             ),
+            "# new one",
+        ),
+        TailComment(
+            Expression(
+                Call(
+                    "plot",
+                    [
+                        (
+                            None,
+                            Formula(
+                                TwoSided(
+                                    "Speed",
+                                    Variable(
+                                        "Layout",
+                                    ),
+                                ),
+                            ),
+                        ),
+                        (
+                            Some(
+                                "data",
+                            ),
+                            Variable(
+                                "kbd",
+                            ),
+                        ),
+                    ],
+                ),
+            ),
+            "# boxplot",
         ),
         Empty,
         Comment(
@@ -464,56 +473,62 @@ Tractus(
                 ],
             ),
         ),
-        Assignment(
-            Variable(
-                "m",
-            ),
-            [],
-            Call(
-                "aov",
-                [
-                    (
-                        None,
-                        Formula(
-                            TwoSided(
-                                "Speed",
-                                Variable(
-                                    "Layout",
+        TailComment(
+            Assignment(
+                Variable(
+                    "m",
+                ),
+                [],
+                Call(
+                    "aov",
+                    [
+                        (
+                            None,
+                            Formula(
+                                TwoSided(
+                                    "Speed",
+                                    Variable(
+                                        "Layout",
+                                    ),
                                 ),
                             ),
                         ),
-                    ),
-                    (
-                        Some(
-                            "data",
+                        (
+                            Some(
+                                "data",
+                            ),
+                            Variable(
+                                "kbd",
+                            ),
                         ),
-                        Variable(
-                            "kbd",
-                        ),
-                    ),
-                ],
+                    ],
+                ),
             ),
+            "# fit model",
         ),
-        Expression(
-            Call(
-                "shapiro.test",
-                [
-                    (
-                        None,
-                        Call(
-                            "residuals",
-                            [
-                                (
-                                    None,
-                                    Variable(
-                                        "m",
+        TailComment(
+            Expression(
+                Call(
+                    "shapiro.test",
+                    [
+                        (
+                            None,
+                            Call(
+                                "residuals",
+                                [
+                                    (
+                                        None,
+                                        Variable(
+                                            "m",
+                                        ),
                                     ),
-                                ),
-                            ],
+                                ],
+                            ),
                         ),
-                    ),
-                ],
+                    ],
+                ),
             ),
+            "# test residuals",
         ),
         Expression(
             Call(
@@ -536,26 +551,29 @@ Tractus(
                 ],
             ),
         ),
-        Expression(
-            Call(
-                "qqline",
-                [
-                    (
-                        None,
-                        Call(
-                            "residuals",
-                            [
-                                (
-                                    None,
-                                    Variable(
-                                        "m",
+        TailComment(
+            Expression(
+                Call(
+                    "qqline",
+                    [
+                        (
+                            None,
+                            Call(
+                                "residuals",
+                                [
+                                    (
+                                        None,
+                                        Variable(
+                                            "m",
+                                        ),
                                     ),
-                                ),
-                            ],
+                                ],
+                            ),
                         ),
-                    ),
-                ],
+                    ],
+                ),
             ),
+            "# plot residuals",
         ),
         Empty,
         Comment(
@@ -618,136 +636,145 @@ Tractus(
                 ),
             ),
         ),
-        Expression(
-            Call(
-                "ks.test",
-                [
-                    (
-                        None,
-                        Column(
+        TailComment(
+            Expression(
+                Call(
+                    "ks.test",
+                    [
+                        (
+                            None,
+                            Column(
+                                Index(
+                                    Variable(
+                                        "kbd",
+                                    ),
+                                    [
+                                        Some(
+                                            Infix(
+                                                "==",
+                                                Column(
+                                                    Variable(
+                                                        "kbd",
+                                                    ),
+                                                    Variable(
+                                                        "Layout",
+                                                    ),
+                                                ),
+                                                Constant(
+                                                    "\"QWERTY\"",
+                                                ),
+                                            ),
+                                        ),
+                                        None,
+                                    ],
+                                ),
+                                Variable(
+                                    "Speed",
+                                ),
+                            ),
+                        ),
+                        (
+                            None,
+                            Constant(
+                                "\"plnorm\"",
+                            ),
+                        ),
+                        (
+                            Some(
+                                "meanlog",
+                            ),
                             Index(
                                 Variable(
-                                    "kbd",
+                                    "fit",
                                 ),
                                 [
                                     Some(
-                                        Infix(
-                                            "==",
-                                            Column(
-                                                Variable(
-                                                    "kbd",
-                                                ),
-                                                Variable(
-                                                    "Layout",
-                                                ),
-                                            ),
-                                            Constant(
-                                                "\"QWERTY\"",
-                                            ),
+                                        Constant(
+                                            "1",
                                         ),
                                     ),
-                                    None,
                                 ],
                             ),
-                            Variable(
-                                "Speed",
+                        ),
+                        (
+                            Some(
+                                "sdlog",
                             ),
-                        ),
-                    ),
-                    (
-                        None,
-                        Constant(
-                            "\"plnorm\"",
-                        ),
-                    ),
-                    (
-                        Some(
-                            "meanlog",
-                        ),
-                        Index(
-                            Variable(
-                                "fit",
-                            ),
-                            [
-                                Some(
-                                    Constant(
-                                        "1",
-                                    ),
+                            Index(
+                                Variable(
+                                    "fit",
                                 ),
-                            ],
-                        ),
-                    ),
-                    (
-                        Some(
-                            "sdlog",
-                        ),
-                        Index(
-                            Variable(
-                                "fit",
-                            ),
-                            [
-                                Some(
-                                    Constant(
-                                        "2",
+                                [
+                                    Some(
+                                        Constant(
+                                            "2",
+                                        ),
                                     ),
-                                ),
-                            ],
+                                ],
+                            ),
                         ),
-                    ),
-                    (
-                        Some(
-                            "exact",
+                        (
+                            Some(
+                                "exact",
+                            ),
+                            Constant(
+                                "TRUE",
+                            ),
                         ),
-                        Constant(
-                            "TRUE",
-                        ),
-                    ),
-                ],
+                    ],
+                ),
             ),
+            "# lognormality",
         ),
         Empty,
         Comment(
             "# compute new log(Speed) column and re-test",
         ),
-        Assignment(
-            Column(
-                Variable(
-                    "kbd",
+        TailComment(
+            Assignment(
+                Column(
+                    Variable(
+                        "kbd",
+                    ),
+                    Variable(
+                        "logSpeed",
+                    ),
                 ),
-                Variable(
-                    "logSpeed",
+                [],
+                Call(
+                    "log",
+                    [
+                        (
+                            None,
+                            Column(
+                                Variable(
+                                    "kbd",
+                                ),
+                                Variable(
+                                    "Speed",
+                                ),
+                            ),
+                        ),
+                    ],
                 ),
             ),
-            [],
-            Call(
-                "log",
-                [
-                    (
-                        None,
-                        Column(
+            "# add new column",
+        ),
+        TailComment(
+            Expression(
+                Call(
+                    "View",
+                    [
+                        (
+                            None,
                             Variable(
                                 "kbd",
                             ),
-                            Variable(
-                                "Speed",
-                            ),
                         ),
-                    ),
-                ],
+                    ],
+                ),
             ),
-        ),
-        Expression(
-            Call(
-                "View",
-                [
-                    (
-                        None,
-                        Variable(
-                            "kbd",
-                        ),
-                    ),
-                ],
-            ),
+            "# verify",
         ),
         Expression(
             Call(
@@ -788,56 +815,62 @@ Tractus(
                 ],
             ),
         ),
-        Assignment(
-            Variable(
-                "m",
-            ),
-            [],
-            Call(
-                "aov",
-                [
-                    (
-                        None,
-                        Formula(
-                            TwoSided(
-                                "logSpeed",
-                                Variable(
-                                    "Layout",
+        TailComment(
+            Assignment(
+                Variable(
+                    "m",
+                ),
+                [],
+                Call(
+                    "aov",
+                    [
+                        (
+                            None,
+                            Formula(
+                                TwoSided(
+                                    "logSpeed",
+                                    Variable(
+                                        "Layout",
+                                    ),
                                 ),
                             ),
                         ),
-                    ),
-                    (
-                        Some(
-                            "data",
+                        (
+                            Some(
+                                "data",
+                            ),
+                            Variable(
+                                "kbd",
+                            ),
                         ),
-                        Variable(
-                            "kbd",
-                        ),
-                    ),
-                ],
+                    ],
+                ),
             ),
+            "# fit model",
         ),
-        Expression(
-            Call(
-                "shapiro.test",
-                [
-                    (
-                        None,
-                        Call(
-                            "residuals",
-                            [
-                                (
-                                    None,
-                                    Variable(
-                                        "m",
+        TailComment(
+            Expression(
+                Call(
+                    "shapiro.test",
+                    [
+                        (
+                            None,
+                            Call(
+                                "residuals",
+                                [
+                                    (
+                                        None,
+                                        Variable(
+                                            "m",
+                                        ),
                                     ),
-                                ),
-                            ],
+                                ],
+                            ),
                         ),
-                    ),
-                ],
+                    ],
+                ),
             ),
+            "# test residuals",
         ),
         Expression(
             Call(
@@ -860,26 +893,29 @@ Tractus(
                 ],
             ),
         ),
-        Expression(
-            Call(
-                "qqline",
-                [
-                    (
-                        None,
-                        Call(
-                            "residuals",
-                            [
-                                (
-                                    None,
-                                    Variable(
-                                        "m",
+        TailComment(
+            Expression(
+                Call(
+                    "qqline",
+                    [
+                        (
+                            None,
+                            Call(
+                                "residuals",
+                                [
+                                    (
+                                        None,
+                                        Variable(
+                                            "m",
+                                        ),
                                     ),
-                                ),
-                            ],
+                                ],
+                            ),
                         ),
-                    ),
-                ],
+                    ],
+                ),
             ),
+            "# plot residuals",
         ),
         Empty,
         Comment(
@@ -888,174 +924,189 @@ Tractus(
         Library(
             "car",
         ),
-        Expression(
-            Call(
-                "leveneTest",
-                [
-                    (
-                        None,
-                        Formula(
-                            TwoSided(
-                                "Speed",
-                                Variable(
-                                    "Layout",
+        TailComment(
+            Expression(
+                Call(
+                    "leveneTest",
+                    [
+                        (
+                            None,
+                            Formula(
+                                TwoSided(
+                                    "Speed",
+                                    Variable(
+                                        "Layout",
+                                    ),
                                 ),
                             ),
                         ),
-                    ),
-                    (
-                        Some(
-                            "data",
+                        (
+                            Some(
+                                "data",
+                            ),
+                            Variable(
+                                "kbd",
+                            ),
                         ),
-                        Variable(
-                            "kbd",
+                        (
+                            Some(
+                                "center",
+                            ),
+                            Variable(
+                                "median",
+                            ),
                         ),
-                    ),
-                    (
-                        Some(
-                            "center",
-                        ),
-                        Variable(
-                            "median",
-                        ),
-                    ),
-                ],
+                    ],
+                ),
             ),
+            "# Brown-Forsythe test",
         ),
         Empty,
         Comment(
             "# one-way ANOVA, suitable now to logSpeed",
         ),
-        Assignment(
-            Variable(
-                "m",
-            ),
-            [],
-            Call(
-                "aov",
-                [
-                    (
-                        None,
-                        Formula(
-                            TwoSided(
-                                "Speed",
-                                Variable(
-                                    "Layout",
+        TailComment(
+            Assignment(
+                Variable(
+                    "m",
+                ),
+                [],
+                Call(
+                    "aov",
+                    [
+                        (
+                            None,
+                            Formula(
+                                TwoSided(
+                                    "Speed",
+                                    Variable(
+                                        "Layout",
+                                    ),
                                 ),
                             ),
                         ),
-                    ),
-                    (
-                        Some(
-                            "data",
+                        (
+                            Some(
+                                "data",
+                            ),
+                            Variable(
+                                "kbd",
+                            ),
                         ),
-                        Variable(
-                            "kbd",
-                        ),
-                    ),
-                ],
+                    ],
+                ),
             ),
+            "# fit model",
         ),
-        Expression(
-            Call(
-                "anova",
-                [
-                    (
-                        None,
-                        Variable(
-                            "m",
+        TailComment(
+            Expression(
+                Call(
+                    "anova",
+                    [
+                        (
+                            None,
+                            Variable(
+                                "m",
+                            ),
                         ),
-                    ),
-                ],
+                    ],
+                ),
             ),
+            "# report anova",
         ),
         Empty,
         Comment(
             "# post hoc independent-samples t-tests",
         ),
-        Expression(
-            Call(
-                "plot",
-                [
-                    (
-                        None,
-                        Formula(
-                            TwoSided(
-                                "Speed",
-                                Variable(
-                                    "Layout",
+        TailComment(
+            Expression(
+                Call(
+                    "plot",
+                    [
+                        (
+                            None,
+                            Formula(
+                                TwoSided(
+                                    "Speed",
+                                    Variable(
+                                        "Layout",
+                                    ),
                                 ),
                             ),
                         ),
-                    ),
-                    (
-                        Some(
-                            "data",
+                        (
+                            Some(
+                                "data",
+                            ),
+                            Variable(
+                                "kbd",
+                            ),
                         ),
-                        Variable(
-                            "kbd",
-                        ),
-                    ),
-                ],
+                    ],
+                ),
             ),
+            "# for convenience",
         ),
         Library(
             "multcomp",
         ),
-        Expression(
-            Call(
-                "summary",
-                [
-                    (
-                        None,
-                        Call(
-                            "glht",
-                            [
-                                (
-                                    None,
-                                    Variable(
-                                        "m",
+        TailComment(
+            Expression(
+                Call(
+                    "summary",
+                    [
+                        (
+                            None,
+                            Call(
+                                "glht",
+                                [
+                                    (
+                                        None,
+                                        Variable(
+                                            "m",
+                                        ),
                                     ),
-                                ),
-                                (
-                                    None,
-                                    Call(
-                                        "mcp",
-                                        [
-                                            (
-                                                Some(
-                                                    "Layout",
+                                    (
+                                        None,
+                                        Call(
+                                            "mcp",
+                                            [
+                                                (
+                                                    Some(
+                                                        "Layout",
+                                                    ),
+                                                    Constant(
+                                                        "\"Tukey\"",
+                                                    ),
                                                 ),
-                                                Constant(
-                                                    "\"Tukey\"",
-                                                ),
-                                            ),
-                                        ],
+                                            ],
+                                        ),
                                     ),
-                                ),
-                            ],
+                                ],
+                            ),
                         ),
-                    ),
-                    (
-                        Some(
-                            "test",
-                        ),
-                        Call(
-                            "adjusted",
-                            [
-                                (
-                                    Some(
-                                        "type",
+                        (
+                            Some(
+                                "test",
+                            ),
+                            Call(
+                                "adjusted",
+                                [
+                                    (
+                                        Some(
+                                            "type",
+                                        ),
+                                        Constant(
+                                            "\"holm\"",
+                                        ),
                                     ),
-                                    Constant(
-                                        "\"holm\"",
-                                    ),
-                                ),
-                            ],
+                                ],
+                            ),
                         ),
-                    ),
-                ],
+                    ],
+                ),
             ),
+            "# Tukey means compare all pairs",
         ),
         Comment(
             "# note: equivalent to this using lsm instead of mcp",
@@ -1133,73 +1184,79 @@ Tractus(
         Library(
             "coin",
         ),
-        Expression(
-            Call(
-                "kruskal_test",
-                [
-                    (
-                        None,
-                        Formula(
-                            TwoSided(
-                                "Speed",
-                                Variable(
-                                    "Layout",
+        TailComment(
+            Expression(
+                Call(
+                    "kruskal_test",
+                    [
+                        (
+                            None,
+                            Formula(
+                                TwoSided(
+                                    "Speed",
+                                    Variable(
+                                        "Layout",
+                                    ),
                                 ),
                             ),
                         ),
-                    ),
-                    (
-                        Some(
-                            "data",
+                        (
+                            Some(
+                                "data",
+                            ),
+                            Variable(
+                                "kbd",
+                            ),
                         ),
-                        Variable(
-                            "kbd",
+                        (
+                            Some(
+                                "distribution",
+                            ),
+                            Constant(
+                                "\"asymptotic\"",
+                            ),
                         ),
-                    ),
-                    (
-                        Some(
-                            "distribution",
-                        ),
-                        Constant(
-                            "\"asymptotic\"",
-                        ),
-                    ),
-                ],
+                    ],
+                ),
             ),
+            "# can\'t do exact with 3 levels",
         ),
-        Expression(
-            Call(
-                "kruskal_test",
-                [
-                    (
-                        None,
-                        Formula(
-                            TwoSided(
-                                "logSpeed",
-                                Variable(
-                                    "Layout",
+        TailComment(
+            Expression(
+                Call(
+                    "kruskal_test",
+                    [
+                        (
+                            None,
+                            Formula(
+                                TwoSided(
+                                    "logSpeed",
+                                    Variable(
+                                        "Layout",
+                                    ),
                                 ),
                             ),
                         ),
-                    ),
-                    (
-                        Some(
-                            "data",
+                        (
+                            Some(
+                                "data",
+                            ),
+                            Variable(
+                                "kbd",
+                            ),
                         ),
-                        Variable(
-                            "kbd",
+                        (
+                            Some(
+                                "distribution",
+                            ),
+                            Constant(
+                                "\"asymptotic\"",
+                            ),
                         ),
-                    ),
-                    (
-                        Some(
-                            "distribution",
-                        ),
-                        Constant(
-                            "\"asymptotic\"",
-                        ),
-                    ),
-                ],
+                    ],
+                ),
             ),
+            "# note: same result",
         ),
         Comment(
             "# for reporting Kruskal-Wallis as chi-square, we can get N with nrow(kbd)",
@@ -1523,40 +1580,42 @@ Tractus(
         Library(
             "PMCMR",
         ),
-        Expression(
-            Call(
-                "posthoc.kruskal.conover.test",
-                [
-                    (
-                        None,
-                        Formula(
-                            TwoSided(
-                                "Speed",
-                                Variable(
-                                    "Layout",
+        TailComment(
+            Expression(
+                Call(
+                    "posthoc.kruskal.conover.test",
+                    [
+                        (
+                            None,
+                            Formula(
+                                TwoSided(
+                                    "Speed",
+                                    Variable(
+                                        "Layout",
+                                    ),
                                 ),
                             ),
                         ),
-                    ),
-                    (
-                        Some(
-                            "data",
+                        (
+                            Some(
+                                "data",
+                            ),
+                            Variable(
+                                "kbd",
+                            ),
                         ),
-                        Variable(
-                            "kbd",
+                        (
+                            Some(
+                                "p.adjust.method",
+                            ),
+                            Constant(
+                                "\"holm\"",
+                            ),
                         ),
-                    ),
-                    (
-                        Some(
-                            "p.adjust.method",
-                        ),
-                        Constant(
-                            "\"holm\"",
-                        ),
-                    ),
-                ],
+                    ],
+                ),
             ),
+            "# Conover & Iman (1979)",
         ),
-        Empty,
     ],
 )

@@ -1,8 +1,8 @@
 WHITESPACE = _{ " " | "\t" }
 file = _{ SOI ~ lines ~ EOI }
-lines = _{ (line | empty) ~ (line_separator ~ (line | empty))* }
+lines = _{ (line ~ line_separator | empty ~ NEWLINE )* ~ (line ~ ";"?)? }
 line_separator = _{ ";" ~ NEWLINE | ";" | NEWLINE }
-line = { statement | statement ~ comment | comment }
+line = { statement ~ comment | statement | comment }
 statement = { assignment | if_statement | library | expression }
 
 assignment = { (expression ~ ("<-" | "="))+ ~ expression}
