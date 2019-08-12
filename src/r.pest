@@ -1,8 +1,13 @@
 WHITESPACE = _{ " " | "\t" }
-file = { SOI ~ statement ~ ((";" ~ NEWLINE | ";" | NEWLINE) ~ statement?)* ~ EOI }
-statement = { (assignment | library | expression)? ~ comment? }
+file = { SOI ~ lines ~ EOI }
+lines = _{ line ~ (line_separator ~ line?)* }
+line_separator = _{ ";" ~ NEWLINE | ";" | NEWLINE }
+line = { statement? ~ comment? }
+statement = { assignment | if_statement | library | expression }
 
 assignment = { (expression ~ ("<-" | "="))+ ~ expression}
+if_statement = { "if" ~ "(" ~ expression ~ ")" ~ ("{" ~ NEWLINE? ~ lines ~ NEWLINE? ~ "}" | NEWLINE? ~ line ~ NEWLINE?) }
+
 comment = @{ "#" ~ character* }
 character = _{ !NEWLINE ~ ANY }
 empty = @{ "" }

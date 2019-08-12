@@ -7,11 +7,37 @@ use pest::Parser;
 #[grammar = "r.pest"]
 struct RParser;
 
+#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+pub struct Lines(Vec<RStmt>);
+
+impl Lines {
+    fn vec(&self) -> &Vec<RStmt> {
+        &self.0
+    }
+
+    fn into(self) -> Vec<RStmt> {
+        self.0
+    }
+}
+
+impl std::fmt::Display for Lines {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.vec().iter().join("\n"))
+    }
+}
+
+impl From<Vec<RStmt>> for Lines {
+    fn from(other: Vec<RStmt>) -> Lines {
+        Lines(other)
+    }
+}
+
 #[derive(PartialEq, Eq, Debug, Clone, Hash)]
 pub enum RStmt {
     Empty,
     Comment(String),
     Assignment(RExp, Vec<RExp>, RExp),
+    If(RExp, Lines),
     Library(RIdentifier),
     Expression(RExp),
 }
@@ -27,7 +53,7 @@ impl RStmt {
     }
 }
 
-impl std::fmt::Display for RStmt{
+impl std::fmt::Display for RStmt {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use RStmt::*;
         match self {
@@ -41,9 +67,12 @@ impl std::fmt::Display for RStmt{
                 }
                 write!(f, "{}", right)
             }
+            If(condition, body) => write!(f, "if ({}) {{\n\t{}\n}}", condition, body),
             Library(name) => write!(f, "{}", name),
-            Expression(exp) => write!(f, "{}", exp)
-        }}}
+            Expression(exp) => write!(f, "{}", exp),
+        }
+    }
+}
 
 #[derive(PartialEq, Eq, Debug, Clone, Hash)]
 pub enum RExp {
@@ -187,43 +216,65 @@ pub fn parse(code: &str) -> Result<Vec<RStmt>, Error> {
     Ok(file
         .into_inner()
         .filter_map(|token| match token.as_rule() {
-            Rule::statement => {
-                let maybe_line = token.into_inner().next();
-                match maybe_line {
-                    None => Some(RStmt::Empty), // empty line
-                    Some(line) => {
-                        match line.as_rule() {
-                            Rule::comment => Some(RStmt::Comment(line.as_str().to_string())),
-                            Rule::raw_expression => {
-                                Some(RStmt::Expression(parse_expression(line))) // Expression is always non-empty.
-                            }
-                            Rule::assignment => {
-                                // Can be multiple assignment, e. g. a=b=c=1. We want to extract the right-most expression,
-                                // wich is assigned to all others, and the left-most one, which prevents an empty left side.
-                                let mut elements: Vec<RExp> = line.into_inner().map(parse_expression).collect();
-                                let error = "Assignment did not have enough elements.";
-                                let right = elements.pop().expect(error);
-                                if elements.is_empty() {
-                                    panic!(error);
-                                }
-                                let left = elements.remove(0);
-                                let additional = elements;
-                                
-                                Some(RStmt::Assignment(left, additional, right))
-                            }
-                            Rule::library => {
-                                let name = line.into_inner().next().unwrap(); // Library name always exists.
-                                Some(RStmt::Library(name.as_str().into()))
-                            }
-                            _ => unreachable!(),
-                        }
-                    }
-                }
+            Rule::line => {
+                let line_token = token.into_inner().next();
+                Some(parse_line(line_token))
             }
             Rule::EOI => None,
             _ => unreachable!(),
         })
         .collect())
+}
+
+fn parse_line(maybe_line: Option<pest::iterators::Pair<Rule>>) -> RStmt {
+    if let Some(line) = maybe_line {
+        match line.as_rule() {
+            Rule::statement => {
+                let statement = line.into_inner().next().unwrap(); // Take statement out of line.
+                match statement.as_rule() {
+                    Rule::raw_expression => {
+                        RStmt::Expression(parse_expression(statement)) // Expression is always non-empty.
+                    }
+                    Rule::assignment => {
+                        // Can be multiple assignment, e. g. a=b=c=1. We want to extract the right-most expression,
+                        // wich is assigned to all others, and the left-most one, which prevents an empty left side.
+                        let mut elements: Vec<RExp> =
+                            statement.into_inner().map(parse_expression).collect();
+                        let error = "Assignment did not have enough elements.";
+                        let right = elements.pop().expect(error);
+                        if elements.is_empty() {
+                            panic!(error);
+                        }
+                        let left = elements.remove(0);
+                        let additional = elements;
+                        RStmt::Assignment(left, additional, right)
+                    }
+                    Rule::if_statement => {
+                        let mut elements = statement.into_inner();
+                        let condition = if let Some(condition_pair) = elements.next() {
+                            parse_expression(condition_pair)
+                        } else {
+                            panic!("If statement did not have enough elements.");
+                        };
+                        panic!("{:#?}", elements);
+                        let body: Vec<RStmt> = elements
+                            .map(|line| parse_line(line.into_inner().next()))
+                            .collect();
+                        RStmt::If(condition, Lines::from(body))
+                    }
+                    Rule::library => {
+                        let name = statement.into_inner().next().unwrap(); // Library name always exists.
+                        RStmt::Library(name.as_str().into())
+                    }
+                    _ => unreachable!(),
+                }
+            }
+            Rule::comment => RStmt::Comment(line.as_str().to_string()),
+            e => panic!("Rule: {:?}", e),
+        }
+    } else {
+        RStmt::Empty
+    }
 }
 
 fn parse_expression(expression_pair: pest::iterators::Pair<Rule>) -> RExp {
@@ -232,9 +283,7 @@ fn parse_expression(expression_pair: pest::iterators::Pair<Rule>) -> RExp {
     let mut rexp = match expression.as_rule() {
         Rule::constant => RExp::Constant(expression.as_str().to_string()),
         Rule::identifier => RExp::Variable(expression.as_str().to_string()),
-        Rule::function_call => {
-            parse_function_expression(expression)
-        }
+        Rule::function_call => parse_function_expression(expression),
         Rule::prefix => {
             let mut prefix_expression = expression.into_inner();
             let operator = prefix_expression.next().unwrap(); // Prefix always has operator.
@@ -347,9 +396,7 @@ fn parse_function_expression(function_pair: pest::iterators::Pair<Rule>) -> RExp
     RExp::Call(name.as_str().into(), args)
 }
 
-fn parse_formula_expression(
-    mut expression: pest::iterators::Pairs<Rule>,
-) -> RFormulaExpression {
+fn parse_formula_expression(mut expression: pest::iterators::Pairs<Rule>) -> RFormulaExpression {
     let first_expression = expression.next().unwrap(); // Expression always has at least one element.
     let mut result = match first_expression.as_rule() {
         Rule::identifier => RFormulaExpression::Variable(first_expression.as_str().to_string()),
@@ -375,7 +422,7 @@ fn parse_formula_expression(
 
 #[cfg(test)]
 mod tests {
-    use super::{parse, RExp, RFormula, RFormulaExpression, RStmt};
+    use super::*;
 
     fn test_parse(code: &'static str) -> Vec<RStmt> {
         parse(code).unwrap_or_else(|e| panic!("{}", e))
@@ -408,7 +455,11 @@ a=b=c=1";
         let expected = vec![
             RStmt::Assignment(RExp::variable("a"), vec![], RExp::constant("1")),
             RStmt::Assignment(RExp::variable("b"), vec![], RExp::constant("2")),
-            RStmt::Assignment(RExp::variable("a"), vec![RExp::variable("b"), RExp::variable("c")], RExp::constant("1"))
+            RStmt::Assignment(
+                RExp::variable("a"),
+                vec![RExp::variable("b"), RExp::variable("c")],
+                RExp::constant("1"),
+            ),
         ];
         assert_eq!(expected, result);
     }
@@ -560,10 +611,14 @@ func2 <- function (with, arguments) 2
 func3 <- function (with, default = 'arguments') 3 ";
         let result = test_parse(code);
         let expected = vec![
-            RStmt::Assignment(RExp::variable("func1"), vec![], RExp::Function(vec![], "1".into())),
+            RStmt::Assignment(
+                RExp::variable("func1"),
+                vec![],
+                RExp::Function(vec![], "1".into()),
+            ),
             RStmt::Assignment(
                 RExp::variable("func2"),
-                 vec![],
+                vec![],
                 RExp::Function(
                     vec![("with".into(), None), ("arguments".into(), None)],
                     "2".into(),
@@ -571,7 +626,7 @@ func3 <- function (with, default = 'arguments') 3 ";
             ),
             RStmt::Assignment(
                 RExp::variable("func3"),
-                 vec![],
+                vec![],
                 RExp::Function(
                     vec![
                         ("with".into(), None),
@@ -593,12 +648,12 @@ y <- negate(!x)";
         let expected = vec![
             RStmt::Assignment(
                 RExp::variable("x"),
-                 vec![],
+                vec![],
                 RExp::Prefix("!".into(), Box::new(RExp::constant("TRUE"))),
             ),
             RStmt::Assignment(
                 RExp::variable("y"),
-                 vec![],
+                vec![],
                 RExp::Call(
                     "negate".into(),
                     vec![(
@@ -647,6 +702,33 @@ TRUE && FALSE
         let expected = vec![
             RStmt::Expression(RExp::constant("1")),
             RStmt::Expression(RExp::constant("2")),
+        ];
+        assert_eq!(expected, result);
+    }
+
+    #[test]
+    fn parses_if() {
+        let code = "\
+if (0 == 1) {
+    do_something()
+}
+if (is_ok())
+    do_something_again()
+";
+        let result = test_parse(code);
+        let expected = vec![
+            RStmt::If(
+                RExp::Infix(
+                    "==".into(),
+                    Box::new(RExp::constant("0")),
+                    Box::new(RExp::constant("1")),
+                ),
+                Lines::from(vec![RStmt::Expression(RExp::Call(
+                    "do_something".into(),
+                    vec![],
+                ))]),
+            ),
+            RStmt::If(RExp::Call("is_ok".into(), vec![]), Lines::from(vec![])),
         ];
         assert_eq!(expected, result);
     }
