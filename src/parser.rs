@@ -217,63 +217,59 @@ pub fn parse(code: &str) -> Result<Vec<RStmt>, Error> {
         .into_inner()
         .filter_map(|token| match token.as_rule() {
             Rule::line => {
-                let line_token = token.into_inner().next();
+                let line_token = token.into_inner();
                 Some(parse_line(line_token))
             }
+            Rule::empty => Some(RStmt::Empty),
             Rule::EOI => None,
             _ => unreachable!(),
         })
         .collect())
 }
 
-fn parse_line(maybe_line: Option<pest::iterators::Pair<Rule>>) -> RStmt {
-    if let Some(line) = maybe_line {
-        match line.as_rule() {
-            Rule::statement => {
-                let statement = line.into_inner().next().unwrap(); // Take statement out of line.
-                match statement.as_rule() {
-                    Rule::raw_expression => {
-                        RStmt::Expression(parse_expression(statement)) // Expression is always non-empty.
-                    }
-                    Rule::assignment => {
-                        // Can be multiple assignment, e. g. a=b=c=1. We want to extract the right-most expression,
-                        // wich is assigned to all others, and the left-most one, which prevents an empty left side.
-                        let mut elements: Vec<RExp> =
-                            statement.into_inner().map(parse_expression).collect();
-                        let error = "Assignment did not have enough elements.";
-                        let right = elements.pop().expect(error);
-                        if elements.is_empty() {
-                            panic!(error);
-                        }
-                        let left = elements.remove(0);
-                        let additional = elements;
-                        RStmt::Assignment(left, additional, right)
-                    }
-                    Rule::if_statement => {
-                        let mut elements = statement.into_inner();
-                        let condition = if let Some(condition_pair) = elements.next() {
-                            parse_expression(condition_pair)
-                        } else {
-                            panic!("If statement did not have enough elements.");
-                        };
-                        panic!("{:#?}", elements);
-                        let body: Vec<RStmt> = elements
-                            .map(|line| parse_line(line.into_inner().next()))
-                            .collect();
-                        RStmt::If(condition, Lines::from(body))
-                    }
-                    Rule::library => {
-                        let name = statement.into_inner().next().unwrap(); // Library name always exists.
-                        RStmt::Library(name.as_str().into())
-                    }
-                    _ => unreachable!(),
+fn parse_line(mut line_pairs: pest::iterators::Pairs<Rule>) -> RStmt {
+    let line = line_pairs.next().unwrap(); // A line always contains at least a statement or a comment.
+    match line.as_rule() {
+        Rule::statement => {
+            let statement = line.into_inner().next().unwrap(); // Take statement out of line.
+            match statement.as_rule() {
+                Rule::raw_expression => {
+                    RStmt::Expression(parse_expression(statement)) // Expression is always non-empty.
                 }
+                Rule::assignment => {
+                    // Can be multiple assignment, e. g. a=b=c=1. We want to extract the right-most expression,
+                    // wich is assigned to all others, and the left-most one, which prevents an empty left side.
+                    let mut elements: Vec<RExp> =
+                        statement.into_inner().map(parse_expression).collect();
+                    let error = "Assignment did not have enough elements.";
+                    let right = elements.pop().expect(error);
+                    if elements.is_empty() {
+                        panic!(error);
+                    }
+                    let left = elements.remove(0);
+                    let additional = elements;
+                    RStmt::Assignment(left, additional, right)
+                }
+                Rule::if_statement => {
+                    let mut elements = statement.into_inner();
+                    let condition = if let Some(condition_pair) = elements.next() {
+                        parse_expression(condition_pair)
+                    } else {
+                        panic!("If statement did not have enough elements.");
+                    };
+                    let body: Vec<RStmt> =
+                        elements.map(|line| parse_line(line.into_inner())).collect();
+                    RStmt::If(condition, Lines::from(body))
+                }
+                Rule::library => {
+                    let name = statement.into_inner().next().unwrap(); // Library name always exists.
+                    RStmt::Library(name.as_str().into())
+                }
+                _ => unreachable!(),
             }
-            Rule::comment => RStmt::Comment(line.as_str().to_string()),
-            e => panic!("Rule: {:?}", e),
         }
-    } else {
-        RStmt::Empty
+        Rule::comment => RStmt::Comment(line.as_str().to_string()),
+        e => panic!("Rule: {:?}", e),
     }
 }
 
@@ -434,14 +430,46 @@ mod tests {
         let code = "\
 #123
 #hello
-
 # another thing   ";
         let result = test_parse(code);
         let expected = vec![
             RStmt::Comment("#123".into()),
             RStmt::Comment("#hello".into()),
-            RStmt::Empty,
             RStmt::Comment("# another thing   ".into()),
+        ];
+        assert_eq!(expected, result);
+    }
+
+    #[test]
+    fn parses_empty_lines() {
+        let code = "
+# First block
+a <- 1
+
+# Second block
+b <- 1
+c <- 2
+
+
+# Third block
+d <- 1
+
+";
+        let result = test_parse(code);
+        let expected = vec![
+            RStmt::Empty,
+            RStmt::Comment("# First block".into()),
+            RStmt::Assignment(RExp::variable("a"), vec![], RExp::constant("1")),
+            RStmt::Empty,
+            RStmt::Comment("# Second block".into()),
+            RStmt::Assignment(RExp::variable("b"), vec![], RExp::constant("1")),
+            RStmt::Assignment(RExp::variable("c"), vec![], RExp::constant("2")),
+            RStmt::Empty,
+            RStmt::Empty,
+            RStmt::Comment("# Third block".into()),
+            RStmt::Assignment(RExp::variable("d"), vec![], RExp::constant("1")),
+            RStmt::Empty,
+            RStmt::Empty,
         ];
         assert_eq!(expected, result);
     }
@@ -729,7 +757,13 @@ if (is_ok())
                     vec![],
                 ))]),
             ),
-            RStmt::If(RExp::Call("is_ok".into(), vec![]), Lines::from(vec![])),
+            RStmt::If(
+                RExp::Call("is_ok".into(), vec![]),
+                Lines::from(vec![RStmt::Expression(RExp::Call(
+                    "do_something_again".into(),
+                    vec![],
+                ))]),
+            ),
         ];
         assert_eq!(expected, result);
     }
