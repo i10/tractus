@@ -212,9 +212,7 @@ pub type Error = pest::error::Error<Rule>;
 pub fn parse(code: &str) -> Result<Vec<RStmt>, Error> {
     let mut parse_result = RParser::parse(Rule::file, code)?;
 
-    let file = parse_result.next().unwrap();
-    Ok(file
-        .into_inner()
+    Ok(parse_result
         .filter_map(|token| match token.as_rule() {
             Rule::line => {
                 let line_token = token.into_inner();

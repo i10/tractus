@@ -1,5 +1,5 @@
 WHITESPACE = _{ " " | "\t" }
-file = { SOI ~ lines ~ EOI }
+file = _{ SOI ~ lines ~ EOI }
 lines = _{ (line | empty) ~ (line_separator ~ (line | empty))* }
 line_separator = _{ ";" ~ NEWLINE | ";" | NEWLINE }
 line = { statement | statement ~ comment | comment }
