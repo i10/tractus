@@ -28,7 +28,8 @@ fn snapshots() {
                     }
                 })
                 .unwrap_or(None)
-        }).collect();
+        })
+        .collect();
     assert!(!snapshot_files.is_empty(), "No snapshot files were found!");
 
     for snapshot_path in snapshot_files {
@@ -37,11 +38,7 @@ fn snapshots() {
         file.read_to_string(&mut code).unwrap();
 
         let parsed = Tractus::parse(&code).unwrap_or_else(|e| {
-            panic!(
-                "Parsing failed on file {}: {}",
-                snapshot_path.to_string_lossy(),
-                e
-            )
+            panic!("Parsing failed on file {}: {}", snapshot_path.display(), e)
         });
         let file_stem = snapshot_path
             .as_path()
