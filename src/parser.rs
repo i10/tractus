@@ -423,6 +423,7 @@ fn parse_formula_expression(mut expression: pest::iterators::Pairs<Rule>) -> RFo
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pretty_assertions::{assert_eq, assert_ne};
 
     fn test_parse(code: &'static str) -> Vec<RStmt> {
         parse(code).unwrap_or_else(|e| panic!("{}", e))
