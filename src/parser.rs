@@ -360,7 +360,7 @@ fn parse_line(line_pair: pest::iterators::Pair<Rule>) -> RStmt {
 }
 
 fn parse_expression(expression_pair: pest::iterators::Pair<Rule>) -> RExp {
-    let mut whole_expression = dbg!(expression_pair.into_inner());
+    let mut whole_expression = expression_pair.into_inner();
     let expression = whole_expression.next().unwrap(); // Expression is always non-empty.
     let mut rexp = match expression.as_rule() {
         Rule::constant => RExp::Constant(expression.as_str().to_string()),
@@ -983,6 +983,7 @@ else
                 ))]),
                 None,
             ),
+            RStmt::Empty,
             RStmt::If(
                 RExp::constant("TRUE"),
                 Lines::from(vec![RStmt::Expression(RExp::Call(
@@ -1019,6 +1020,7 @@ for (i in something) {
 }
 for (i in get())
     do_something_again(i)
+for(row in 1:15) l[[row]] = row
 ";
         let result = test_parse(code);
         let expected = vec![
@@ -1041,6 +1043,22 @@ for (i in get())
                     "do_something_again".into(),
                     vec![(None, RExp::variable("i"))],
                 ))]),
+            ),
+            RStmt::For(
+                RExp::variable("row"),
+                RExp::Infix(
+                    ":".into(),
+                    Box::new(RExp::constant("1")),
+                    Box::new(RExp::constant("15")),
+                ),
+                Lines::from(vec![RStmt::Assignment(
+                    RExp::ListIndex(
+                        Box::new(RExp::variable("l")),
+                        vec![Some(RExp::variable("row"))],
+                    ),
+                    vec![],
+                    RExp::variable("row"),
+                )]),
             ),
         ];
         assert_eq!(expected, result);
