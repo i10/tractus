@@ -35,6 +35,7 @@ pub enum RStmt {
     TailComment(Box<RStmt>, String),
     Assignment(RExp, Vec<RExp>, RExp),
     If(RExp, Lines, Option<Lines>),
+    While(RExp, Lines),
     For(RExp, RExp, Lines),
     Library(RIdentifier),
     Expression(RExp),
@@ -47,9 +48,10 @@ impl RStmt {
             Assignment(_, _, expression) => Some(expression),
             Expression(expression) => Some(expression),
             TailComment(statement, _) => statement.expression(),
-            // TODO: Check how to handle if and for.
+            // TODO: Check how to handle if, while, and for.
             If(_, _, _) => None,
             For(_, _, _) => None,
+            While(_, _) => None,
             Empty => None,
             Comment(_) => None,
             Library(_) => None,
@@ -79,6 +81,7 @@ impl std::fmt::Display for RStmt {
                 }
                 Ok(())
             }
+            While(condition, body) => write!(f, "while ({}) {{\n{}\n}}", condition, body),
             For(variable, range, body) => {
                 write!(f, "for ({} in {}) {{\n{}\n}}", variable, range, body)
             }
@@ -324,6 +327,19 @@ fn parse_line(line_pair: pest::iterators::Pair<Rule>) -> RStmt {
                             });
 
                             RStmt::If(condition, Lines::from(body), else_body)
+                        }
+                        Rule::while_statement => {
+                            let mut elements = statement.into_inner();
+                            let condition = if let Some(condition_pair) =
+                                elements.next()
+                            {
+                                parse_expression(condition_pair)
+                            } else {
+                                panic!("While statement did not have enough elements.");
+                            };
+                            let body = elements.next().unwrap().into_inner(); // For statement always has a body.
+                            let body: Vec<RStmt> = body.map(parse_line).collect();
+                            RStmt::While(condition, Lines::from(body))
                         }
                         Rule::for_statement => {
                             let mut elements = statement.into_inner();
@@ -1060,6 +1076,45 @@ for(row in 1:15) l[[row]] = row
                     vec![],
                     RExp::variable("row"),
                 )]),
+            ),
+        ];
+        assert_eq!(expected, result);
+    }
+
+    #[test]
+    fn parses_while() {
+        let code = "\
+while (i < 10) {
+    do_stuff()
+    i <- i + 1
+}
+while (true)
+    annoy()
+";
+        let result = test_parse(code);
+        let expected = vec![
+            RStmt::While(
+                RExp::Infix(
+                    "<".into(),
+                    Box::new(RExp::variable("i")),
+                    Box::new(RExp::constant("10")),
+                ),
+                Lines::from(vec![
+                    RStmt::Expression(RExp::Call("do_stuff".into(), vec![])),
+                    RStmt::Assignment(
+                        RExp::variable("i"),
+                        vec![],
+                        RExp::Infix(
+                            "+".into(),
+                            Box::new(RExp::variable("i")),
+                            Box::new(RExp::constant("1")),
+                        ),
+                    ),
+                ]),
+            ),
+            RStmt::While(
+                RExp::constant("true"),
+                Lines::from(vec![RStmt::Expression(RExp::Call("annoy".into(), vec![]))]),
             ),
         ];
         assert_eq!(expected, result);
