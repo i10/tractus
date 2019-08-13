@@ -128,6 +128,7 @@ impl RExp {
             Variable(name) => Some(name.to_string()),
             Column(left, _) => left.extract_variable_name(),
             Index(left, _) => left.extract_variable_name(),
+            ListIndex(left, _) => left.extract_variable_name(),
             Call(name, args) => {
                 // `colnames(variable) <- c("a", "b", "c")` is valid R.
                 let valid_functions = ["colnames", "rownames", "names"];
@@ -1135,6 +1136,16 @@ while (true)
         #[test]
         fn from_index() {
             let name = RExp::Index(
+                Box::new(RExp::variable("x")),
+                vec![Some(RExp::variable("a"))],
+            )
+            .extract_variable_name();
+            assert_eq!(Some("x".to_string()), name);
+        }
+
+        #[test]
+        fn from_list_index() {
+            let name = RExp::ListIndex(
                 Box::new(RExp::variable("x")),
                 vec![Some(RExp::variable("a"))],
             )
