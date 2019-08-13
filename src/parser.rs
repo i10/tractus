@@ -103,6 +103,16 @@ impl RExp {
     pub fn variable(content: &'static str) -> RExp {
         RExp::Variable(content.to_string())
     }
+
+    pub fn extract_variable_name(&self) -> Option<RIdentifier> {
+        use RExp::*;
+        match self {
+            Variable(name) => Some(name.to_string()),
+            Column(left, _) => left.extract_variable_name(),
+            Index(left, _) => left.extract_variable_name(),
+            _ => None,
+        }
+    }
 }
 
 impl std::fmt::Display for RExp {
@@ -163,7 +173,7 @@ impl std::fmt::Display for RExp {
 #[derive(PartialEq, Eq, Debug, Clone, Hash)]
 pub enum RFormula {
     OneSided(RFormulaExpression),
-    TwoSided(RIdentifier, RFormulaExpression),
+    TwoSided(Box<RExp>, RFormulaExpression),
 }
 
 impl std::fmt::Display for RFormula {
@@ -327,22 +337,8 @@ fn parse_expression(expression_pair: pest::iterators::Pair<Rule>) -> RExp {
             )
         }
         Rule::formula => {
-            let formula_kind = expression.into_inner().next().unwrap(); // Formula always has a kind.
-            match formula_kind.as_rule() {
-                Rule::one_sided => {
-                    let right = formula_kind.into_inner();
+                    let right = expression.into_inner();
                     RExp::Formula(RFormula::OneSided(parse_formula_expression(right)))
-                }
-                Rule::two_sided => {
-                    let mut formula = formula_kind.into_inner();
-                    let left = formula.next().unwrap(); // Two-sided formula always has left side.
-                    RExp::Formula(RFormula::TwoSided(
-                        left.as_str().into(),
-                        parse_formula_expression(formula),
-                    ))
-                }
-                _ => unreachable!(),
-            }
         }
         Rule::function_definition => {
             let mut function = expression.into_inner();
@@ -391,7 +387,14 @@ fn parse_expression(expression_pair: pest::iterators::Pair<Rule>) -> RExp {
                     Box::new(parse_expression(right)),
                 );
             }
-            _ => unreachable!(),
+            Rule::formula => {
+                    let formula = infix.into_inner();
+                    rexp = RExp::Formula(RFormula::TwoSided(
+                        Box::new(rexp),
+                        parse_formula_expression(formula),
+                    ));
+            }
+            r => unexpected_rule!(r, infix)
         }
     }
 
@@ -641,7 +644,7 @@ other ~ transform(x)";
                 RFormulaExpression::Variable("one_sided".into()),
             ))),
             RStmt::Expression(RExp::Formula(RFormula::TwoSided(
-                "two".into(),
+                Box::new(RExp::variable("two")),
                 RFormulaExpression::Variable("sided".into()),
             ))),
             RStmt::Expression(RExp::Formula(RFormula::OneSided(RFormulaExpression::Plus(
@@ -652,7 +655,7 @@ other ~ transform(x)";
                 "multiple".into(),
             )))),
             RStmt::Expression(RExp::Formula(RFormula::TwoSided(
-                "two".into(),
+                Box::new(RExp::variable("two")),
                 RFormulaExpression::Plus(
                     Box::new(RFormulaExpression::Variable("sided".into())),
                     "multiple".into(),
@@ -663,7 +666,7 @@ other ~ transform(x)";
                 vec![(None, RExp::Variable("x".into()))],
             )))),
             RStmt::Expression(RExp::Formula(RFormula::TwoSided(
-                "other".into(),
+                Box::new(RExp::variable("other")),
                 RFormulaExpression::Call(
                     "transform".into(),
                     vec![(None, RExp::Variable("x".into()))],

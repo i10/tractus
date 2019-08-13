@@ -32,7 +32,9 @@ pub fn detect_hypotheses(expression: &RExp) -> HashSet<Hypothesis> {
     use RExp::*;
     match expression {
         Formula(RFormula::TwoSided(left, right)) => HashSet::from_iter(vec![Hypothesis {
-            left: left.clone(),
+            left: left
+                .extract_variable_name()
+                .expect("Left side of formula was not a valid identifier."),
             right: right.clone(),
         }]),
 
@@ -92,7 +94,7 @@ mod tests {
     #[test]
     fn parses_formula() {
         let expression = RExp::Formula(RFormula::TwoSided(
-            "dependent".into(),
+            Box::new(RExp::variable("dependent")),
             RFormulaExpression::Variable("independent".into()),
         ));
         let result = detect_hypotheses(&expression);
@@ -110,7 +112,7 @@ mod tests {
             vec![(
                 None,
                 RExp::Formula(RFormula::TwoSided(
-                    "speed".into(),
+                    Box::new(RExp::variable("speed")),
                     RFormulaExpression::Plus(
                         Box::new(RFormulaExpression::Variable("layout".into())),
                         "age".into(),

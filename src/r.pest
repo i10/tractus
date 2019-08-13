@@ -16,7 +16,7 @@ empty = @{ "" }
 
 // Take care to prevent left recursion. See https://math.stackexchange.com/a/140049
 expression = _{ "(" ~ raw_expression ~ ")" | raw_expression }
-raw_expression = ${ non_recursive ~ ( infix | indexing )* }
+raw_expression = ${ non_recursive ~ ( infix | indexing | formula )* }
 non_recursive = _{ function_definition | function_call | prefix | formula | constant | identifier }
 indexing = _{ (column | index) }
 column = !{ "$" ~ identifier }
@@ -48,9 +48,7 @@ unnamed_argument = { expression }
 
 library = { "library(" ~ identifier ~ ")"}
 
-formula = !{ one_sided | two_sided }
-one_sided = { "~" ~ formula_right_side }
-two_sided = { identifier? ~ "~" ~ formula_right_side }
+formula = !{ WHITESPACE* ~ "~" ~ formula_right_side }
 formula_right_side = _{ formula_expression ~ (formula_operator ~ formula_expression)* }
 formula_expression = _{ function_call | identifier }
 formula_operator = { "+" }

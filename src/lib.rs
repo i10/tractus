@@ -119,7 +119,7 @@ mod tests {
                     (
                         None,
                         RExp::Formula(RFormula::TwoSided(
-                            "Speed".into(),
+                            Box::new(RExp::variable("Speed")),
                             RFormulaExpression::Variable("Layout".into()),
                         )),
                     ),

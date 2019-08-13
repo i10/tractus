@@ -1,5 +1,5 @@
 ---
-created: "2019-08-13T09:16:11.229788500Z"
+created: "2019-08-13T09:58:30.316068900Z"
 creator: insta@0.8.2
 source: tests/snapshots.rs
 expression: parsed
@@ -353,7 +353,9 @@ Tractus(
                             None,
                             Formula(
                                 TwoSided(
-                                    "Speed",
+                                    Variable(
+                                        "Speed",
+                                    ),
                                     Variable(
                                         "Layout",
                                     ),
@@ -507,7 +509,9 @@ Tractus(
                             None,
                             Formula(
                                 TwoSided(
-                                    "Speed",
+                                    Variable(
+                                        "Speed",
+                                    ),
                                     Variable(
                                         "Layout",
                                     ),
@@ -849,7 +853,9 @@ Tractus(
                             None,
                             Formula(
                                 TwoSided(
-                                    "logSpeed",
+                                    Variable(
+                                        "logSpeed",
+                                    ),
                                     Variable(
                                         "Layout",
                                     ),
@@ -954,7 +960,9 @@ Tractus(
                             None,
                             Formula(
                                 TwoSided(
-                                    "Speed",
+                                    Variable(
+                                        "Speed",
+                                    ),
                                     Variable(
                                         "Layout",
                                     ),
@@ -999,7 +1007,9 @@ Tractus(
                             None,
                             Formula(
                                 TwoSided(
-                                    "Speed",
+                                    Variable(
+                                        "Speed",
+                                    ),
                                     Variable(
                                         "Layout",
                                     ),
@@ -1048,7 +1058,9 @@ Tractus(
                             None,
                             Formula(
                                 TwoSided(
-                                    "Speed",
+                                    Variable(
+                                        "Speed",
+                                    ),
                                     Variable(
                                         "Layout",
                                     ),
@@ -1159,7 +1171,9 @@ Tractus(
                                                 None,
                                                 Formula(
                                                     TwoSided(
-                                                        "pairwise",
+                                                        Variable(
+                                                            "pairwise",
+                                                        ),
                                                         Variable(
                                                             "Layout",
                                                         ),
@@ -1214,7 +1228,9 @@ Tractus(
                             None,
                             Formula(
                                 TwoSided(
-                                    "Speed",
+                                    Variable(
+                                        "Speed",
+                                    ),
                                     Variable(
                                         "Layout",
                                     ),
@@ -1251,7 +1267,9 @@ Tractus(
                             None,
                             Formula(
                                 TwoSided(
-                                    "logSpeed",
+                                    Variable(
+                                        "logSpeed",
+                                    ),
                                     Variable(
                                         "Layout",
                                     ),
@@ -1610,7 +1628,9 @@ Tractus(
                             None,
                             Formula(
                                 TwoSided(
-                                    "Speed",
+                                    Variable(
+                                        "Speed",
+                                    ),
                                     Variable(
                                         "Layout",
                                     ),

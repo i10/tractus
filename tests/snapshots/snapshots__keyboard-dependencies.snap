@@ -1,5 +1,5 @@
 ---
-created: "2019-08-13T09:17:29.144326700Z"
+created: "2019-08-13T09:58:31.190068800Z"
 creator: insta@0.8.2
 source: tests/snapshots.rs
 expression: parsed.generate_hypothesis_tree()
@@ -1396,7 +1396,9 @@ expression: parsed.generate_hypothesis_tree()
                                                 None,
                                                 Formula(
                                                     TwoSided(
-                                                        "pairwise",
+                                                        Variable(
+                                                            "pairwise",
+                                                        ),
                                                         Variable(
                                                             "Layout",
                                                         ),

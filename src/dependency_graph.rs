@@ -50,7 +50,7 @@ pub fn parse_dependency_graph(input: &[RStmt]) -> DependencyGraph {
                 for variable in assigned {
                     let node_id =
                         register_dependencies(right, &mut dependency_graph, &mut variables);
-                    match extract_variable_name(variable) {
+                    match variable.extract_variable_name() {
                         Some(name) => variables.insert(name, node_id),
                         None => panic!(
                             "Could not find a variable in {}, in the left side of the assignment {}.",
@@ -97,16 +97,6 @@ fn extract_dependencies(expression: &RExp) -> Vec<RIdentifier> {
         Column(left, _) => extract_dependencies(left),
         Index(left, _) => extract_dependencies(left),
         _ => vec![],
-    }
-}
-
-fn extract_variable_name(exp: &RExp) -> Option<RIdentifier> {
-    use RExp::*;
-    match exp {
-        Variable(name) => Some(name.to_string()),
-        Column(left, _) => extract_variable_name(&*left),
-        Index(left, _) => extract_variable_name(&*left),
-        _ => None,
     }
 }
 
@@ -277,44 +267,42 @@ mod tests {
     mod extracts_variable_name {
         use crate::parser::RExp;
 
-        use super::super::extract_variable_name;
-
         #[test]
         fn from_variable() {
-            let name = extract_variable_name(&RExp::variable("x"));
+            let name = RExp::variable("x").extract_variable_name();
             assert_eq!(Some("x".to_string()), name);
         }
 
         #[test]
         fn from_column() {
-            let name = extract_variable_name(&RExp::Column(
+            let name = RExp::Column(
                 Box::new(RExp::variable("x")),
                 Box::new(RExp::variable("a")),
-            ));
+            ).extract_variable_name();
             assert_eq!(Some("x".to_string()), name);
         }
 
         #[test]
         fn from_index() {
-            let name = extract_variable_name(&RExp::Index(
+            let name = RExp::Index(
                 Box::new(RExp::variable("x")),
                 vec![Some(RExp::variable("a"))],
-            ));
+            ).extract_variable_name();
             assert_eq!(Some("x".to_string()), name);
         }
 
         #[test]
         fn rejects_constants() {
-            let name = extract_variable_name(&RExp::constant("x"));
+            let name = RExp::constant("x").extract_variable_name();
             assert_eq!(None, name);
         }
 
         #[test]
         fn rejects_constant_in_column() {
-            let name = extract_variable_name(&RExp::Column(
+            let name = RExp::Column(
                 Box::new(RExp::constant("x")),
                 Box::new(RExp::variable("a")),
-            ));
+            ).extract_variable_name();
             assert_eq!(None, name);
         }
     }
