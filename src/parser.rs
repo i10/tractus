@@ -35,6 +35,7 @@ pub enum RStmt {
     TailComment(Box<RStmt>, String),
     Assignment(RExp, Vec<RExp>, RExp),
     If(RExp, Lines),
+    For(RExp, RExp, Lines),
     Library(RIdentifier),
     Expression(RExp),
 }
@@ -46,9 +47,11 @@ impl RStmt {
             Assignment(_, _, expression) => Some(expression),
             Expression(expression) => Some(expression),
             TailComment(statement, _) => statement.expression(),
+            // TODO: Check how to handle if and for.
+            If(_, _) => None,
+            For(_, _, _) => None,
             Empty => None,
             Comment(_) => None,
-            If(_, _) => None,
             Library(_) => None,
         }
     }
@@ -69,7 +72,10 @@ impl std::fmt::Display for RStmt {
                 }
                 write!(f, "{}", right)
             }
-            If(condition, body) => write!(f, "if ({}) {{\n\t{}\n}}", condition, body),
+            If(condition, body) => write!(f, "if ({}) {{\n{}\n}}", condition, body),
+            For(variable, range, body) => {
+                write!(f, "for ({} in {}) {{\n{}\n}}", variable, range, body)
+            }
             Library(name) => write!(f, "{}", name),
             Expression(exp) => write!(f, "{}", exp),
         }
@@ -211,6 +217,17 @@ pub type RIdentifier = String;
 
 pub type Error = pest::error::Error<Rule>;
 
+/// Helper macro for use instead of `unreachable!()` that outputs more information.
+macro_rules! unexpected_rule {
+    ( $rule:ident, $pair:ident) => {
+        panic!(
+            "Encountered unexpected rule {:?} for input {:#?}.",
+            $rule,
+            $pair.as_str()
+        )
+    };
+}
+
 pub fn parse(code: &str) -> Result<Vec<RStmt>, Error> {
     let parse_result = RParser::parse(Rule::file, code)?;
 
@@ -259,15 +276,27 @@ fn parse_line(line_pair: pest::iterators::Pair<Rule>) -> RStmt {
                             let body: Vec<RStmt> = elements.map(parse_line).collect();
                             RStmt::If(condition, Lines::from(body))
                         }
+                        Rule::for_statement => {
+                            let mut elements = statement.into_inner();
+                            let (pattern, range) = if let (Some(pattern_pair), Some(range_pair)) =
+                                (elements.next(), elements.next())
+                            {
+                                (parse_expression(pattern_pair), parse_expression(range_pair))
+                            } else {
+                                panic!("For statement did not have enough elements.");
+                            };
+                            let body: Vec<RStmt> = elements.map(parse_line).collect();
+                            RStmt::For(pattern, range, Lines::from(body))
+                        }
                         Rule::library => {
                             let name = statement.into_inner().next().unwrap(); // Library name always exists.
                             RStmt::Library(name.as_str().into())
                         }
-                        _ => unreachable!(),
+                        r => unexpected_rule!(r, statement),
                     }
                 }
                 Rule::comment => RStmt::Comment(first_pair.as_str().to_string()),
-                _ => unreachable!(),
+                r => unexpected_rule!(r, first_pair),
             };
 
             if let Some(comment) = line.next() {
@@ -277,11 +306,7 @@ fn parse_line(line_pair: pest::iterators::Pair<Rule>) -> RStmt {
                 first
             }
         }
-        r => panic!(
-            "Encountered unexpected rule {:?} for input {:#?}.",
-            r,
-            line_pair.as_str()
-        ),
+        r => unexpected_rule!(r, line_pair),
     }
 }
 
@@ -796,6 +821,43 @@ if (is_ok())
                 Lines::from(vec![RStmt::Expression(RExp::Call(
                     "do_something_again".into(),
                     vec![],
+                ))]),
+            ),
+        ];
+        assert_eq!(expected, result);
+    }
+
+    #[test]
+    fn parses_for() {
+        let code = "\
+for (i in something) {
+    do_something_with(i)
+
+    do_something_else()
+}
+for (i in get())
+    do_something_again(i)
+";
+        let result = test_parse(code);
+        let expected = vec![
+            RStmt::For(
+                RExp::variable("i"),
+                RExp::variable("something"),
+                Lines::from(vec![
+                    RStmt::Expression(RExp::Call(
+                        "do_something_with".into(),
+                        vec![(None, RExp::variable("i"))],
+                    )),
+                    RStmt::Empty,
+                    RStmt::Expression(RExp::Call("do_something_else".into(), vec![])),
+                ]),
+            ),
+            RStmt::For(
+                RExp::variable("i"),
+                RExp::Call("get".into(), vec![]),
+                Lines::from(vec![RStmt::Expression(RExp::Call(
+                    "do_something_again".into(),
+                    vec![(None, RExp::variable("i"))],
                 ))]),
             ),
         ];
