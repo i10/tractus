@@ -263,53 +263,6 @@ mod tests {
         compare_graphs(&expected, &graph);
     }
 
-    mod extracts_variable_name {
-        use crate::parser::RExp;
-
-        #[test]
-        fn from_variable() {
-            let name = RExp::variable("x").extract_variable_name();
-            assert_eq!(Some("x".to_string()), name);
-        }
-
-        #[test]
-        fn from_column() {
-            let name = RExp::Column(Box::new(RExp::variable("x")), Box::new(RExp::variable("a")))
-                .extract_variable_name();
-            assert_eq!(Some("x".to_string()), name);
-        }
-
-        #[test]
-        fn from_index() {
-            let name = RExp::Index(
-                Box::new(RExp::variable("x")),
-                vec![Some(RExp::variable("a"))],
-            )
-            .extract_variable_name();
-            assert_eq!(Some("x".to_string()), name);
-        }
-
-        #[test]
-        fn from_colnames() {
-            let name = RExp::Call("colnames".into(), vec![(None, RExp::variable("x"))])
-                .extract_variable_name();
-            assert_eq!(Some("x".to_string()), name);
-        }
-
-        #[test]
-        fn rejects_constants() {
-            let name = RExp::constant("x").extract_variable_name();
-            assert_eq!(None, name);
-        }
-
-        #[test]
-        fn rejects_constant_in_column() {
-            let name = RExp::Column(Box::new(RExp::constant("x")), Box::new(RExp::variable("a")))
-                .extract_variable_name();
-            assert_eq!(None, name);
-        }
-    }
-
     mod dependencies {
         use crate::parser::RExp;
 
