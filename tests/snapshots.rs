@@ -6,8 +6,6 @@ use std::path;
 
 use insta::assert_debug_snapshot_matches;
 
-use tractus::Tractus;
-
 #[test]
 fn snapshots() {
     test_snapshots_in(get_snapshot_dir("tests/snapshots"), None);
@@ -47,7 +45,10 @@ fn test_snapshots_in(snapshot_dir: path::PathBuf, maybe_prefix: Option<&'static 
     assert!(!snapshot_files.is_empty(), "No snapshot files were found!");
 
     for snapshot_file in snapshot_files {
-        test_snapshot(&snapshot_file, maybe_prefix)
+        let result = std::panic::catch_unwind(|| test_snapshot(&snapshot_file, maybe_prefix));
+        if result.is_err() {
+            panic!("File {} failed.", snapshot_file.display())
+        }
     }
 }
 
@@ -56,7 +57,7 @@ fn test_snapshot(snapshot_path: &path::PathBuf, maybe_prefix: Option<&'static st
     let mut code = String::new();
     file.read_to_string(&mut code).unwrap();
 
-    let parsed = Tractus::parse(&code)
+    let parsed = tractus::parse(&code)
         .unwrap_or_else(|e| panic!("Parsing failed on file {}: {}", snapshot_path.display(), e));
     let file_stem = snapshot_path
         .as_path()
@@ -67,8 +68,10 @@ fn test_snapshot(snapshot_path: &path::PathBuf, maybe_prefix: Option<&'static st
         .map(|prefix| format!("{}-{}", prefix, file_stem))
         .unwrap_or_else(|| file_stem.into_owned());
     assert_debug_snapshot_matches!(format!("{}-parsed", snapshot_name), parsed);
+    let hypotheses_map = tractus::parse_hypotheses_map(&parsed);
+    let dependency_graph = tractus::parse_dependency_graph(&parsed);
     assert_debug_snapshot_matches!(
         format!("{}-dependencies", snapshot_name),
-        parsed.generate_hypothesis_tree()
+        tractus::parse_hypothesis_tree(&hypotheses_map, &dependency_graph)
     );
 }
