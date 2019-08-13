@@ -129,13 +129,9 @@ impl RExp {
             Column(left, _) => left.extract_variable_name(),
             Index(left, _) => left.extract_variable_name(),
             ListIndex(left, _) => left.extract_variable_name(),
-            Call(name, args) => {
+            Call(_, args) => {
                 // `colnames(variable) <- c("a", "b", "c")` is valid R.
-                let valid_functions = ["colnames", "rownames", "names"];
-                let function_name = name
-                    .extract_variable_name()
-                    .unwrap_or_else(|| panic!("Expected function name in {}.", name));
-                if valid_functions.iter().any(|f| f == &function_name) && args.len() == 1 {
+                if args.len() == 1 {
                     let (_, exp) = &args[0];
                     exp.extract_variable_name()
                 } else {
