@@ -34,7 +34,7 @@ pub enum RStmt {
     Comment(String),
     TailComment(Box<RStmt>, String),
     Assignment(RExp, Vec<RExp>, RExp),
-    If(RExp, Lines),
+    If(RExp, Lines, Option<Lines>),
     For(RExp, RExp, Lines),
     Library(RIdentifier),
     Expression(RExp),
@@ -48,7 +48,7 @@ impl RStmt {
             Expression(expression) => Some(expression),
             TailComment(statement, _) => statement.expression(),
             // TODO: Check how to handle if and for.
-            If(_, _) => None,
+            If(_, _, _) => None,
             For(_, _, _) => None,
             Empty => None,
             Comment(_) => None,
@@ -72,7 +72,13 @@ impl std::fmt::Display for RStmt {
                 }
                 write!(f, "{}", right)
             }
-            If(condition, body) => write!(f, "if ({}) {{\n{}\n}}", condition, body),
+            If(condition, body, maybe_else_body) => {
+                write!(f, "if ({}) {{\n{}\n}}", condition, body)?;
+                if let Some(else_body) = maybe_else_body {
+                    write!(f, "\nelse {{\n{}\n}}", else_body)?;
+                }
+                Ok(())
+            }
             For(variable, range, body) => {
                 write!(f, "for ({} in {}) {{\n{}\n}}", variable, range, body)
             }
@@ -297,7 +303,10 @@ fn parse_line(line_pair: pest::iterators::Pair<Rule>) -> RStmt {
                             };
                             let body = elements.next().unwrap().into_inner(); // If statement always has a body.
                             let body: Vec<RStmt> = body.map(parse_line).collect();
-                            RStmt::If(condition, Lines::from(body))
+
+                            let else_body = elements.next().map(|else_body| Lines::from(else_body.into_inner().map(parse_line).collect::<Vec<RStmt>>()));
+
+                            RStmt::If(condition, Lines::from(body), else_body)
                         }
                         Rule::for_statement => {
                             let mut elements = statement.into_inner();
@@ -864,7 +873,17 @@ if (0 == 1) {
 }
 if (is_ok())
     do_something_again()
-";
+
+if (TRUE) {
+    is_true()
+}
+else {
+    is_false()
+}
+if (FALSE)
+    is_false()
+else
+    is_true()";
         let result = test_parse(code);
         let expected = vec![
             RStmt::If(
@@ -877,15 +896,33 @@ if (is_ok())
                     RStmt::Expression(RExp::Call("do_something".into(), vec![])),
                     RStmt::Empty,
                     RStmt::Expression(RExp::Call("do_something_else".into(), vec![])),
-                ]),
+                ]),None,
             ),
             RStmt::If(
                 RExp::Call("is_ok".into(), vec![]),
                 Lines::from(vec![RStmt::Expression(RExp::Call(
                     "do_something_again".into(),
                     vec![],
-                ))]),
+                ))]), None,
             ),
+            RStmt::If(
+                RExp::constant("TRUE"),
+                Lines::from(vec![RStmt::Expression(RExp::Call(
+                    "is_true".into(),
+                    vec![],
+                ))]),
+                Some(Lines::from(vec![RStmt::Expression(RExp::Call(
+                    "is_false".into(), vec![]
+                ))]))),
+            RStmt::If(
+                RExp::constant("FALSE"),
+                Lines::from(vec![RStmt::Expression(RExp::Call(
+                    "is_false".into(),
+                    vec![],
+                ))]),
+                Some(Lines::from(vec![RStmt::Expression(RExp::Call(
+                    "is_true".into(), vec![]
+                ))]))),
         ];
         assert_eq!(expected, result);
     }

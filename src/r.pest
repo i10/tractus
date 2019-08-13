@@ -6,9 +6,9 @@ line = { statement ~ comment | statement | comment }
 statement = { assignment | if_statement | for_statement | library | expression }
 
 assignment = { (expression ~ ("<-" | "="))+ ~ expression}
-if_statement = { "if" ~ "(" ~ expression ~ ")" ~ block }
+if_statement = { "if" ~ "(" ~ expression ~ ")" ~ block ~ (NEWLINE* ~ "else" ~ block)? }
 for_statement = { "for" ~ "(" ~ expression ~ "in" ~ expression ~ ")" ~ block }
-block = _{ ("{" ~ NEWLINE? ~ lines ~ NEWLINE? ~ "}" | NEWLINE? ~ line ~ NEWLINE?) }
+block = { ("{" ~ NEWLINE? ~ lines ~ NEWLINE? ~ "}" | NEWLINE? ~ line ~ NEWLINE?) }
 
 comment = @{ "#" ~ character* }
 character = _{ !NEWLINE ~ ANY }
