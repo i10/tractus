@@ -107,7 +107,7 @@ mod tests {
     #[test]
     fn parses_formula_notation_in_call() {
         let expression = RExp::Call(
-            "test".into(),
+            RExp::boxed_variable("test"),
             vec![(
                 None,
                 RExp::Formula(RFormula::TwoSided(
@@ -165,7 +165,7 @@ mod tests {
         // fitdistr(kbd[kbd$Layout == "QWERTY",]$Speed, "lognormal")$estimate
         let expression = RExp::Column(
             Box::new(RExp::Call(
-                "fitdistr".into(),
+                RExp::boxed_variable("fitdistr"),
                 vec![
                     (
                         None,

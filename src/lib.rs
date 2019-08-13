@@ -104,7 +104,7 @@ mod tests {
                 ),
                 vec![],
                 RExp::Call(
-                    "factor".into(),
+                    RExp::boxed_variable("factor"),
                     vec![(
                         None,
                         RExp::Column(
@@ -115,7 +115,7 @@ mod tests {
                 ),
             ),
             RStmt::Expression(RExp::Call(
-                "plot".into(),
+                RExp::boxed_variable("plot"),
                 vec![
                     (
                         None,
@@ -128,7 +128,7 @@ mod tests {
                 ],
             )),
             RStmt::Expression(RExp::Call(
-                "summary".into(),
+                RExp::boxed_variable("summary"),
                 vec![(None, RExp::variable("kbd"))],
             )),
         ];

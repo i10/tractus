@@ -17,8 +17,8 @@ empty = @{ "" }
 
 // Take care to prevent left recursion. See https://math.stackexchange.com/a/140049
 expression = ${ ("(" ~ expression ~ ")" | non_recursive) ~ recursive*}
-non_recursive = _{ function_definition | function_call | prefix | formula | constant | identifier }
-recursive = _{ infix | indexing | formula }
+non_recursive = _{ function_definition | prefix | formula | constant | identifier }
+recursive = _{ infix | indexing | formula | function_call }
 indexing = _{ (column | index | list_index) }
 column = !{ "$" ~ identifier }
 index = !{ "[" ~ (expression | empty) ~ ("," ~ (expression | empty))* ~ "]" }
@@ -42,8 +42,7 @@ parameter = _{ parameter_with_default | required_parameter }
 required_parameter = { identifier }
 parameter_with_default = { identifier ~ "=" ~ expression }
 
-function_call = !{ function_identifier ~ "(" ~ NEWLINE* ~ arguments ~ NEWLINE* ~ ")" }
-function_identifier = { (identifier ~ "::")* ~ identifier }
+function_call = !{ "(" ~ NEWLINE* ~ arguments ~ NEWLINE* ~ ")" }
 arguments = { argument? ~ ("," ~ NEWLINE* ~ argument)* }
 argument = _{ named_argument | unnamed_argument }
 named_argument = { identifier ~ "=" ~ expression }

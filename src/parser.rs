@@ -95,7 +95,7 @@ impl std::fmt::Display for RStmt {
 pub enum RExp {
     Constant(String),
     Variable(RIdentifier),
-    Call(RIdentifier, Vec<(Option<RIdentifier>, RExp)>),
+    Call(Box<RExp>, Vec<(Option<RIdentifier>, RExp)>),
     Column(Box<RExp>, Box<RExp>),
     Index(Box<RExp>, Vec<Option<RExp>>),
     ListIndex(Box<RExp>, Vec<Option<RExp>>),
@@ -114,6 +114,14 @@ impl RExp {
         RExp::Variable(content.to_string())
     }
 
+    pub fn boxed_constant(content: impl Into<String>) -> Box<RExp> {
+        Box::new(RExp::Constant(content.into()))
+    }
+
+    pub fn boxed_variable(content: impl Into<String>) -> Box<RExp> {
+        Box::new(RExp::Variable(content.into()))
+    }
+
     pub fn extract_variable_name(&self) -> Option<RIdentifier> {
         use RExp::*;
         match self {
@@ -123,7 +131,10 @@ impl RExp {
             Call(name, args) => {
                 // `colnames(variable) <- c("a", "b", "c")` is valid R.
                 let valid_functions = ["colnames", "rownames", "names"];
-                if valid_functions.iter().any(|f| f == name) && args.len() == 1 {
+                let function_name = name
+                    .extract_variable_name()
+                    .unwrap_or_else(|| panic!("Expected function name in {}.", name));
+                if valid_functions.iter().any(|f| f == &function_name) && args.len() == 1 {
                     let (_, exp) = &args[0];
                     exp.extract_variable_name()
                 } else {
@@ -343,7 +354,6 @@ fn parse_expression(expression_pair: pest::iterators::Pair<Rule>) -> RExp {
     let mut rexp = match expression.as_rule() {
         Rule::constant => RExp::Constant(expression.as_str().to_string()),
         Rule::identifier => RExp::Variable(expression.as_str().to_string()),
-        Rule::function_call => parse_function_expression(expression),
         Rule::prefix => {
             let mut prefix_expression = expression.into_inner();
             let operator = prefix_expression.next().unwrap(); // Prefix always has operator.
@@ -381,6 +391,7 @@ fn parse_expression(expression_pair: pest::iterators::Pair<Rule>) -> RExp {
     // Process all indexing expressions that follow.
     for infix in whole_expression {
         match infix.as_rule() {
+            Rule::function_call => rexp = parse_function_expression(rexp, infix),
             Rule::column => rexp = RExp::Column(Box::new(rexp), Box::new(parse_expression(infix))),
             Rule::index => {
                 let indices = infix
@@ -427,9 +438,8 @@ fn parse_expression(expression_pair: pest::iterators::Pair<Rule>) -> RExp {
     rexp
 }
 
-fn parse_function_expression(function_pair: pest::iterators::Pair<Rule>) -> RExp {
+fn parse_function_expression(expression: RExp, function_pair: pest::iterators::Pair<Rule>) -> RExp {
     let mut function = function_pair.into_inner();
-    let name = function.next().unwrap(); // Function name always exists.
     let maybe_arguments = function.next();
     let args: Vec<(Option<RIdentifier>, RExp)> = match maybe_arguments {
         Some(args) => {
@@ -455,7 +465,7 @@ fn parse_function_expression(function_pair: pest::iterators::Pair<Rule>) -> RExp
         }
         None => vec![],
     };
-    RExp::Call(name.as_str().into(), args)
+    RExp::Call(Box::new(expression), args)
 }
 
 #[cfg(test)]
@@ -477,7 +487,10 @@ hello() # world
         let expected = vec![
             RStmt::Comment("#123".into()),
             RStmt::TailComment(
-                Box::new(RStmt::Expression(RExp::Call("hello".into(), vec![]))),
+                Box::new(RStmt::Expression(RExp::Call(
+                    RExp::boxed_variable("hello"),
+                    vec![],
+                ))),
                 "# world".into(),
             ),
             RStmt::Comment("# another thing   ".into()),
@@ -537,10 +550,13 @@ colnames(something) <- c(\"R\", \"is\", \"crazy\")";
                 RExp::constant("1"),
             ),
             RStmt::Assignment(
-                RExp::Call("colnames".into(), vec![(None, RExp::variable("something"))]),
+                RExp::Call(
+                    RExp::boxed_variable("colnames"),
+                    vec![(None, RExp::variable("something"))],
+                ),
                 vec![],
                 RExp::Call(
-                    "c".into(),
+                    RExp::boxed_variable("c"),
                     vec![
                         (None, RExp::constant("\"R\"")),
                         (None, RExp::constant("\"is\"")),
@@ -562,16 +578,17 @@ break_down(
     \"long\",
     argument=\"chains\"
     )
-name::space()";
+name::space()
+higher_order()(10)";
         let result = test_parse(code);
         let expected = vec![
-            RStmt::Expression(RExp::Call("empty".into(), vec![])),
+            RStmt::Expression(RExp::Call(RExp::boxed_variable("empty"), vec![])),
             RStmt::Expression(RExp::Call(
-                "single".into(),
+                RExp::boxed_variable("single"),
                 vec![(None, RExp::constant("1"))],
             )),
             RStmt::Expression(RExp::Call(
-                "with_args".into(),
+                RExp::boxed_variable("with_args"),
                 vec![
                     (None, RExp::constant("1")),
                     (None, RExp::variable("x")),
@@ -579,13 +596,17 @@ name::space()";
                 ],
             )),
             RStmt::Expression(RExp::Call(
-                "break_down".into(),
+                RExp::boxed_variable("break_down"),
                 vec![
                     (None, RExp::constant("\"long\"")),
                     (Some("argument".to_string()), RExp::constant("\"chains\"")),
                 ],
             )),
-            RStmt::Expression(RExp::Call("name::space".into(), vec![])),
+            RStmt::Expression(RExp::Call(RExp::boxed_variable("name::space"), vec![])),
+            RStmt::Expression(RExp::Call(
+                Box::new(RExp::Call(RExp::boxed_variable("higher_order"), vec![])),
+                vec![(None, RExp::constant("10"))],
+            )),
         ];
         assert_eq!(expected, result);
     }
@@ -677,7 +698,7 @@ item[empty,]";
             )),
             RStmt::Expression(RExp::Index(
                 Box::new(RExp::Column(
-                    Box::new(RExp::Call("get_matrix".into(), vec![])),
+                    Box::new(RExp::Call(RExp::boxed_variable("get_matrix"), vec![])),
                     Box::new(RExp::variable("column")),
                 )),
                 vec![Some(RExp::constant("1"))],
@@ -727,18 +748,18 @@ lm(y[subk]~factor(x[subk]))";
                 )),
             ))),
             RStmt::Expression(RExp::Formula(RFormula::OneSided(Box::new(RExp::Call(
-                "transform".into(),
+                RExp::boxed_variable("transform"),
                 vec![(None, RExp::Variable("x".into()))],
             ))))),
             RStmt::Expression(RExp::Formula(RFormula::TwoSided(
                 Box::new(RExp::variable("other")),
                 Box::new(RExp::Call(
-                    "transform".into(),
+                    RExp::boxed_variable("transform"),
                     vec![(None, RExp::Variable("x".into()))],
                 )),
             ))),
             RStmt::Expression(RExp::Call(
-                "lm".into(),
+                RExp::boxed_variable("lm"),
                 vec![(
                     None,
                     RExp::Formula(RFormula::TwoSided(
@@ -747,7 +768,7 @@ lm(y[subk]~factor(x[subk]))";
                             vec![Some(RExp::variable("subk"))],
                         )),
                         Box::new(RExp::Call(
-                            "factor".into(),
+                            RExp::boxed_variable("factor"),
                             vec![(
                                 None,
                                 RExp::Index(
@@ -805,7 +826,7 @@ func3 <- function (with, default = 'arguments') {
                         RStmt::Assignment(
                             RExp::variable("a"),
                             vec![],
-                            RExp::Call("other".into(), vec![]),
+                            RExp::Call(RExp::boxed_variable("other"), vec![]),
                         ),
                         RStmt::Expression(RExp::variable("a")),
                     ]),
@@ -832,7 +853,7 @@ y <- negate(!x)
                 RExp::variable("y"),
                 vec![],
                 RExp::Call(
-                    "negate".into(),
+                    RExp::boxed_variable("negate"),
                     vec![(
                         None,
                         RExp::Prefix("!".into(), Box::new(RExp::variable("x"))),
@@ -949,16 +970,19 @@ else
                     Box::new(RExp::constant("1")),
                 ),
                 Lines::from(vec![
-                    RStmt::Expression(RExp::Call("do_something".into(), vec![])),
+                    RStmt::Expression(RExp::Call(RExp::boxed_variable("do_something"), vec![])),
                     RStmt::Empty,
-                    RStmt::Expression(RExp::Call("do_something_else".into(), vec![])),
+                    RStmt::Expression(RExp::Call(
+                        RExp::boxed_variable("do_something_else"),
+                        vec![],
+                    )),
                 ]),
                 None,
             ),
             RStmt::If(
-                RExp::Call("is_ok".into(), vec![]),
+                RExp::Call(RExp::boxed_variable("is_ok"), vec![]),
                 Lines::from(vec![RStmt::Expression(RExp::Call(
-                    "do_something_again".into(),
+                    RExp::boxed_variable("do_something_again"),
                     vec![],
                 ))]),
                 None,
@@ -967,22 +991,22 @@ else
             RStmt::If(
                 RExp::constant("TRUE"),
                 Lines::from(vec![RStmt::Expression(RExp::Call(
-                    "is_true".into(),
+                    RExp::boxed_variable("is_true"),
                     vec![],
                 ))]),
                 Some(Lines::from(vec![RStmt::Expression(RExp::Call(
-                    "is_false".into(),
+                    RExp::boxed_variable("is_false"),
                     vec![],
                 ))])),
             ),
             RStmt::If(
                 RExp::constant("FALSE"),
                 Lines::from(vec![RStmt::Expression(RExp::Call(
-                    "is_false".into(),
+                    RExp::boxed_variable("is_false"),
                     vec![],
                 ))]),
                 Some(Lines::from(vec![RStmt::Expression(RExp::Call(
-                    "is_true".into(),
+                    RExp::boxed_variable("is_true"),
                     vec![],
                 ))])),
             ),
@@ -1009,18 +1033,21 @@ for(row in 1:15) l[[row]] = row
                 RExp::variable("something"),
                 Lines::from(vec![
                     RStmt::Expression(RExp::Call(
-                        "do_something_with".into(),
+                        RExp::boxed_variable("do_something_with"),
                         vec![(None, RExp::variable("i"))],
                     )),
                     RStmt::Empty,
-                    RStmt::Expression(RExp::Call("do_something_else".into(), vec![])),
+                    RStmt::Expression(RExp::Call(
+                        RExp::boxed_variable("do_something_else"),
+                        vec![],
+                    )),
                 ]),
             ),
             RStmt::For(
                 RExp::variable("i"),
-                RExp::Call("get".into(), vec![]),
+                RExp::Call(RExp::boxed_variable("get"), vec![]),
                 Lines::from(vec![RStmt::Expression(RExp::Call(
-                    "do_something_again".into(),
+                    RExp::boxed_variable("do_something_again"),
                     vec![(None, RExp::variable("i"))],
                 ))]),
             ),
@@ -1063,7 +1090,7 @@ while (true)
                     Box::new(RExp::constant("10")),
                 ),
                 Lines::from(vec![
-                    RStmt::Expression(RExp::Call("do_stuff".into(), vec![])),
+                    RStmt::Expression(RExp::Call(RExp::boxed_variable("do_stuff"), vec![])),
                     RStmt::Assignment(
                         RExp::variable("i"),
                         vec![],
@@ -1077,7 +1104,10 @@ while (true)
             ),
             RStmt::While(
                 RExp::constant("true"),
-                Lines::from(vec![RStmt::Expression(RExp::Call("annoy".into(), vec![]))]),
+                Lines::from(vec![RStmt::Expression(RExp::Call(
+                    RExp::boxed_variable("annoy"),
+                    vec![],
+                ))]),
             ),
         ];
         assert_eq!(expected, result);
@@ -1111,8 +1141,11 @@ while (true)
 
         #[test]
         fn from_colnames() {
-            let name = RExp::Call("colnames".into(), vec![(None, RExp::variable("x"))])
-                .extract_variable_name();
+            let name = RExp::Call(
+                RExp::boxed_variable("colnames"),
+                vec![(None, RExp::variable("x"))],
+            )
+            .extract_variable_name();
             assert_eq!(Some("x".to_string()), name);
         }
 

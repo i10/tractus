@@ -195,7 +195,7 @@ fn render_preferrably_as_function(expression: &RExp) -> String {
 
 fn extract_function_name(expression: &RExp) -> Option<String> {
     match expression {
-        RExp::Call(name, _) => Some(name.clone()),
+        RExp::Call(name, _) => name.extract_variable_name(),
         RExp::Column(left, _) => extract_function_name(left),
         _ => None,
     }
