@@ -337,8 +337,8 @@ fn parse_expression(expression_pair: pest::iterators::Pair<Rule>) -> RExp {
             )
         }
         Rule::formula => {
-                    let right = expression.into_inner();
-                    RExp::Formula(RFormula::OneSided(parse_formula_expression(right)))
+            let right = expression.into_inner();
+            RExp::Formula(RFormula::OneSided(parse_formula_expression(right)))
         }
         Rule::function_definition => {
             let mut function = expression.into_inner();
@@ -388,13 +388,13 @@ fn parse_expression(expression_pair: pest::iterators::Pair<Rule>) -> RExp {
                 );
             }
             Rule::formula => {
-                    let formula = infix.into_inner();
-                    rexp = RExp::Formula(RFormula::TwoSided(
-                        Box::new(rexp),
-                        parse_formula_expression(formula),
-                    ));
+                let formula = infix.into_inner();
+                rexp = RExp::Formula(RFormula::TwoSided(
+                    Box::new(rexp),
+                    parse_formula_expression(formula),
+                ));
             }
-            r => unexpected_rule!(r, infix)
+            r => unexpected_rule!(r, infix),
         }
     }
 
@@ -571,6 +571,19 @@ with_args(1, x, name = value)";
         let expected = vec![
             RStmt::Expression(RExp::constant("'first'")),
             RStmt::Expression(RExp::constant("\"second\"")),
+        ];
+        assert_eq!(expected, result);
+    }
+
+    #[test]
+    fn parses_numbers() {
+        let code = "\
+1
+.20";
+        let result = test_parse(code);
+        let expected = vec![
+            RStmt::Expression(RExp::constant("1")),
+            RStmt::Expression(RExp::constant(".20")),
         ];
         assert_eq!(expected, result);
     }
