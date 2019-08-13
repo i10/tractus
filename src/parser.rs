@@ -537,12 +537,15 @@ d <- 1
     fn parses_assignments() {
         let code = "\
 a <- 1
+line <-
+    \"break\"
 b = 2
 a=b=c=1
 colnames(something) <- c(\"R\", \"is\", \"crazy\")";
         let result = test_parse(code);
         let expected = vec![
             RStmt::Assignment(RExp::variable("a"), vec![], RExp::constant("1")),
+            RStmt::Assignment(RExp::variable("line"), vec![], RExp::constant("\"break\"")),
             RStmt::Assignment(RExp::variable("b"), vec![], RExp::constant("2")),
             RStmt::Assignment(
                 RExp::variable("a"),
