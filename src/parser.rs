@@ -203,8 +203,8 @@ impl std::fmt::Display for RExp {
 
 #[derive(PartialEq, Eq, Debug, Clone, Hash)]
 pub enum RFormula {
-    OneSided(RFormulaExpression),
-    TwoSided(Box<RExp>, RFormulaExpression),
+    OneSided(Box<RExp>),
+    TwoSided(Box<RExp>, Box<RExp>),
 }
 
 impl std::fmt::Display for RFormula {
@@ -213,43 +213,6 @@ impl std::fmt::Display for RFormula {
         match self {
             OneSided(right) => write!(f, "~ {}", right),
             TwoSided(left, right) => write!(f, "{} ~ {}", left, right),
-        }
-    }
-}
-
-#[derive(PartialEq, Eq, Debug, Clone, Hash)]
-pub enum RFormulaExpression {
-    Variable(RIdentifier),
-    Call(RIdentifier, Vec<(Option<RIdentifier>, RExp)>),
-    Plus(Box<RFormulaExpression>, RIdentifier),
-    /*Minus(Box<RFormulaExpression>, RIdentifier),
-    Colon(Box<RFormulaExpression>, RIdentifier),
-    Star(Box<RFormulaExpression>, RIdentifier),
-    In(Box<RFormulaExpression>, RIdentifier),
-    Hat(Box<RFormulaExpression>, RIdentifier),*/
-}
-
-impl std::fmt::Display for RFormulaExpression {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use RFormulaExpression::*;
-        match self {
-            Variable(name) => write!(f, "{}", name),
-            Call(name, args) => {
-                let arguments = args
-                    .iter()
-                    .map(|(maybe_name, expression)| {
-                        let mut s = String::new();
-                        if let Some(name) = maybe_name {
-                            write!(s, "{} = ", name)?;
-                        }
-                        write!(s, "{}", expression)?;
-                        Ok(s)
-                    })
-                    .collect::<Result<Vec<String>, std::fmt::Error>>()?
-                    .join(", ");
-                write!(f, "{}({})", name, arguments)
-            }
-            Plus(left, right) => write!(f, "{} + {}", left, right),
         }
     }
 }
@@ -330,9 +293,7 @@ fn parse_line(line_pair: pest::iterators::Pair<Rule>) -> RStmt {
                         }
                         Rule::while_statement => {
                             let mut elements = statement.into_inner();
-                            let condition = if let Some(condition_pair) =
-                                elements.next()
-                            {
+                            let condition = if let Some(condition_pair) = elements.next() {
                                 parse_expression(condition_pair)
                             } else {
                                 panic!("While statement did not have enough elements.");
@@ -392,10 +353,7 @@ fn parse_expression(expression_pair: pest::iterators::Pair<Rule>) -> RExp {
                 Box::new(parse_expression(exp)),
             )
         }
-        Rule::formula => {
-            let right = expression.into_inner();
-            RExp::Formula(RFormula::OneSided(parse_formula_expression(right)))
-        }
+        Rule::formula => RExp::Formula(RFormula::OneSided(Box::new(parse_expression(expression)))),
         Rule::function_definition => {
             let mut function = expression.into_inner();
             let args = function.next().unwrap(); // Function always has (possibly empty) arguments.
@@ -457,10 +415,9 @@ fn parse_expression(expression_pair: pest::iterators::Pair<Rule>) -> RExp {
                 );
             }
             Rule::formula => {
-                let formula = infix.into_inner();
                 rexp = RExp::Formula(RFormula::TwoSided(
                     Box::new(rexp),
-                    parse_formula_expression(formula),
+                    Box::new(parse_expression(infix)),
                 ));
             }
             r => unexpected_rule!(r, infix),
@@ -499,30 +456,6 @@ fn parse_function_expression(function_pair: pest::iterators::Pair<Rule>) -> RExp
         None => vec![],
     };
     RExp::Call(name.as_str().into(), args)
-}
-
-fn parse_formula_expression(mut expression: pest::iterators::Pairs<Rule>) -> RFormulaExpression {
-    let first_expression = expression.next().unwrap(); // Expression always has at least one element.
-    let mut result = match first_expression.as_rule() {
-        Rule::identifier => RFormulaExpression::Variable(first_expression.as_str().to_string()),
-        Rule::function_call => {
-            let function_call = parse_function_expression(first_expression);
-            if let RExp::Call(name, args) = function_call {
-                RFormulaExpression::Call(name, args)
-            } else {
-                panic!("Expected functional call, found {}.", function_call);
-            }
-        }
-        _ => unreachable!(),
-    };
-    for (operator, right) in expression.tuples() {
-        match operator.as_str() {
-            "+" => result = RFormulaExpression::Plus(Box::new(result), right.as_str().into()),
-            // TODO: Implement missing operators.
-            _ => unreachable!(),
-        }
-    }
-    result
 }
 
 #[cfg(test)]
@@ -761,43 +694,69 @@ item[empty,]";
 ~ one_sided
 two ~ sided
 ~ one + sided + multiple
-two ~ sided + multiple
+two ~ sided + 1
 ~ transform(x)
-other ~ transform(x)";
+other ~ transform(x)
+lm(y[subk]~factor(x[subk]))";
         let result = test_parse(code);
         let expected = vec![
-            RStmt::Expression(RExp::Formula(RFormula::OneSided(
-                RFormulaExpression::Variable("one_sided".into()),
-            ))),
+            RStmt::Expression(RExp::Formula(RFormula::OneSided(Box::new(RExp::Variable(
+                "one_sided".into(),
+            ))))),
             RStmt::Expression(RExp::Formula(RFormula::TwoSided(
                 Box::new(RExp::variable("two")),
-                RFormulaExpression::Variable("sided".into()),
+                Box::new(RExp::Variable("sided".into())),
             ))),
-            RStmt::Expression(RExp::Formula(RFormula::OneSided(RFormulaExpression::Plus(
-                Box::new(RFormulaExpression::Plus(
-                    Box::new(RFormulaExpression::Variable("one".into())),
-                    "sided".into(),
+            RStmt::Expression(RExp::Formula(RFormula::OneSided(Box::new(RExp::Infix(
+                "+".into(),
+                Box::new(RExp::variable("one")),
+                Box::new(RExp::Infix(
+                    "+".into(),
+                    Box::new(RExp::variable("sided")),
+                    Box::new(RExp::variable("multiple")),
                 )),
-                "multiple".into(),
-            )))),
+            ))))),
             RStmt::Expression(RExp::Formula(RFormula::TwoSided(
                 Box::new(RExp::variable("two")),
-                RFormulaExpression::Plus(
-                    Box::new(RFormulaExpression::Variable("sided".into())),
-                    "multiple".into(),
-                ),
+                Box::new(RExp::Infix(
+                    "+".into(),
+                    Box::new(RExp::variable("sided")),
+                    Box::new(RExp::constant("1")),
+                )),
             ))),
-            RStmt::Expression(RExp::Formula(RFormula::OneSided(RFormulaExpression::Call(
+            RStmt::Expression(RExp::Formula(RFormula::OneSided(Box::new(RExp::Call(
                 "transform".into(),
                 vec![(None, RExp::Variable("x".into()))],
-            )))),
+            ))))),
             RStmt::Expression(RExp::Formula(RFormula::TwoSided(
                 Box::new(RExp::variable("other")),
-                RFormulaExpression::Call(
+                Box::new(RExp::Call(
                     "transform".into(),
                     vec![(None, RExp::Variable("x".into()))],
-                ),
+                )),
             ))),
+            RStmt::Expression(RExp::Call(
+                "lm".into(),
+                vec![(
+                    None,
+                    RExp::Formula(RFormula::TwoSided(
+                        Box::new(RExp::Index(
+                            Box::new(RExp::variable("y")),
+                            vec![Some(RExp::variable("subk"))],
+                        )),
+                        Box::new(RExp::Call(
+                            "factor".into(),
+                            vec![(
+                                None,
+                                RExp::Index(
+                                    Box::new(RExp::variable("x")),
+                                    vec![Some(RExp::variable("subk"))],
+                                ),
+                            )],
+                        )),
+                    )),
+                )],
+            )),
         ];
         assert_eq!(expected, result);
     }
@@ -808,7 +767,8 @@ other ~ transform(x)";
 func1 <- function () {
     1
 }
-func2 <- function (with, arguments) { 2 }
+func2 <- function (with, arguments)
+    { 2 }
 func3 <- function (with, default = 'arguments') {
     a <- other()
     a
@@ -967,7 +927,8 @@ if (0 == 1) {
 if (is_ok())
     do_something_again()
 
-if (TRUE) {
+if (TRUE)
+{
     is_true()
 }
 else {

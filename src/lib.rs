@@ -10,7 +10,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use crate::dependency_graph::{parse_dependency_graph, DependencyGraph};
 
 use crate::hypotheses::{detect_hypotheses, Hypothesis};
-pub use crate::parser::{RExp, RFormula, RFormulaExpression, RStmt};
+pub use crate::parser::{RExp, RFormula, RStmt};
 
 #[derive(Debug)]
 pub struct Tractus(Vec<RStmt>);
@@ -86,9 +86,10 @@ where
 
 #[cfg(test)]
 mod tests {
+    use pretty_assertions::assert_eq;
     use std::iter::FromIterator;
 
-    use crate::parser::{RFormula, RFormulaExpression};
+    use crate::parser::RFormula;
 
     use super::*;
 
@@ -120,7 +121,7 @@ mod tests {
                         None,
                         RExp::Formula(RFormula::TwoSided(
                             Box::new(RExp::variable("Speed")),
-                            RFormulaExpression::Variable("Layout".into()),
+                            Box::new(RExp::variable("Layout")),
                         )),
                     ),
                     (Some("data".into()), RExp::variable("kbd")),
@@ -145,7 +146,7 @@ mod tests {
         };
         let hyp = Hypothesis {
             left: "Speed".into(),
-            right: RFormulaExpression::Variable("Layout".into()),
+            right: RExp::variable("Layout"),
         };
         let n2 = Node {
             expression: tractus.get_statement(1).unwrap().expression().unwrap(),

@@ -2,12 +2,12 @@ use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::iter::FromIterator;
 
-use crate::parser::{RExp, RFormula, RFormulaExpression, RIdentifier};
+use crate::parser::{RExp, RFormula, RIdentifier};
 
 #[derive(PartialEq, Eq, Hash, Debug, Clone)]
 pub struct Hypothesis {
     pub left: RIdentifier,
-    pub right: RFormulaExpression,
+    pub right: RExp,
 }
 
 impl std::fmt::Display for Hypothesis {
@@ -35,7 +35,7 @@ pub fn detect_hypotheses(expression: &RExp) -> HashSet<Hypothesis> {
             left: left
                 .extract_variable_name()
                 .expect("Left side of formula was not a valid identifier."),
-            right: right.clone(),
+            right: *right.clone(),
         }]),
 
         // variable[variable$independent == "level",]$dependent
@@ -53,9 +53,7 @@ pub fn detect_hypotheses(expression: &RExp) -> HashSet<Hypothesis> {
                                     if inner_variable == variable {
                                         HashSet::from_iter(vec![Hypothesis {
                                             left: dependent_name.clone(),
-                                            right: RFormulaExpression::Variable(
-                                                independent_name.to_string(),
-                                            ),
+                                            right: RExp::Variable(independent_name.to_string()),
                                         }])
                                     } else {
                                         HashSet::new()
@@ -88,6 +86,7 @@ pub fn detect_hypotheses(expression: &RExp) -> HashSet<Hypothesis> {
 #[cfg(test)]
 mod tests {
     use crate::parser::RFormula;
+    use pretty_assertions::assert_eq;
 
     use super::*;
 
@@ -95,12 +94,12 @@ mod tests {
     fn parses_formula() {
         let expression = RExp::Formula(RFormula::TwoSided(
             Box::new(RExp::variable("dependent")),
-            RFormulaExpression::Variable("independent".into()),
+            Box::new(RExp::variable("independent")),
         ));
         let result = detect_hypotheses(&expression);
         let expected = HashSet::from_iter(vec![Hypothesis {
             left: "dependent".into(),
-            right: RFormulaExpression::Variable("independent".into()),
+            right: RExp::variable("independent"),
         }]);
         assert_eq!(expected, result);
     }
@@ -113,19 +112,21 @@ mod tests {
                 None,
                 RExp::Formula(RFormula::TwoSided(
                     Box::new(RExp::variable("speed")),
-                    RFormulaExpression::Plus(
-                        Box::new(RFormulaExpression::Variable("layout".into())),
-                        "age".into(),
-                    ),
+                    Box::new(RExp::Infix(
+                        "+".into(),
+                        Box::new(RExp::variable("layout")),
+                        Box::new(RExp::variable("age")),
+                    )),
                 )),
             )],
         );
         let result = detect_hypotheses(&expression);
         let expected = HashSet::from_iter(vec![Hypothesis {
             left: "speed".into(),
-            right: RFormulaExpression::Plus(
-                Box::new(RFormulaExpression::Variable("layout".into())),
-                "age".into(),
+            right: RExp::Infix(
+                "+".into(),
+                Box::new(RExp::variable("layout")),
+                Box::new(RExp::variable("age")),
             ),
         }]);
         assert_eq!(expected, result);
@@ -154,7 +155,7 @@ mod tests {
         let result = detect_hypotheses(&expression);
         let expected = HashSet::from_iter(vec![Hypothesis {
             left: "dependent".into(),
-            right: RFormulaExpression::Variable("independent".into()),
+            right: RExp::variable("independent"),
         }]);
         assert_eq!(expected, result);
     }
@@ -194,7 +195,7 @@ mod tests {
         let result = detect_hypotheses(&expression);
         let expected = HashSet::from_iter(vec![Hypothesis {
             left: "Speed".into(),
-            right: RFormulaExpression::Variable("Layout".into()),
+            right: RExp::variable("Layout"),
         }]);
         assert_eq!(expected, result);
     }

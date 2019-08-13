@@ -9,7 +9,7 @@ assignment = { (expression ~ ("<-" | "="))+ ~ expression}
 if_statement = { "if" ~ "(" ~ expression ~ ")" ~ block ~ (NEWLINE* ~ "else" ~ block)? }
 while_statement = { "while" ~ "(" ~ expression ~ ")" ~ block }
 for_statement = { "for" ~ "(" ~ expression ~ "in" ~ expression ~ ")" ~ block }
-block = { ("{" ~ NEWLINE? ~ lines ~ NEWLINE? ~ "}" | NEWLINE? ~ line) }
+block = { NEWLINE* ~ ("{" ~ NEWLINE* ~ lines ~ NEWLINE* ~ "}" | NEWLINE* ~ line) }
 
 comment = @{ "#" ~ character* }
 character = _{ !NEWLINE ~ ANY }
@@ -52,6 +52,4 @@ unnamed_argument = { expression }
 library = { "library(" ~ identifier ~ ")"}
 
 formula = !{ WHITESPACE* ~ "~" ~ formula_right_side }
-formula_right_side = _{ formula_expression ~ (formula_operator ~ formula_expression)* }
-formula_expression = _{ function_call | identifier }
-formula_operator = { "+" }
+formula_right_side = _{ expression ~ (infix_operator ~ expression)* }
