@@ -23,16 +23,16 @@ column = !{ "$" ~ identifier }
 index = !{ "[" ~ (expression | empty) ~ ("," ~ (expression | empty))* ~ "]" }
 list_index = !{ "[[" ~ (expression | empty) ~ ("," ~ (expression | empty))* ~ "]]" }
 prefix = !{ prefix_character ~ expression }
-prefix_character = { "!" }
+prefix_character = { "!" | "-" | "+" }
 infix = !{ WHITESPACE* ~ infix_operator ~ NEWLINE* ~ expression }
-infix_operator = { "<" | "<=" | ">" | ">=" | "==" | "!=" | "+" | "-" | "*" | "/" | "^" | "&&" | "||" | "&" | "|" | ":" | custom_infix_operator }
+infix_operator = { !"<-" ~ "<" | "<=" | ">" | ">=" | "==" | "!=" | "+" | "-" | "*" | "/" | "^" | "&&" | "||" | "&" | "|" | ":" | custom_infix_operator }
 custom_infix_operator = { "%" ~ (!("%" | WHITESPACE | NEWLINE) ~ ANY)* ~ "%" }
 
 identifier = @{ !(ASCII_DIGIT | "_" | "." ~ ASCII_DIGIT) ~ identifier_character+ }
 identifier_character = _{ ASCII_ALPHANUMERIC | "." | "_" }
 
 constant = ${ number | string | ^"TRUE" | ^"FALSE" }
-number = @{ ("+" | "-")? ~ (ASCII_DIGIT* ~ ".")? ~ ASCII_DIGIT+ ~ ("e" ~ ("+" | "-") ~ ASCII_DIGIT+)? }
+number = @{ (ASCII_DIGIT* ~ ".")? ~ ASCII_DIGIT+ ~ ("e" ~ ("+" | "-") ~ ASCII_DIGIT+)? }
 string = @{ "\"" ~ ( "\\\"" | !"\"" ~ ANY )* ~ "\"" | "'" ~ ( "\\'" | !"'" ~ ANY )* ~ "'"}
 
 function_definition = !{ "function" ~ "(" ~ parameters ~ ")" ~ block }

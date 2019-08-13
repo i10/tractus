@@ -664,9 +664,9 @@ name::space()";
             RStmt::Expression(RExp::constant("1")),
             RStmt::Expression(RExp::constant(".20")),
             RStmt::Expression(RExp::constant("0.10")),
-            RStmt::Expression(RExp::constant("-2")),
+            RStmt::Expression(RExp::Prefix("-".into(), Box::new(RExp::constant("2")))),
             RStmt::Expression(RExp::constant("2e-30")),
-            RStmt::Expression(RExp::constant("+3.4e+1")),
+            RStmt::Expression(RExp::Prefix("+".into(), Box::new(RExp::constant("3.4e+1")))),
         ];
         assert_eq!(expected, result);
     }
@@ -837,7 +837,8 @@ func3 <- function (with, default = 'arguments') {
     fn parses_prefix_operators() {
         let code = "\
 x <- !TRUE
-y <- negate(!x)";
+y <- negate(!x)
+-(1 + 2)";
         let result = test_parse(code);
         let expected = vec![
             RStmt::Assignment(
@@ -856,6 +857,14 @@ y <- negate(!x)";
                     )],
                 ),
             ),
+            RStmt::Expression(RExp::Prefix(
+                "-".into(),
+                Box::new(RExp::Infix(
+                    "+".into(),
+                    Box::new(RExp::constant("1")),
+                    Box::new(RExp::constant("2")),
+                )),
+            )),
         ];
         assert_eq!(expected, result);
     }
