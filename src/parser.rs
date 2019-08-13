@@ -892,7 +892,7 @@ y <- negate(!x)
     #[test]
     fn parses_infix_operators() {
         let code = "\
-1 < 3
+1 <= 3
 TRUE && FALSE
 'a' %custom% 'infix'
 1 +
@@ -900,7 +900,7 @@ TRUE && FALSE
         let result = test_parse(code);
         let expected = vec![
             RStmt::Expression(RExp::Infix(
-                "<".into(),
+                "<=".into(),
                 Box::new(RExp::constant("1")),
                 Box::new(RExp::constant("3")),
             )),
