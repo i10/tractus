@@ -168,7 +168,6 @@ mod tests {
 
         compare_graphs(&expected, &graph);
     }
-
     #[test]
     fn detects_mutations() {
         let input = vec![
@@ -275,10 +274,8 @@ mod tests {
 
         #[test]
         fn from_column() {
-            let name = RExp::Column(
-                Box::new(RExp::variable("x")),
-                Box::new(RExp::variable("a")),
-            ).extract_variable_name();
+            let name = RExp::Column(Box::new(RExp::variable("x")), Box::new(RExp::variable("a")))
+                .extract_variable_name();
             assert_eq!(Some("x".to_string()), name);
         }
 
@@ -287,7 +284,15 @@ mod tests {
             let name = RExp::Index(
                 Box::new(RExp::variable("x")),
                 vec![Some(RExp::variable("a"))],
-            ).extract_variable_name();
+            )
+            .extract_variable_name();
+            assert_eq!(Some("x".to_string()), name);
+        }
+
+        #[test]
+        fn from_colnames() {
+            let name = RExp::Call("colnames".into(), vec![(None, RExp::variable("x"))])
+                .extract_variable_name();
             assert_eq!(Some("x".to_string()), name);
         }
 
@@ -299,10 +304,8 @@ mod tests {
 
         #[test]
         fn rejects_constant_in_column() {
-            let name = RExp::Column(
-                Box::new(RExp::constant("x")),
-                Box::new(RExp::variable("a")),
-            ).extract_variable_name();
+            let name = RExp::Column(Box::new(RExp::constant("x")), Box::new(RExp::variable("a")))
+                .extract_variable_name();
             assert_eq!(None, name);
         }
     }

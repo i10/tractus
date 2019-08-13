@@ -117,6 +117,15 @@ impl RExp {
             Variable(name) => Some(name.to_string()),
             Column(left, _) => left.extract_variable_name(),
             Index(left, _) => left.extract_variable_name(),
+            Call(name, args) => {
+                // `colnames(variable) <- c("a", "b", "c")` is valid R.
+                if name == "colnames" && args.len() == 1 {
+                    let (_, exp) = &args[0];
+                    exp.extract_variable_name()
+                } else {
+                    None
+                }
+            }
             _ => None,
         }
     }
@@ -565,7 +574,8 @@ d <- 1
         let code = "\
 a <- 1
 b = 2
-a=b=c=1";
+a=b=c=1
+colnames(something) <- c(\"R\", \"is\", \"crazy\")";
         let result = test_parse(code);
         let expected = vec![
             RStmt::Assignment(RExp::variable("a"), vec![], RExp::constant("1")),
@@ -574,6 +584,18 @@ a=b=c=1";
                 RExp::variable("a"),
                 vec![RExp::variable("b"), RExp::variable("c")],
                 RExp::constant("1"),
+            ),
+            RStmt::Assignment(
+                RExp::Call("colnames".into(), vec![(None, RExp::variable("something"))]),
+                vec![],
+                RExp::Call(
+                    "c".into(),
+                    vec![
+                        (None, RExp::constant("\"R\"")),
+                        (None, RExp::constant("\"is\"")),
+                        (None, RExp::constant("\"crazy\"")),
+                    ],
+                ),
             ),
         ];
         assert_eq!(expected, result);
