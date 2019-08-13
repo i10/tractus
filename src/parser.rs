@@ -295,7 +295,8 @@ fn parse_line(line_pair: pest::iterators::Pair<Rule>) -> RStmt {
                             } else {
                                 panic!("If statement did not have enough elements.");
                             };
-                            let body: Vec<RStmt> = elements.map(parse_line).collect();
+                            let body = elements.next().unwrap().into_inner(); // If statement always has a body.
+                            let body: Vec<RStmt> = body.map(parse_line).collect();
                             RStmt::If(condition, Lines::from(body))
                         }
                         Rule::for_statement => {
@@ -307,7 +308,8 @@ fn parse_line(line_pair: pest::iterators::Pair<Rule>) -> RStmt {
                             } else {
                                 panic!("For statement did not have enough elements.");
                             };
-                            let body: Vec<RStmt> = elements.map(parse_line).collect();
+                            let body = elements.next().unwrap().into_inner(); // For statement always has a body.
+                            let body: Vec<RStmt> = body.map(parse_line).collect();
                             RStmt::For(pattern, range, Lines::from(body))
                         }
                         Rule::library => {
@@ -368,7 +370,8 @@ fn parse_expression(expression_pair: pest::iterators::Pair<Rule>) -> RExp {
                     }
                 })
                 .collect();
-            let body: Vec<RStmt> = function.map(parse_line).collect(); // Remaining tokens are body lines.
+            let body = function.next().unwrap().into_inner(); // Function always has a body.
+            let body: Vec<RStmt> = body.map(parse_line).collect();
             RExp::Function(args, Lines::from(body))
         }
         _ => unreachable!(),
