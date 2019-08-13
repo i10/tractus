@@ -41,7 +41,7 @@ required_parameter = { identifier }
 parameter_with_default = { identifier ~ "=" ~ expression }
 
 function_call = !{ identifier ~ "(" ~ arguments ~ ")" }
-arguments = { argument? ~ ("," ~ argument)* }
+arguments = { argument? ~ ("," ~ NEWLINE* ~ argument)* }
 argument = _{ named_argument | unnamed_argument }
 named_argument = { identifier ~ "=" ~ expression }
 unnamed_argument = { expression }

@@ -542,7 +542,9 @@ a=b=c=1";
         let code = "\
 empty()
 single(1)
-with_args(1, x, name = value)";
+with_args(1, x, name = value)
+break_down(\"long\",
+    argument=\"chains\")";
         let result = test_parse(code);
         let expected = vec![
             RStmt::Expression(RExp::Call("empty".into(), vec![])),
@@ -556,6 +558,13 @@ with_args(1, x, name = value)";
                     (None, RExp::constant("1")),
                     (None, RExp::variable("x")),
                     (Some("name".to_string()), RExp::variable("value")),
+                ],
+            )),
+            RStmt::Expression(RExp::Call(
+                "break_down".into(),
+                vec![
+                    (None, RExp::constant("\"long\"")),
+                    (Some("argument".to_string()), RExp::constant("\"chains\"")),
                 ],
             )),
         ];
