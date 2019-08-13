@@ -304,7 +304,14 @@ fn parse_line(line_pair: pest::iterators::Pair<Rule>) -> RStmt {
                             let body = elements.next().unwrap().into_inner(); // If statement always has a body.
                             let body: Vec<RStmt> = body.map(parse_line).collect();
 
-                            let else_body = elements.next().map(|else_body| Lines::from(else_body.into_inner().map(parse_line).collect::<Vec<RStmt>>()));
+                            let else_body = elements.next().map(|else_body| {
+                                Lines::from(
+                                    else_body
+                                        .into_inner()
+                                        .map(parse_line)
+                                        .collect::<Vec<RStmt>>(),
+                                )
+                            });
 
                             RStmt::If(condition, Lines::from(body), else_body)
                         }
@@ -828,7 +835,9 @@ y <- negate(!x)";
         let code = "\
 1 < 3
 TRUE && FALSE
-'a' %custom% 'infix'";
+'a' %custom% 'infix'
+1 +
+    3";
         let result = test_parse(code);
         let expected = vec![
             RStmt::Expression(RExp::Infix(
@@ -845,6 +854,11 @@ TRUE && FALSE
                 "%custom%".into(),
                 Box::new(RExp::constant("'a'")),
                 Box::new(RExp::constant("'infix'")),
+            )),
+            RStmt::Expression(RExp::Infix(
+                "+".into(),
+                Box::new(RExp::constant("1")),
+                Box::new(RExp::constant("3")),
             )),
         ];
         assert_eq!(expected, result);
@@ -896,14 +910,16 @@ else
                     RStmt::Expression(RExp::Call("do_something".into(), vec![])),
                     RStmt::Empty,
                     RStmt::Expression(RExp::Call("do_something_else".into(), vec![])),
-                ]),None,
+                ]),
+                None,
             ),
             RStmt::If(
                 RExp::Call("is_ok".into(), vec![]),
                 Lines::from(vec![RStmt::Expression(RExp::Call(
                     "do_something_again".into(),
                     vec![],
-                ))]), None,
+                ))]),
+                None,
             ),
             RStmt::If(
                 RExp::constant("TRUE"),
@@ -912,8 +928,10 @@ else
                     vec![],
                 ))]),
                 Some(Lines::from(vec![RStmt::Expression(RExp::Call(
-                    "is_false".into(), vec![]
-                ))]))),
+                    "is_false".into(),
+                    vec![],
+                ))])),
+            ),
             RStmt::If(
                 RExp::constant("FALSE"),
                 Lines::from(vec![RStmt::Expression(RExp::Call(
@@ -921,8 +939,10 @@ else
                     vec![],
                 ))]),
                 Some(Lines::from(vec![RStmt::Expression(RExp::Call(
-                    "is_true".into(), vec![]
-                ))]))),
+                    "is_true".into(),
+                    vec![],
+                ))])),
+            ),
         ];
         assert_eq!(expected, result);
     }
