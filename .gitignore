@@ -3,3 +3,4 @@
 Cargo.lock
 
 /tests/snapshots/hidden
+/tests/snapshots/snapshots__hidden-*
