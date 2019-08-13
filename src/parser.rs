@@ -608,8 +608,10 @@ colnames(something) <- c(\"R\", \"is\", \"crazy\")";
 empty()
 single(1)
 with_args(1, x, name = value)
-break_down(\"long\",
-    argument=\"chains\")
+break_down(
+    \"long\",
+    argument=\"chains\"
+    )
 name::space()";
         let result = test_parse(code);
         let expected = vec![
