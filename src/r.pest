@@ -6,7 +6,8 @@ line = { statement ~ comment | statement | comment }
 statement = { assignment | if_statement | library | expression }
 
 assignment = { (expression ~ ("<-" | "="))+ ~ expression}
-if_statement = { "if" ~ "(" ~ expression ~ ")" ~ ("{" ~ NEWLINE? ~ lines ~ NEWLINE? ~ "}" | NEWLINE? ~ line ~ NEWLINE?) }
+if_statement = { "if" ~ "(" ~ expression ~ ")" ~ block }
+block = _{ ("{" ~ NEWLINE? ~ lines ~ NEWLINE? ~ "}" | NEWLINE? ~ line ~ NEWLINE?) }
 
 comment = @{ "#" ~ character* }
 character = _{ !NEWLINE ~ ANY }
@@ -32,7 +33,7 @@ constant = ${ number | string | ^"TRUE" | ^"FALSE" }
 number = @{ ASCII_DIGIT+ }
 string = @{ "\"" ~ ( "\\\"" | !"\"" ~ ANY )* ~ "\"" | "'" ~ ( "\\'" | !"'" ~ ANY )* ~ "'"}
 
-function_definition = !{ "function" ~ "(" ~ parameters ~ ")" ~ expression }
+function_definition = !{ "function" ~ "(" ~ parameters ~ ")" ~ block }
 parameters = { parameter? ~ ("," ~ parameter)* }
 parameter = _{ parameter_with_default | required_parameter }
 required_parameter = { identifier }

@@ -84,7 +84,7 @@ pub enum RExp {
     Column(Box<RExp>, Box<RExp>),
     Index(Box<RExp>, Vec<Option<RExp>>),
     Formula(RFormula),
-    Function(Vec<(RIdentifier, Option<RExp>)>, String),
+    Function(Vec<(RIdentifier, Option<RExp>)>, Lines),
     Prefix(String, Box<RExp>),
     Infix(String, Box<RExp>, Box<RExp>),
 }
@@ -277,7 +277,11 @@ fn parse_line(line_pair: pest::iterators::Pair<Rule>) -> RStmt {
                 first
             }
         }
-        _ => unreachable!(),
+        r => panic!(
+            "Encountered unexpected rule {:?} for input {:#?}.",
+            r,
+            line_pair.as_str()
+        ),
     }
 }
 
@@ -331,8 +335,8 @@ fn parse_expression(expression_pair: pest::iterators::Pair<Rule>) -> RExp {
                     }
                 })
                 .collect();
-            let body = function.next().unwrap(); // Function always has a body.
-            RExp::Function(args, body.as_str().into())
+            let body: Vec<RStmt> = function.map(parse_line).collect(); // Remaining tokens are body lines.
+            RExp::Function(args, Lines::from(body))
         }
         _ => unreachable!(),
     };
@@ -647,22 +651,30 @@ other ~ transform(x)";
     #[test]
     fn parses_function_definition() {
         let code = "\
-func1 <- function () 1
-func2 <- function (with, arguments) 2
-func3 <- function (with, default = 'arguments') 3 ";
+func1 <- function () {
+    1
+}
+func2 <- function (with, arguments) { 2 }
+func3 <- function (with, default = 'arguments') {
+    a <- other()
+    a
+} ";
         let result = test_parse(code);
         let expected = vec![
             RStmt::Assignment(
                 RExp::variable("func1"),
                 vec![],
-                RExp::Function(vec![], "1".into()),
+                RExp::Function(
+                    vec![],
+                    Lines::from(vec![RStmt::Expression(RExp::constant("1"))]),
+                ),
             ),
             RStmt::Assignment(
                 RExp::variable("func2"),
                 vec![],
                 RExp::Function(
                     vec![("with".into(), None), ("arguments".into(), None)],
-                    "2".into(),
+                    Lines::from(vec![RStmt::Expression(RExp::constant("2"))]),
                 ),
             ),
             RStmt::Assignment(
@@ -673,7 +685,14 @@ func3 <- function (with, default = 'arguments') 3 ";
                         ("with".into(), None),
                         ("default".into(), Some(RExp::constant("'arguments'"))),
                     ],
-                    "3".into(),
+                    Lines::from(vec![
+                        RStmt::Assignment(
+                            RExp::variable("a"),
+                            vec![],
+                            RExp::Call("other".into(), vec![]),
+                        ),
+                        RStmt::Expression(RExp::variable("a")),
+                    ]),
                 ),
             ),
         ];

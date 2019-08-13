@@ -1,5 +1,5 @@
 ---
-created: "2019-08-12T15:50:02.866826Z"
+created: "2019-08-13T09:17:29.144326700Z"
 creator: insta@0.8.2
 source: tests/snapshots.rs
 expression: parsed.generate_hypothesis_tree()
@@ -77,7 +77,28 @@ expression: parsed.generate_hypothesis_tree()
                                                 None,
                                             ),
                                         ],
-                                        "summary(data$Speed)",
+                                        Lines(
+                                            [
+                                                Expression(
+                                                    Call(
+                                                        "summary",
+                                                        [
+                                                            (
+                                                                None,
+                                                                Column(
+                                                                    Variable(
+                                                                        "data",
+                                                                    ),
+                                                                    Variable(
+                                                                        "Speed",
+                                                                    ),
+                                                                ),
+                                                            ),
+                                                        ],
+                                                    ),
+                                                ),
+                                            ],
+                                        ),
                                     ),
                                 ),
                             ],

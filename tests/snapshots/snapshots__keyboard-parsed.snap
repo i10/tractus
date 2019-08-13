@@ -1,5 +1,5 @@
 ---
-created: "2019-08-12T15:46:47.820345200Z"
+created: "2019-08-13T09:16:11.229788500Z"
 creator: insta@0.8.2
 source: tests/snapshots.rs
 expression: parsed
@@ -132,7 +132,28 @@ Tractus(
                                     None,
                                 ),
                             ],
-                            "summary(data$Speed)",
+                            Lines(
+                                [
+                                    Expression(
+                                        Call(
+                                            "summary",
+                                            [
+                                                (
+                                                    None,
+                                                    Column(
+                                                        Variable(
+                                                            "data",
+                                                        ),
+                                                        Variable(
+                                                            "Speed",
+                                                        ),
+                                                    ),
+                                                ),
+                                            ],
+                                        ),
+                                    ),
+                                ],
+                            ),
                         ),
                     ),
                 ],
