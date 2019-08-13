@@ -1078,7 +1078,7 @@ while (i < 10) {
     do_stuff()
     i <- i + 1
 }
-while (true)
+while (TRUE)
     annoy()
 ";
         let result = test_parse(code);
@@ -1103,7 +1103,7 @@ while (true)
                 ]),
             ),
             RStmt::While(
-                RExp::constant("true"),
+                RExp::constant("TRUE"),
                 Lines::from(vec![RStmt::Expression(RExp::Call(
                     RExp::boxed_variable("annoy"),
                     vec![],
