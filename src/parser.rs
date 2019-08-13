@@ -286,7 +286,7 @@ fn parse_line(line_pair: pest::iterators::Pair<Rule>) -> RStmt {
                 Rule::statement => {
                     let statement = first_pair.into_inner().next().unwrap(); // Take statement out of line.
                     match statement.as_rule() {
-                        Rule::raw_expression => {
+                        Rule::expression => {
                             RStmt::Expression(parse_expression(statement)) // Expression is always non-empty.
                         }
                         Rule::assignment => {
@@ -360,7 +360,7 @@ fn parse_line(line_pair: pest::iterators::Pair<Rule>) -> RStmt {
 }
 
 fn parse_expression(expression_pair: pest::iterators::Pair<Rule>) -> RExp {
-    let mut whole_expression = expression_pair.into_inner();
+    let mut whole_expression = dbg!(expression_pair.into_inner());
     let expression = whole_expression.next().unwrap(); // Expression is always non-empty.
     let mut rexp = match expression.as_rule() {
         Rule::constant => RExp::Constant(expression.as_str().to_string()),
@@ -399,7 +399,8 @@ fn parse_expression(expression_pair: pest::iterators::Pair<Rule>) -> RExp {
             let body: Vec<RStmt> = body.map(parse_line).collect();
             RExp::Function(args, Lines::from(body))
         }
-        _ => unreachable!(),
+        Rule::expression => parse_expression(expression),
+        r => unexpected_rule!(r, expression),
     };
 
     // Process all indexing expressions that follow.
@@ -410,7 +411,7 @@ fn parse_expression(expression_pair: pest::iterators::Pair<Rule>) -> RExp {
                 let indices = infix
                     .into_inner()
                     .map(|maybe_expression| match maybe_expression.as_rule() {
-                        Rule::raw_expression => Some(parse_expression(maybe_expression)),
+                        Rule::expression => Some(parse_expression(maybe_expression)),
                         Rule::empty => None,
                         _ => unreachable!(),
                     })
@@ -421,7 +422,7 @@ fn parse_expression(expression_pair: pest::iterators::Pair<Rule>) -> RExp {
                 let indices = infix
                     .into_inner()
                     .map(|maybe_expression| match maybe_expression.as_rule() {
-                        Rule::raw_expression => Some(parse_expression(maybe_expression)),
+                        Rule::expression => Some(parse_expression(maybe_expression)),
                         Rule::empty => None,
                         _ => unreachable!(),
                     })
@@ -907,11 +908,31 @@ TRUE && FALSE
     fn parses_expression_in_parens() {
         let code = "\
 1
-(2)";
+(2)
+(1 + (2 + 3))
+((1 + 2) + 3)";
         let result = test_parse(code);
         let expected = vec![
             RStmt::Expression(RExp::constant("1")),
             RStmt::Expression(RExp::constant("2")),
+            RStmt::Expression(RExp::Infix(
+                "+".into(),
+                Box::new(RExp::constant("1")),
+                Box::new(RExp::Infix(
+                    "+".into(),
+                    Box::new(RExp::constant("2")),
+                    Box::new(RExp::constant("3")),
+                )),
+            )),
+            RStmt::Expression(RExp::Infix(
+                "+".into(),
+                Box::new(RExp::Infix(
+                    "+".into(),
+                    Box::new(RExp::constant("1")),
+                    Box::new(RExp::constant("2")),
+                )),
+                Box::new(RExp::constant("3")),
+            )),
         ];
         assert_eq!(expected, result);
     }
