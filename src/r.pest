@@ -29,7 +29,7 @@ infix = !{ WHITESPACE* ~ infix_operator ~ NEWLINE* ~ expression }
 infix_operator = { "<=" | ">=" | !"<-" ~ "<" | ">" | "==" | "!=" | "+" | "-" | "*" | "/" | "^" | "&&" | "||" | "&" | "|" | ":" | custom_infix_operator }
 custom_infix_operator = { "%" ~ (!("%" | WHITESPACE | NEWLINE) ~ ANY)* ~ "%" }
 
-identifier = @{ !(ASCII_DIGIT | "_" | "." ~ ASCII_DIGIT) ~ identifier_character+ }
+identifier = @{ !(ASCII_DIGIT | "_" | "." ~ ASCII_DIGIT) ~ identifier_character+ ~ ("::" ~ identifier)? }
 identifier_character = _{ ASCII_ALPHANUMERIC | "." | "_" }
 
 constant = ${ number | string | ^"TRUE" | ^"FALSE" }
