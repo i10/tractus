@@ -608,7 +608,8 @@ empty()
 single(1)
 with_args(1, x, name = value)
 break_down(\"long\",
-    argument=\"chains\")";
+    argument=\"chains\")
+name::space()";
         let result = test_parse(code);
         let expected = vec![
             RStmt::Expression(RExp::Call("empty".into(), vec![])),
@@ -631,6 +632,7 @@ break_down(\"long\",
                     (Some("argument".to_string()), RExp::constant("\"chains\"")),
                 ],
             )),
+            RStmt::Expression(RExp::Call("name::space".into(), vec![])),
         ];
         assert_eq!(expected, result);
     }
