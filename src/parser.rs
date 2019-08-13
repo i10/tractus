@@ -594,11 +594,13 @@ name::space()";
     fn parses_strings() {
         let code = "\
 'first'
-\"second\"";
+\"second\"
+`third`";
         let result = test_parse(code);
         let expected = vec![
             RStmt::Expression(RExp::constant("'first'")),
             RStmt::Expression(RExp::constant("\"second\"")),
+            RStmt::Expression(RExp::constant("`third`")),
         ];
         assert_eq!(expected, result);
     }

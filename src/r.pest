@@ -34,7 +34,7 @@ identifier_character = _{ ASCII_ALPHANUMERIC | "." | "_" }
 
 constant = ${ number | string | ^"TRUE" | ^"FALSE" }
 number = @{ (ASCII_DIGIT* ~ ".")? ~ ASCII_DIGIT+ ~ ("e" ~ ("+" | "-") ~ ASCII_DIGIT+)? }
-string = @{ "\"" ~ ( "\\\"" | !"\"" ~ ANY )* ~ "\"" | "'" ~ ( "\\'" | !"'" ~ ANY )* ~ "'"}
+string = @{ "\"" ~ ("\\\"" | !"\"" ~ ANY)* ~ "\"" | "'" ~ ("\\'" | !"'" ~ ANY)* ~ "'" | "`" ~ ("\\`" | !"`" ~ ANY)* ~ "`" }
 
 function_definition = !{ "function" ~ "(" ~ parameters ~ ")" ~ block }
 parameters = { parameter? ~ ("," ~ parameter)* }
