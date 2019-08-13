@@ -89,6 +89,7 @@ pub enum RExp {
     Call(RIdentifier, Vec<(Option<RIdentifier>, RExp)>),
     Column(Box<RExp>, Box<RExp>),
     Index(Box<RExp>, Vec<Option<RExp>>),
+    ListIndex(Box<RExp>, Vec<Option<RExp>>),
     Formula(RFormula),
     Function(Vec<(RIdentifier, Option<RExp>)>, Lines),
     Prefix(String, Box<RExp>),
@@ -147,6 +148,17 @@ impl std::fmt::Display for RExp {
                     .collect::<Vec<String>>()
                     .join(", ");
                 write!(f, "{}[{}]", left, indices)
+            }
+            ListIndex(left, right) => {
+                let indices = right
+                    .iter()
+                    .map(|maybe_expression| match maybe_expression {
+                        Some(expression) => format!("{}", expression),
+                        None => "".to_string(),
+                    })
+                    .collect::<Vec<String>>()
+                    .join(", ");
+                write!(f, "{}[[{}]]", left, indices)
             }
             Formula(formula) => write!(f, "{}", formula),
             Function(params, body) => {
@@ -376,6 +388,17 @@ fn parse_expression(expression_pair: pest::iterators::Pair<Rule>) -> RExp {
                     })
                     .collect();
                 rexp = RExp::Index(Box::new(rexp), indices)
+            }
+            Rule::list_index => {
+                let indices = infix
+                    .into_inner()
+                    .map(|maybe_expression| match maybe_expression.as_rule() {
+                        Rule::raw_expression => Some(parse_expression(maybe_expression)),
+                        Rule::empty => None,
+                        _ => unreachable!(),
+                    })
+                    .collect();
+                rexp = RExp::ListIndex(Box::new(rexp), indices)
             }
             Rule::infix => {
                 let mut infix_operator = infix.into_inner();
@@ -612,7 +635,9 @@ library(MASS)";
         let code = "\
 item$column
 item[other$thing]
+item[[1]]
 other[multiple, index, arguments]
+list[[1,2]]
 get_matrix()$column[1]
 item[empty,]";
         let result = test_parse(code);
@@ -628,6 +653,10 @@ item[empty,]";
                     Box::new(RExp::variable("thing")),
                 ))],
             )),
+            RStmt::Expression(RExp::ListIndex(
+                Box::new(RExp::variable("item")),
+                vec![Some(RExp::constant("1"))],
+            )),
             RStmt::Expression(RExp::Index(
                 Box::new(RExp::variable("other")),
                 vec![
@@ -635,6 +664,10 @@ item[empty,]";
                     Some(RExp::variable("index")),
                     Some(RExp::variable("arguments")),
                 ],
+            )),
+            RStmt::Expression(RExp::ListIndex(
+                Box::new(RExp::variable("list")),
+                vec![Some(RExp::constant("1")), Some(RExp::constant("2"))],
             )),
             RStmt::Expression(RExp::Index(
                 Box::new(RExp::Column(
