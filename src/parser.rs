@@ -611,11 +611,13 @@ break_down(\"long\",
     fn parses_numbers() {
         let code = "\
 1
-.20";
+.20
+0.10";
         let result = test_parse(code);
         let expected = vec![
             RStmt::Expression(RExp::constant("1")),
             RStmt::Expression(RExp::constant(".20")),
+            RStmt::Expression(RExp::constant("0.10")),
         ];
         assert_eq!(expected, result);
     }
