@@ -1,5 +1,5 @@
 ---
-created: "2019-08-13T09:58:30.316068900Z"
+created: "2019-08-13T22:35:56.607937400Z"
 creator: insta@0.8.2
 source: tests/snapshots.rs
 expression: parsed
@@ -29,7 +29,9 @@ Tractus(
             ),
             [],
             Call(
-                "read.csv",
+                Variable(
+                    "read.csv",
+                ),
                 [
                     (
                         None,
@@ -42,7 +44,9 @@ Tractus(
         ),
         Expression(
             Call(
-                "View",
+                Variable(
+                    "View",
+                ),
                 [
                     (
                         None,
@@ -65,7 +69,9 @@ Tractus(
                 ),
                 [],
                 Call(
-                    "factor",
+                    Variable(
+                        "factor",
+                    ),
                     [
                         (
                             None,
@@ -85,7 +91,9 @@ Tractus(
         ),
         Expression(
             Call(
-                "summary",
+                Variable(
+                    "summary",
+                ),
                 [
                     (
                         None,
@@ -105,7 +113,9 @@ Tractus(
         ),
         Expression(
             Call(
-                "ddply",
+                Variable(
+                    "ddply",
+                ),
                 [
                     (
                         None,
@@ -136,7 +146,9 @@ Tractus(
                                 [
                                     Expression(
                                         Call(
-                                            "summary",
+                                            Variable(
+                                                "summary",
+                                            ),
                                             [
                                                 (
                                                     None,
@@ -161,7 +173,9 @@ Tractus(
         ),
         Expression(
             Call(
-                "ddply",
+                Variable(
+                    "ddply",
+                ),
                 [
                     (
                         None,
@@ -190,7 +204,9 @@ Tractus(
                             "Speed.mean",
                         ),
                         Call(
-                            "mean",
+                            Variable(
+                                "mean",
+                            ),
                             [
                                 (
                                     None,
@@ -206,7 +222,9 @@ Tractus(
                             "Speed.sd",
                         ),
                         Call(
-                            "sd",
+                            Variable(
+                                "sd",
+                            ),
                             [
                                 (
                                     None,
@@ -226,7 +244,9 @@ Tractus(
         ),
         Expression(
             Call(
-                "hist",
+                Variable(
+                    "hist",
+                ),
                 [
                     (
                         None,
@@ -265,7 +285,9 @@ Tractus(
         ),
         Expression(
             Call(
-                "hist",
+                Variable(
+                    "hist",
+                ),
                 [
                     (
                         None,
@@ -305,7 +327,9 @@ Tractus(
         TailComment(
             Expression(
                 Call(
-                    "hist",
+                    Variable(
+                        "hist",
+                    ),
                     [
                         (
                             None,
@@ -347,7 +371,9 @@ Tractus(
         TailComment(
             Expression(
                 Call(
-                    "plot",
+                    Variable(
+                        "plot",
+                    ),
                     [
                         (
                             None,
@@ -381,7 +407,9 @@ Tractus(
         ),
         Expression(
             Call(
-                "shapiro.test",
+                Variable(
+                    "shapiro.test",
+                ),
                 [
                     (
                         None,
@@ -420,7 +448,9 @@ Tractus(
         ),
         Expression(
             Call(
-                "shapiro.test",
+                Variable(
+                    "shapiro.test",
+                ),
                 [
                     (
                         None,
@@ -459,7 +489,9 @@ Tractus(
         ),
         Expression(
             Call(
-                "shapiro.test",
+                Variable(
+                    "shapiro.test",
+                ),
                 [
                     (
                         None,
@@ -503,7 +535,9 @@ Tractus(
                 ),
                 [],
                 Call(
-                    "aov",
+                    Variable(
+                        "aov",
+                    ),
                     [
                         (
                             None,
@@ -534,12 +568,16 @@ Tractus(
         TailComment(
             Expression(
                 Call(
-                    "shapiro.test",
+                    Variable(
+                        "shapiro.test",
+                    ),
                     [
                         (
                             None,
                             Call(
-                                "residuals",
+                                Variable(
+                                    "residuals",
+                                ),
                                 [
                                     (
                                         None,
@@ -557,12 +595,16 @@ Tractus(
         ),
         Expression(
             Call(
-                "qqnorm",
+                Variable(
+                    "qqnorm",
+                ),
                 [
                     (
                         None,
                         Call(
-                            "residuals",
+                            Variable(
+                                "residuals",
+                            ),
                             [
                                 (
                                     None,
@@ -579,12 +621,16 @@ Tractus(
         TailComment(
             Expression(
                 Call(
-                    "qqline",
+                    Variable(
+                        "qqline",
+                    ),
                     [
                         (
                             None,
                             Call(
-                                "residuals",
+                                Variable(
+                                    "residuals",
+                                ),
                                 [
                                     (
                                         None,
@@ -614,7 +660,9 @@ Tractus(
             [],
             Column(
                 Call(
-                    "fitdistr",
+                    Variable(
+                        "fitdistr",
+                    ),
                     [
                         (
                             None,
@@ -664,7 +712,9 @@ Tractus(
         TailComment(
             Expression(
                 Call(
-                    "ks.test",
+                    Variable(
+                        "ks.test",
+                    ),
                     [
                         (
                             None,
@@ -767,7 +817,9 @@ Tractus(
                 ),
                 [],
                 Call(
-                    "log",
+                    Variable(
+                        "log",
+                    ),
                     [
                         (
                             None,
@@ -788,7 +840,9 @@ Tractus(
         TailComment(
             Expression(
                 Call(
-                    "View",
+                    Variable(
+                        "View",
+                    ),
                     [
                         (
                             None,
@@ -803,7 +857,9 @@ Tractus(
         ),
         Expression(
             Call(
-                "shapiro.test",
+                Variable(
+                    "shapiro.test",
+                ),
                 [
                     (
                         None,
@@ -847,7 +903,9 @@ Tractus(
                 ),
                 [],
                 Call(
-                    "aov",
+                    Variable(
+                        "aov",
+                    ),
                     [
                         (
                             None,
@@ -878,12 +936,16 @@ Tractus(
         TailComment(
             Expression(
                 Call(
-                    "shapiro.test",
+                    Variable(
+                        "shapiro.test",
+                    ),
                     [
                         (
                             None,
                             Call(
-                                "residuals",
+                                Variable(
+                                    "residuals",
+                                ),
                                 [
                                     (
                                         None,
@@ -901,12 +963,16 @@ Tractus(
         ),
         Expression(
             Call(
-                "qqnorm",
+                Variable(
+                    "qqnorm",
+                ),
                 [
                     (
                         None,
                         Call(
-                            "residuals",
+                            Variable(
+                                "residuals",
+                            ),
                             [
                                 (
                                     None,
@@ -923,12 +989,16 @@ Tractus(
         TailComment(
             Expression(
                 Call(
-                    "qqline",
+                    Variable(
+                        "qqline",
+                    ),
                     [
                         (
                             None,
                             Call(
-                                "residuals",
+                                Variable(
+                                    "residuals",
+                                ),
                                 [
                                     (
                                         None,
@@ -954,7 +1024,9 @@ Tractus(
         TailComment(
             Expression(
                 Call(
-                    "leveneTest",
+                    Variable(
+                        "leveneTest",
+                    ),
                     [
                         (
                             None,
@@ -1001,7 +1073,9 @@ Tractus(
                 ),
                 [],
                 Call(
-                    "aov",
+                    Variable(
+                        "aov",
+                    ),
                     [
                         (
                             None,
@@ -1032,7 +1106,9 @@ Tractus(
         TailComment(
             Expression(
                 Call(
-                    "anova",
+                    Variable(
+                        "anova",
+                    ),
                     [
                         (
                             None,
@@ -1052,7 +1128,9 @@ Tractus(
         TailComment(
             Expression(
                 Call(
-                    "plot",
+                    Variable(
+                        "plot",
+                    ),
                     [
                         (
                             None,
@@ -1086,12 +1164,16 @@ Tractus(
         TailComment(
             Expression(
                 Call(
-                    "summary",
+                    Variable(
+                        "summary",
+                    ),
                     [
                         (
                             None,
                             Call(
-                                "glht",
+                                Variable(
+                                    "glht",
+                                ),
                                 [
                                     (
                                         None,
@@ -1102,7 +1184,9 @@ Tractus(
                                     (
                                         None,
                                         Call(
-                                            "mcp",
+                                            Variable(
+                                                "mcp",
+                                            ),
                                             [
                                                 (
                                                     Some(
@@ -1123,7 +1207,9 @@ Tractus(
                                 "test",
                             ),
                             Call(
-                                "adjusted",
+                                Variable(
+                                    "adjusted",
+                                ),
                                 [
                                     (
                                         Some(
@@ -1149,12 +1235,16 @@ Tractus(
         ),
         Expression(
             Call(
-                "summary",
+                Variable(
+                    "summary",
+                ),
                 [
                     (
                         None,
                         Call(
-                            "glht",
+                            Variable(
+                                "glht",
+                            ),
                             [
                                 (
                                     None,
@@ -1165,7 +1255,9 @@ Tractus(
                                 (
                                     None,
                                     Call(
-                                        "lsm",
+                                        Variable(
+                                            "lsm",
+                                        ),
                                         [
                                             (
                                                 None,
@@ -1191,7 +1283,9 @@ Tractus(
                             "test",
                         ),
                         Call(
-                            "adjusted",
+                            Variable(
+                                "adjusted",
+                            ),
                             [
                                 (
                                     Some(
@@ -1222,7 +1316,9 @@ Tractus(
         TailComment(
             Expression(
                 Call(
-                    "kruskal_test",
+                    Variable(
+                        "kruskal_test",
+                    ),
                     [
                         (
                             None,
@@ -1261,7 +1357,9 @@ Tractus(
         TailComment(
             Expression(
                 Call(
-                    "kruskal_test",
+                    Variable(
+                        "kruskal_test",
+                    ),
                     [
                         (
                             None,
@@ -1313,7 +1411,9 @@ Tractus(
             ),
             [],
             Call(
-                "wilcox.test",
+                Variable(
+                    "wilcox.test",
+                ),
                 [
                     (
                         None,
@@ -1396,7 +1496,9 @@ Tractus(
             ),
             [],
             Call(
-                "wilcox.test",
+                Variable(
+                    "wilcox.test",
+                ),
                 [
                     (
                         None,
@@ -1479,7 +1581,9 @@ Tractus(
             ),
             [],
             Call(
-                "wilcox.test",
+                Variable(
+                    "wilcox.test",
+                ),
                 [
                     (
                         None,
@@ -1558,12 +1662,16 @@ Tractus(
         ),
         Expression(
             Call(
-                "p.adjust",
+                Variable(
+                    "p.adjust",
+                ),
                 [
                     (
                         None,
                         Call(
-                            "c",
+                            Variable(
+                                "c",
+                            ),
                             [
                                 (
                                     None,
@@ -1622,7 +1730,9 @@ Tractus(
         TailComment(
             Expression(
                 Call(
-                    "posthoc.kruskal.conover.test",
+                    Variable(
+                        "posthoc.kruskal.conover.test",
+                    ),
                     [
                         (
                             None,
