@@ -16,7 +16,7 @@ character = _{ !NEWLINE ~ ANY }
 empty = @{ "" }
 
 // Take care to prevent left recursion. See https://math.stackexchange.com/a/140049
-expression = ${ ("(" ~ expression ~ ")" | non_recursive) ~ recursive*}
+expression = ${ ("(" ~ WHITESPACE* ~ expression ~ WHITESPACE* ~ ")" | non_recursive) ~ recursive*}
 non_recursive = _{ function_definition | prefix | formula | constant | identifier }
 recursive = _{ infix | indexing | formula | function_call }
 indexing = _{ (column | index | list_index) }

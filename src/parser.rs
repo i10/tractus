@@ -918,7 +918,7 @@ TRUE && FALSE
         let code = "\
 1
 (2)
-(1 + (2 + 3))
+( 1 + (2 + 3))
 ((1 + 2) + 3)";
         let result = test_parse(code);
         let expected = vec![
