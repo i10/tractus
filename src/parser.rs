@@ -672,7 +672,7 @@ item[other$thing]
 item[[1]]
 other[multiple, index, arguments]
 list[[1,2]]
-get_matrix()$column[1]
+get_matrix()$column [ 1 ]
 item[empty,]";
         let result = test_parse(code);
         let expected = vec![
