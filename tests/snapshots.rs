@@ -8,27 +8,31 @@ use insta::assert_debug_snapshot_matches;
 
 #[test]
 fn snapshots() {
-    test_snapshots_in(get_snapshot_dir("tests/snapshots"), None);
+    let snapshot_dir = get_snapshot_dir("tests/snapshots");
+    test_snapshots_in(&snapshot_dir, None).unwrap_or_else(|e| {
+        panic!(
+            "Snapshot directory `{}` could not be read: {}",
+            snapshot_dir.display(),
+            e
+        )
+    });
 }
 
 #[test]
 fn hidden_snapshots() {
-    test_snapshots_in(get_snapshot_dir("tests/snapshots/hidden"), Some("hidden"));
+    test_snapshots_in(&get_snapshot_dir("tests/snapshots/hidden"), Some("hidden"))
+        .unwrap_or_default(); // Is allowed to fail when directory is missing.
 }
 
 fn get_snapshot_dir<P: std::convert::AsRef<std::path::Path>>(relative_path: P) -> path::PathBuf {
     path::Path::new(env!("CARGO_MANIFEST_DIR")).join(relative_path)
 }
 
-fn test_snapshots_in(snapshot_dir: path::PathBuf, maybe_prefix: Option<&'static str>) {
-    let snapshot_files: Vec<path::PathBuf> = fs::read_dir(&snapshot_dir)
-        .unwrap_or_else(|e| {
-            panic!(
-                "Snapshot directory `{}` could not be read: {}",
-                snapshot_dir.display(),
-                e
-            )
-        })
+fn test_snapshots_in(
+    snapshot_dir: &path::PathBuf,
+    maybe_prefix: Option<&'static str>,
+) -> Result<(), std::io::Error> {
+    let snapshot_files: Vec<path::PathBuf> = fs::read_dir(&snapshot_dir)?
         .filter_map(|maybe_entry| {
             maybe_entry
                 .map(|entry| {
@@ -50,6 +54,8 @@ fn test_snapshots_in(snapshot_dir: path::PathBuf, maybe_prefix: Option<&'static 
             panic!("File {} failed.", snapshot_file.display())
         }
     }
+
+    Ok(())
 }
 
 fn test_snapshot(snapshot_path: &path::PathBuf, maybe_prefix: Option<&'static str>) {
