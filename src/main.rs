@@ -7,8 +7,10 @@ use std::io;
 use std::io::{Read, Write};
 use std::path::PathBuf;
 
+use env_logger;
 use horrorshow::helper::doctype;
 use horrorshow::prelude::*;
+use log::{debug, info};
 use structopt::StructOpt;
 
 use tractus::{HypothesisTree, Parsed, RExpression};
@@ -25,15 +27,25 @@ struct Opt {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    env_logger::init();
+
+    debug!("Started processing.");
     let opt = Opt::from_args();
+    debug!("Reading from input...");
     let code = read(opt.input)?;
 
+    info!("Parsing...");
     let parsed = Parsed::from(&code).unwrap_or_else(|e| panic!("{}", e));
+    debug!("Parsing hypotheses map...");
     let hypotheses_map = tractus::parse_hypotheses_map(parsed.iter());
+    debug!("Parsing dependency graph...");
     let dependency_graph = tractus::DependencyGraph::parse(parsed.iter());
+    debug!("Parsing hypothesis tree...");
     let hypotheses = tractus::parse_hypothesis_tree(&hypotheses_map, &dependency_graph);
 
+    debug!("Rendering...");
     let html = render(&hypotheses).into_string()?;
+    info!("Outputting...");
     match opt.output {
         Some(path) => {
             std::fs::write(path, html)?;
@@ -45,6 +57,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    info!("Done.");
     Ok(())
 }
 
