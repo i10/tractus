@@ -30,7 +30,7 @@ infix_operator = { "<=" | ">=" | !"<-" ~ "<" | ">" | "==" | "!=" | "+" | "-" | "
 custom_infix_operator = { "%" ~ (!("%" | WHITESPACE | NEWLINE) ~ ANY)* ~ "%" }
 
 identifier = @{ "\"" ~ raw_identifier ~ "\"" | raw_identifier }
-raw_identifier = _{ !(ASCII_DIGIT | "_" | "." ~ ASCII_DIGIT) ~ identifier_character+ ~ ("::" ~ identifier)? }
+raw_identifier = _{ !(ASCII_DIGIT | "_" | "." ~ ASCII_DIGIT) ~ identifier_character+ ~ ("::" ~ ":"* ~ identifier)? }
 identifier_character = _{ ASCII_ALPHANUMERIC | "." | "_" }
 
 constant = ${ number | string | "TRUE" | "FALSE" }

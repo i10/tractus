@@ -580,7 +580,7 @@ break_down(
     , \"chains\"
     )
 weird(\"name\" = 1)
-name::space()
+name:::space()
 higher_order()(10)";
         let result = test_parse(code);
         let expected = vec![
@@ -609,7 +609,7 @@ higher_order()(10)";
                 RExp::boxed_variable("weird"),
                 vec![(Some("\"name\"".into()), RExp::constant("1"))],
             )),
-            RStmt::Expression(RExp::Call(RExp::boxed_variable("name::space"), vec![])),
+            RStmt::Expression(RExp::Call(RExp::boxed_variable("name:::space"), vec![])),
             RStmt::Expression(RExp::Call(
                 Box::new(RExp::Call(RExp::boxed_variable("higher_order"), vec![])),
                 vec![(None, RExp::constant("10"))],
