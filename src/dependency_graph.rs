@@ -39,33 +39,40 @@ pub fn parse_dependency_graph(input: &[RStmt]) -> DependencyGraph {
     let mut variables: HashMap<String, NodeIndex> = HashMap::new();
 
     for statement in input.iter() {
+        parse_statement(statement, &mut dependency_graph, &mut variables);
+    }
+
+    dependency_graph
+}
+
+fn parse_statement<'a>(
+    statement: &'a RStmt,
+    dependency_graph: &mut DependencyGraph<'a>,
+    variables: &mut HashMap<String, NodeIndex>,
+) {
         use RStmt::*;
         match statement {
             Expression(expression) => {
-                register_dependencies(expression, &mut dependency_graph, &mut variables);
+            register_dependencies(expression, dependency_graph, variables);
             }
             Assignment(left, additional, right) => {
                 let mut assigned = vec![left];
                 assigned.append(&mut additional.iter().collect());
                 for variable in assigned {
-                    let node_id =
-                        register_dependencies(right, &mut dependency_graph, &mut variables);
+                let node_id = register_dependencies(right, dependency_graph, variables);
                     match variable.extract_variable_name() {
                         Some(name) => variables.insert(name, node_id),
                         None => panic!(
                             "Could not find a variable in {}, in the left side of the assignment {}.",
-                            variable,
-                            statement
+                        variable, statement
                         ),
                     };
                 }
             }
+        TailComment(statement, _) => parse_statement(statement, dependency_graph, variables),
             _ => (),
         };
     }
-
-    dependency_graph
-}
 
 fn register_dependencies<'a>(
     expression: &'a RExp,
@@ -144,10 +151,13 @@ mod tests {
                     vec![(None, RExp::variable("x"))],
                 ),
             ),
-            RStmt::Expression(RExp::Call(
+            RStmt::TailComment(
+                Box::new(RStmt::Expression(RExp::Call(
                 RExp::boxed_variable("modify"),
                 vec![(None, RExp::variable("y"))],
-            )),
+                ))),
+                "# modifies y".into(),
+            ),
             RStmt::Expression(RExp::Call(
                 RExp::boxed_variable("change"),
                 vec![(None, RExp::variable("y"))],
