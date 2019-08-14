@@ -1,45 +1,55 @@
 WHITESPACE = _{ " " | "\t" }
-file = { SOI ~ statement ~ ((";" ~ NEWLINE | ";" | NEWLINE) ~ statement?)* ~ EOI }
-statement = { (assignment | library | expression)? ~ comment? }
+file = _{ SOI ~ lines ~ EOI }
+lines = _{ (line ~ line_separator | empty ~ NEWLINE )* ~ (line ~ ";"?)? }
+line_separator = _{ ";" ~ NEWLINE | ";" | NEWLINE }
+line = { statement ~ comment | statement | comment }
+statement = { assignment | if_statement | while_statement | for_statement | library | expression }
 
-assignment = { expression ~ ("<-" | "=") ~ expression}
+assignment = { (expression ~ ("<-" | "=") ~ NEWLINE*)+ ~ expression}
+if_statement = { "if" ~ "(" ~ expression ~ ")" ~ block ~ (NEWLINE* ~ "else" ~ block)? }
+while_statement = { "while" ~ "(" ~ expression ~ ")" ~ block }
+for_statement = { "for" ~ "(" ~ expression ~ "in" ~ expression ~ ")" ~ block }
+block = { NEWLINE* ~ ("{" ~ NEWLINE* ~ lines ~ NEWLINE* ~ "}" | "(" ~ NEWLINE* ~ line ~ NEWLINE* ~ ")" | line) }
+
 comment = @{ "#" ~ character* }
 character = _{ !NEWLINE ~ ANY }
 empty = @{ "" }
 
 // Take care to prevent left recursion. See https://math.stackexchange.com/a/140049
-expression = ${ non_recursive ~ ( infix | indexing )* }
-non_recursive = _{ function_definition | function_call | formula | constant | identifier }
-indexing = _{ (column | index) }
-column = !{ "$" ~ identifier }
-index = !{ "[" ~ (expression | empty) ~ ("," ~ (expression | empty))* ~ "]" }
-infix = !{ WHITESPACE* ~ infix_operator ~ expression }
-infix_operator = { "<" | "<=" | ">" | ">=" | "==" | "!=" | "+" | "-" | "*" | "/" | "^" | "&&" | "||" | custom_infix_operator }
+expression = { ("(" ~ expression ~ ")" | non_recursive) ~ recursive*}
+non_recursive = _{ function_definition | prefix | formula | constant | identifier }
+recursive = _{ infix | indexing | formula | function_call }
+indexing = _{ (column | index | list_index) }
+column = { "$" ~ identifier }
+index = { "[" ~ (expression | empty) ~ ("," ~ (expression | empty))* ~ "]" }
+list_index = { "[[" ~ (expression | empty) ~ ("," ~ (expression | empty))* ~ "]]" }
+prefix = { prefix_character ~ expression }
+prefix_character = { "!" | "-" | "+" }
+infix = { infix_operator ~ NEWLINE* ~ expression }
+infix_operator = { "<=" | ">=" | !"<-" ~ "<" | ">" | "==" | "!=" | "+" | "-" | "*" | "/" | "^" | "&&" | "||" | "&" | "|" | ":" | custom_infix_operator }
 custom_infix_operator = { "%" ~ (!("%" | WHITESPACE | NEWLINE) ~ ANY)* ~ "%" }
 
-identifier = @{ !(ASCII_DIGIT | "_" | "." ~ ASCII_DIGIT) ~ identifier_character+ }
+identifier = @{ "\"" ~ raw_identifier ~ "\"" | raw_identifier }
+raw_identifier = _{ !(ASCII_DIGIT | "_" | "." ~ ASCII_DIGIT) ~ identifier_character+ ~ ("::" ~ ":"* ~ identifier)? }
 identifier_character = _{ ASCII_ALPHANUMERIC | "." | "_" }
 
-constant = ${ number | string | ^"TRUE" | ^"FALSE" }
-number = @{ ASCII_DIGIT+ }
-string = @{ "\"" ~ ( "\\\"" | !"\"" ~ ANY )* ~ "\"" | "'" ~ ( "\\'" | !"'" ~ ANY )* ~ "'"}
+constant = ${ number | string | "TRUE" | "FALSE" }
+number = @{ (ASCII_DIGIT* ~ ".")? ~ ASCII_DIGIT+ ~ ("e" ~ ("+" | "-") ~ ASCII_DIGIT+)? }
+string = @{ "\"" ~ ("\\\"" | !"\"" ~ ANY)* ~ "\"" | "'" ~ ("\\'" | !"'" ~ ANY)* ~ "'" | "`" ~ ("\\`" | !"`" ~ ANY)* ~ "`" }
 
-function_definition = !{ "function" ~ "(" ~ parameters ~ ")" ~ expression }
-parameters = { parameter? ~ ("," ~ parameter)* }
+function_definition = { "function" ~ "(" ~ NEWLINE* ~ parameters ~ NEWLINE* ~ ")" ~ block }
+parameters = { parameter? ~ (NEWLINE* ~ "," ~ NEWLINE* ~ parameter)* }
 parameter = _{ parameter_with_default | required_parameter }
 required_parameter = { identifier }
 parameter_with_default = { identifier ~ "=" ~ expression }
 
-function_call = !{ identifier ~ "(" ~ arguments ~ ")" }
-arguments = { argument? ~ ("," ~ argument)* }
+function_call = { "(" ~ NEWLINE* ~ arguments ~ NEWLINE* ~ ")" }
+arguments = { argument? ~ (NEWLINE* ~ "," ~ NEWLINE* ~ argument)* }
 argument = _{ named_argument | unnamed_argument }
 named_argument = { identifier ~ "=" ~ expression }
 unnamed_argument = { expression }
 
 library = { "library(" ~ identifier ~ ")"}
 
-formula = !{ one_sided | two_sided }
-one_sided = { "~" ~ formula_right_side }
-two_sided = { identifier? ~ "~" ~ formula_right_side }
-formula_right_side = _{ identifier ~ (formula_operator ~ identifier)* }
-formula_operator = { "+" }
+formula = { "~" ~ formula_right_side }
+formula_right_side = _{ expression ~ (infix_operator ~ expression)* }

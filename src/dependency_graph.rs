@@ -38,21 +38,27 @@ pub fn parse_dependency_graph(input: &[RStmt]) -> DependencyGraph {
     let mut dependency_graph: DependencyGraph = DependencyGraph::new();
     let mut variables: HashMap<String, NodeIndex> = HashMap::new();
 
-    for statement in input.into_iter() {
+    for statement in input.iter() {
         use RStmt::*;
         match statement {
             Expression(expression) => {
                 register_dependencies(expression, &mut dependency_graph, &mut variables);
             }
-            Assignment(left, right) => {
-                let node_id = register_dependencies(right, &mut dependency_graph, &mut variables);
-                match extract_variable_name(left) {
-                    Some(name) => variables.insert(name, node_id),
-                    None => panic!(
-                        "Could not find a variable in the left side of the assignment {:?}.",
-                        statement
-                    ),
-                };
+            Assignment(left, additional, right) => {
+                let mut assigned = vec![left];
+                assigned.append(&mut additional.iter().collect());
+                for variable in assigned {
+                    let node_id =
+                        register_dependencies(right, &mut dependency_graph, &mut variables);
+                    match variable.extract_variable_name() {
+                        Some(name) => variables.insert(name, node_id),
+                        None => panic!(
+                            "Could not find a variable in {}, in the left side of the assignment {}.",
+                            variable,
+                            statement
+                        ),
+                    };
+                }
             }
             _ => (),
         };
@@ -94,16 +100,6 @@ fn extract_dependencies(expression: &RExp) -> Vec<RIdentifier> {
     }
 }
 
-fn extract_variable_name(exp: &RExp) -> Option<RIdentifier> {
-    use RExp::*;
-    match exp {
-        Variable(name) => Some(name.to_string()),
-        Column(left, _) => extract_variable_name(&*left),
-        Index(left, _) => extract_variable_name(&*left),
-        _ => None,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;
@@ -139,17 +135,21 @@ mod tests {
     #[test]
     fn detects_linear_graph() {
         let input = vec![
-            RStmt::Assignment(RExp::variable("x"), RExp::constant("1")),
+            RStmt::Assignment(RExp::variable("x"), vec![], RExp::constant("1")),
             RStmt::Assignment(
                 RExp::variable("y"),
-                RExp::Call("transform".into(), vec![(None, RExp::variable("x"))]),
+                vec![],
+                RExp::Call(
+                    RExp::boxed_variable("transform"),
+                    vec![(None, RExp::variable("x"))],
+                ),
             ),
             RStmt::Expression(RExp::Call(
-                "modify".into(),
+                RExp::boxed_variable("modify"),
                 vec![(None, RExp::variable("y"))],
             )),
             RStmt::Expression(RExp::Call(
-                "change".into(),
+                RExp::boxed_variable("change"),
                 vec![(None, RExp::variable("y"))],
             )),
         ];
@@ -159,30 +159,39 @@ mod tests {
         let expected_graph = expected.graph_mut();
         let e1 = RExp::constant("1");
         let n1 = expected_graph.add_node(&e1);
-        let e2 = RExp::Call("transform".into(), vec![(None, RExp::variable("x"))]);
+        let e2 = RExp::Call(
+            RExp::boxed_variable("transform"),
+            vec![(None, RExp::variable("x"))],
+        );
         let n2 = expected_graph.add_node(&e2);
         expected_graph.add_edge(n1, n2, ());
-        let e3 = RExp::Call("modify".into(), vec![(None, RExp::variable("y"))]);
+        let e3 = RExp::Call(
+            RExp::boxed_variable("modify"),
+            vec![(None, RExp::variable("y"))],
+        );
         let n3 = expected_graph.add_node(&e3);
         expected_graph.add_edge(n2, n3, ());
-        let e4 = RExp::Call("change".into(), vec![(None, RExp::variable("y"))]);
+        let e4 = RExp::Call(
+            RExp::boxed_variable("change"),
+            vec![(None, RExp::variable("y"))],
+        );
         let n4 = expected_graph.add_node(&e4);
         expected_graph.add_edge(n2, n4, ());
 
         compare_graphs(&expected, &graph);
     }
-
     #[test]
     fn detects_mutations() {
         let input = vec![
-            RStmt::Assignment(RExp::variable("x"), RExp::constant("data frame")),
+            RStmt::Assignment(RExp::variable("x"), vec![], RExp::constant("data frame")),
             RStmt::Assignment(
                 RExp::Column(
                     Box::new(RExp::variable("x")),
                     Box::new(RExp::constant("column")),
                 ),
+                vec![],
                 RExp::Call(
-                    "factor".into(),
+                    RExp::boxed_variable("factor"),
                     vec![(
                         None,
                         RExp::Column(
@@ -193,7 +202,7 @@ mod tests {
                 ),
             ),
             RStmt::Expression(RExp::Call(
-                "summary".into(),
+                RExp::boxed_variable("summary"),
                 vec![(None, RExp::variable("x"))],
             )),
         ];
@@ -204,7 +213,7 @@ mod tests {
         let e1 = RExp::constant("data frame");
         let n1 = expected_graph.add_node(&e1);
         let e2 = RExp::Call(
-            "factor".into(),
+            RExp::boxed_variable("factor"),
             vec![(
                 None,
                 RExp::Column(
@@ -215,7 +224,10 @@ mod tests {
         );
         let n2 = expected_graph.add_node(&e2);
         expected_graph.add_edge(n1, n2, ());
-        let e3 = RExp::Call("summary".into(), vec![(None, RExp::variable("x"))]);
+        let e3 = RExp::Call(
+            RExp::boxed_variable("summary"),
+            vec![(None, RExp::variable("x"))],
+        );
         let n3 = expected_graph.add_node(&e3);
         expected_graph.add_edge(n2, n3, ());
 
@@ -225,9 +237,9 @@ mod tests {
     #[test]
     fn detects_sibling_dependencies() {
         let input = vec![
-            RStmt::Assignment(RExp::variable("x"), RExp::constant("data frame")),
+            RStmt::Assignment(RExp::variable("x"), vec![], RExp::constant("data frame")),
             RStmt::Expression(RExp::Call(
-                "factor".into(),
+                RExp::boxed_variable("factor"),
                 vec![(
                     None,
                     RExp::Column(
@@ -237,7 +249,7 @@ mod tests {
                 )],
             )),
             RStmt::Expression(RExp::Call(
-                "summary".into(),
+                RExp::boxed_variable("summary"),
                 vec![(None, RExp::variable("x"))],
             )),
         ];
@@ -248,7 +260,7 @@ mod tests {
         let e1 = RExp::constant("data frame");
         let n1 = expected_graph.add_node(&e1);
         let e2 = RExp::Call(
-            "factor".into(),
+            RExp::boxed_variable("factor"),
             vec![(
                 None,
                 RExp::Column(
@@ -259,56 +271,14 @@ mod tests {
         );
         let n2 = expected_graph.add_node(&e2);
         expected_graph.add_edge(n1, n2, ());
-        let e3 = RExp::Call("summary".into(), vec![(None, RExp::variable("x"))]);
+        let e3 = RExp::Call(
+            RExp::boxed_variable("summary"),
+            vec![(None, RExp::variable("x"))],
+        );
         let n3 = expected_graph.add_node(&e3);
         expected_graph.add_edge(n1, n3, ());
 
         compare_graphs(&expected, &graph);
-    }
-
-    mod extracts_variable_name {
-        use crate::parser::RExp;
-
-        use super::super::extract_variable_name;
-
-        #[test]
-        fn from_variable() {
-            let name = extract_variable_name(&RExp::variable("x"));
-            assert_eq!(Some("x".to_string()), name);
-        }
-
-        #[test]
-        fn from_column() {
-            let name = extract_variable_name(&RExp::Column(
-                Box::new(RExp::variable("x")),
-                Box::new(RExp::variable("a")),
-            ));
-            assert_eq!(Some("x".to_string()), name);
-        }
-
-        #[test]
-        fn from_index() {
-            let name = extract_variable_name(&RExp::Index(
-                Box::new(RExp::variable("x")),
-                vec![Some(RExp::variable("a"))],
-            ));
-            assert_eq!(Some("x".to_string()), name);
-        }
-
-        #[test]
-        fn rejects_constants() {
-            let name = extract_variable_name(&RExp::constant("x"));
-            assert_eq!(None, name);
-        }
-
-        #[test]
-        fn rejects_constant_in_column() {
-            let name = extract_variable_name(&RExp::Column(
-                Box::new(RExp::constant("x")),
-                Box::new(RExp::variable("a")),
-            ));
-            assert_eq!(None, name);
-        }
     }
 
     mod dependencies {
@@ -326,7 +296,7 @@ mod tests {
         #[test]
         fn finds_call_args() {
             let expression = RExp::Call(
-                "func".into(),
+                RExp::boxed_variable("func"),
                 vec![
                     (None, RExp::constant("1")),
                     (None, RExp::variable("x")),
@@ -350,7 +320,7 @@ mod tests {
         #[test]
         fn finds_column_in_call() {
             let expression = RExp::Call(
-                "factor".into(),
+                RExp::boxed_variable("factor"),
                 vec![(
                     None,
                     RExp::Column(
@@ -377,14 +347,15 @@ mod tests {
     #[test]
     fn gives_index_for_expression() {
         let input = vec![
-            RStmt::Assignment(RExp::variable("x"), RExp::constant("data frame")),
+            RStmt::Assignment(RExp::variable("x"), vec![], RExp::constant("data frame")),
             RStmt::Assignment(
                 RExp::Column(
                     Box::new(RExp::variable("x")),
                     Box::new(RExp::constant("column")),
                 ),
+                vec![],
                 RExp::Call(
-                    "factor".into(),
+                    RExp::boxed_variable("factor"),
                     vec![(
                         None,
                         RExp::Column(
@@ -395,7 +366,7 @@ mod tests {
                 ),
             ),
             RStmt::Expression(RExp::Call(
-                "summary".into(),
+                RExp::boxed_variable("summary"),
                 vec![(None, RExp::variable("x"))],
             )),
         ];

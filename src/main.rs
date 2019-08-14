@@ -10,7 +10,7 @@ use horrorshow::helper::doctype;
 use horrorshow::prelude::*;
 use structopt::StructOpt;
 
-use tractus::{HypothesisTree, RExp, Tractus};
+use tractus::{HypothesisTree, RExp};
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "tractus")]
@@ -27,8 +27,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let opt = Opt::from_args();
     let code = read(opt.input)?;
 
-    let tractus = Tractus::parse(&code)?;
-    let hypotheses = tractus.generate_hypothesis_tree();
+    let parsed = tractus::parse(&code).unwrap_or_else(|e| panic!("{}", e));
+    let hypotheses_map = tractus::parse_hypotheses_map(&parsed);
+    let dependency_graph = tractus::parse_dependency_graph(&parsed);
+    let hypotheses = tractus::parse_hypothesis_tree(&hypotheses_map, &dependency_graph);
 
     let html = render(&hypotheses).into_string()?;
     match opt.output {
@@ -195,7 +197,7 @@ fn render_preferrably_as_function(expression: &RExp) -> String {
 
 fn extract_function_name(expression: &RExp) -> Option<String> {
     match expression {
-        RExp::Call(name, _) => Some(name.clone()),
+        RExp::Call(name, _) => name.extract_variable_name(),
         RExp::Column(left, _) => extract_function_name(left),
         _ => None,
     }
