@@ -109,6 +109,7 @@ fn extract_dependencies(expression: &RExp) -> Vec<RIdentifier> {
 
 #[cfg(test)]
 mod tests {
+    use pretty_assertions::assert_eq;
     use std::collections::HashSet;
 
     use petgraph::visit::Walker;
