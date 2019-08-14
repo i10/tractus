@@ -967,8 +967,9 @@ else {
 }
 if (FALSE)
     is_false()
-else
+else if(TRUE){
     is_true()
+}
 if (TRUE)
     cry()
 else (why <- 1)";
@@ -1016,10 +1017,14 @@ else (why <- 1)";
                     RExp::boxed_variable("is_false"),
                     vec![],
                 ))]),
-                Some(Lines::from(vec![RStmt::Expression(RExp::Call(
-                    RExp::boxed_variable("is_true"),
-                    vec![],
-                ))])),
+                Some(Lines::from(vec![RStmt::If(
+                    RExp::constant("TRUE"),
+                    Lines::from(vec![RStmt::Expression(RExp::Call(
+                        RExp::boxed_variable("is_true"),
+                        vec![],
+                    ))]),
+                    None,
+                )])),
             ),
             RStmt::If(
                 RExp::constant("TRUE"),
