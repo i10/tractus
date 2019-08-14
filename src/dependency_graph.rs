@@ -1,16 +1,39 @@
 use std::collections::HashMap;
 
-use petgraph::Graph;
+use petgraph;
 
 use crate::parser::{RExp, RIdentifier, RStmt};
 
 type NodeIndexType = petgraph::graph::DefaultIx;
 pub type NodeIndex = petgraph::graph::NodeIndex<NodeIndexType>;
+type Graph<'a> = petgraph::Graph<&'a RExp, String, petgraph::Directed, NodeIndexType>;
 
 #[derive(Default, Debug)]
 pub struct DependencyGraph<'a> {
-    graph: Graph<&'a RExp, (), petgraph::Directed, NodeIndexType>,
+    graph: Graph<'a>,
     map: HashMap<&'a RExp, NodeIndex>,
+    variables: VariableMap,
+}
+
+#[derive(Default, Debug)]
+struct VariableMap(HashMap<String, Vec<NodeIndex>>);
+
+impl VariableMap {
+    fn new() -> Self {
+        VariableMap(HashMap::new())
+    }
+
+    fn push(&mut self, variable: String, index: NodeIndex) {
+        self.0.entry(variable).or_insert_with(|| vec![]).push(index);
+    }
+
+    fn get(&mut self, index: &str) -> Option<&NodeIndex> {
+        self.get_all(index).and_then(|v| v.last())
+    }
+
+    fn get_all(&mut self, index: &str) -> Option<&Vec<NodeIndex>> {
+        self.0.get(index)
+    }
 }
 
 impl<'a> DependencyGraph<'a> {
@@ -18,73 +41,76 @@ impl<'a> DependencyGraph<'a> {
         DependencyGraph {
             graph: Graph::new(),
             map: HashMap::new(),
+            variables: VariableMap::new(),
         }
     }
 
-    pub fn graph(&self) -> &Graph<&'a RExp, (), petgraph::Directed, NodeIndexType> {
+    pub fn parse(input: &'a[RStmt]) -> Self {
+        let mut dependency_graph: DependencyGraph = DependencyGraph::new();
+
+        for statement in input.iter() {
+            parse_statement(statement, &mut dependency_graph);
+        }
+
+        dependency_graph
+    }
+
+
+    pub fn graph(&self) -> &Graph<'a> {
         &self.graph
     }
 
-    pub fn graph_mut(&mut self) -> &mut Graph<&'a RExp, (), petgraph::Directed, NodeIndexType> {
+    pub fn graph_mut(&mut self) -> &mut Graph<'a> {
         &mut self.graph
     }
 
     pub fn id(&self, expression: &RExp) -> Option<NodeIndex> {
         self.map.get(expression).cloned()
     }
-}
 
-pub fn parse_dependency_graph(input: &[RStmt]) -> DependencyGraph {
-    let mut dependency_graph: DependencyGraph = DependencyGraph::new();
-    let mut variables: HashMap<String, NodeIndex> = HashMap::new();
-
-    for statement in input.iter() {
-        parse_statement(statement, &mut dependency_graph, &mut variables);
+    pub fn graphviz(&self) -> petgraph::dot::Dot<&Graph<'a>>{
+            petgraph::dot::Dot::new(&self.graph)
     }
-
-    dependency_graph
 }
 
 fn parse_statement<'a>(
     statement: &'a RStmt,
     dependency_graph: &mut DependencyGraph<'a>,
-    variables: &mut HashMap<String, NodeIndex>,
 ) {
-        use RStmt::*;
-        match statement {
-            Expression(expression) => {
-            register_dependencies(expression, dependency_graph, variables);
-            }
-            Assignment(left, additional, right) => {
-                let mut assigned = vec![left];
-                assigned.append(&mut additional.iter().collect());
-                for variable in assigned {
-                let node_id = register_dependencies(right, dependency_graph, variables);
-                    match variable.extract_variable_name() {
-                        Some(name) => variables.insert(name, node_id),
-                        None => panic!(
-                            "Could not find a variable in {}, in the left side of the assignment {}.",
+    use RStmt::*;
+    match statement {
+        Expression(expression) => {
+            register_dependencies(expression, dependency_graph);
+        }
+        Assignment(left, additional, right) => {
+            let mut assigned = vec![left];
+            assigned.append(&mut additional.iter().collect());
+            for variable in assigned {
+                let node_id = register_dependencies(right, dependency_graph);
+                match variable.extract_variable_name() {
+                    Some(name) => dependency_graph.variables.push(name, node_id),
+                    None => panic!(
+                        "Could not find a variable in {}, in the left side of the assignment {}.",
                         variable, statement
-                        ),
-                    };
-                }
+                    ),
+                };
             }
-        TailComment(statement, _) => parse_statement(statement, dependency_graph, variables),
-            _ => (),
-        };
-    }
+        }
+        TailComment(statement, _) => parse_statement(statement, dependency_graph),
+        _ => (),
+    };
+}
 
 fn register_dependencies<'a>(
     expression: &'a RExp,
     dependency_graph: &mut DependencyGraph<'a>,
-    variables: &mut HashMap<String, NodeIndex>,
 ) -> NodeIndex {
     let dependencies = extract_dependencies(&expression);
     let node_id = dependency_graph.graph.add_node(expression);
     dependency_graph.map.insert(expression, node_id);
     for dependency in dependencies {
-        if let Some(parent) = variables.get(&dependency) {
-            dependency_graph.graph.add_edge(*parent, node_id, ());
+        if let Some(parent) = dependency_graph.variables.get(&dependency) {
+            dependency_graph.graph.add_edge(*parent, node_id, dependency);
         }
         // Else, we do not know the variable. But this might still be valid,
         // e. g. if it is a library function that wasn't explicitly declared in the code.
@@ -114,8 +140,10 @@ mod tests {
 
     use petgraph::visit::Walker;
 
-    use super::{parse_dependency_graph, DependencyGraph};
+    use super::*;
     use crate::parser::{RExp, RStmt};
+
+
     fn compare_graphs(expected: &DependencyGraph, actual: &DependencyGraph) {
         let expected = &expected.graph();
         let actual = &actual.graph();
@@ -154,8 +182,8 @@ mod tests {
             ),
             RStmt::TailComment(
                 Box::new(RStmt::Expression(RExp::Call(
-                RExp::boxed_variable("modify"),
-                vec![(None, RExp::variable("y"))],
+                    RExp::boxed_variable("modify"),
+                    vec![(None, RExp::variable("y"))],
                 ))),
                 "# modifies y".into(),
             ),
@@ -164,7 +192,7 @@ mod tests {
                 vec![(None, RExp::variable("y"))],
             )),
         ];
-        let graph = parse_dependency_graph(&input);
+        let graph = DependencyGraph::parse(&input);
 
         let mut expected = DependencyGraph::new();
         let expected_graph = expected.graph_mut();
@@ -175,19 +203,19 @@ mod tests {
             vec![(None, RExp::variable("x"))],
         );
         let n2 = expected_graph.add_node(&e2);
-        expected_graph.add_edge(n1, n2, ());
+        expected_graph.add_edge(n1, n2, "x".into());
         let e3 = RExp::Call(
             RExp::boxed_variable("modify"),
             vec![(None, RExp::variable("y"))],
         );
         let n3 = expected_graph.add_node(&e3);
-        expected_graph.add_edge(n2, n3, ());
+        expected_graph.add_edge(n2, n3, "y".into());
         let e4 = RExp::Call(
             RExp::boxed_variable("change"),
             vec![(None, RExp::variable("y"))],
         );
         let n4 = expected_graph.add_node(&e4);
-        expected_graph.add_edge(n2, n4, ());
+        expected_graph.add_edge(n2, n4, "y".into());
 
         compare_graphs(&expected, &graph);
     }
@@ -217,7 +245,7 @@ mod tests {
                 vec![(None, RExp::variable("x"))],
             )),
         ];
-        let graph = parse_dependency_graph(&input);
+        let graph = DependencyGraph::parse(&input);
 
         let mut expected = DependencyGraph::new();
         let expected_graph = expected.graph_mut();
@@ -234,13 +262,13 @@ mod tests {
             )],
         );
         let n2 = expected_graph.add_node(&e2);
-        expected_graph.add_edge(n1, n2, ());
+        expected_graph.add_edge(n1, n2, "x".into());
         let e3 = RExp::Call(
             RExp::boxed_variable("summary"),
             vec![(None, RExp::variable("x"))],
         );
         let n3 = expected_graph.add_node(&e3);
-        expected_graph.add_edge(n2, n3, ());
+        expected_graph.add_edge(n2, n3, "x".into());
 
         compare_graphs(&expected, &graph);
     }
@@ -264,7 +292,7 @@ mod tests {
                 vec![(None, RExp::variable("x"))],
             )),
         ];
-        let graph = parse_dependency_graph(&input);
+        let graph = DependencyGraph::parse(&input);
 
         let mut expected = DependencyGraph::new();
         let expected_graph = expected.graph_mut();
@@ -281,13 +309,13 @@ mod tests {
             )],
         );
         let n2 = expected_graph.add_node(&e2);
-        expected_graph.add_edge(n1, n2, ());
+        expected_graph.add_edge(n1, n2, "x".into());
         let e3 = RExp::Call(
             RExp::boxed_variable("summary"),
             vec![(None, RExp::variable("x"))],
         );
         let n3 = expected_graph.add_node(&e3);
-        expected_graph.add_edge(n1, n3, ());
+        expected_graph.add_edge(n1, n3, "x".into());
 
         compare_graphs(&expected, &graph);
     }
@@ -381,7 +409,7 @@ mod tests {
                 vec![(None, RExp::variable("x"))],
             )),
         ];
-        let graph = parse_dependency_graph(&input);
+        let graph = DependencyGraph::parse(&input);
 
         let assert_expression_is_found = |index: usize| {
             let e = input[index].expression().unwrap();

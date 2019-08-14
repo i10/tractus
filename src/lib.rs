@@ -7,9 +7,9 @@ mod parser;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-pub use crate::dependency_graph::{DependencyGraph, parse_dependency_graph};
-use crate::hypotheses::{Hypothesis, detect_hypotheses};
-pub use crate::parser::{RExp, RFormula, RStmt, parse};
+pub use crate::dependency_graph::DependencyGraph;
+use crate::hypotheses::{detect_hypotheses, Hypothesis};
+pub use crate::parser::{parse, RExp, RFormula, RStmt};
 
 pub fn parse_hypotheses_map(input: &[RStmt]) -> HashMap<&RExp, HashSet<Hypothesis>> {
     input
@@ -121,7 +121,7 @@ mod tests {
         ];
 
         let hypotheses_map = parse_hypotheses_map(&input);
-        let dependency_graph = parse_dependency_graph(&input);
+        let dependency_graph = DependencyGraph::parse(&input);
         let tree = parse_hypothesis_tree(&hypotheses_map, &dependency_graph);
         // Need to build from the inside out.
         let n4 = Node {

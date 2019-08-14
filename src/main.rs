@@ -29,7 +29,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let parsed = tractus::parse(&code).unwrap_or_else(|e| panic!("{}", e));
     let hypotheses_map = tractus::parse_hypotheses_map(&parsed);
-    let dependency_graph = tractus::parse_dependency_graph(&parsed);
+    let dependency_graph = tractus::DependencyGraph::parse(&parsed);
     let hypotheses = tractus::parse_hypothesis_tree(&hypotheses_map, &dependency_graph);
 
     let html = render(&hypotheses).into_string()?;
