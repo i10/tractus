@@ -1,14 +1,16 @@
 ---
-created: "2019-08-13T09:58:31.190068800Z"
+created: "2019-08-14T00:36:20.302960600Z"
 creator: insta@0.8.2
 source: tests/snapshots.rs
-expression: parsed.generate_hypothesis_tree()
+expression: "tractus::parse_hypothesis_tree(&hypotheses_map, &dependency_graph)"
 ---
 {
     None: [
         Node {
             expression: Call(
-                "read.csv",
+                Variable(
+                    "read.csv",
+                ),
                 [
                     (
                         None,
@@ -22,7 +24,9 @@ expression: parsed.generate_hypothesis_tree()
                 None: [
                     Node {
                         expression: Call(
-                            "View",
+                            Variable(
+                                "View",
+                            ),
                             [
                                 (
                                     None,
@@ -36,7 +40,9 @@ expression: parsed.generate_hypothesis_tree()
                     },
                     Node {
                         expression: Call(
-                            "summary",
+                            Variable(
+                                "summary",
+                            ),
                             [
                                 (
                                     None,
@@ -50,7 +56,9 @@ expression: parsed.generate_hypothesis_tree()
                     },
                     Node {
                         expression: Call(
-                            "ddply",
+                            Variable(
+                                "ddply",
+                            ),
                             [
                                 (
                                     None,
@@ -81,7 +89,9 @@ expression: parsed.generate_hypothesis_tree()
                                             [
                                                 Expression(
                                                     Call(
-                                                        "summary",
+                                                        Variable(
+                                                            "summary",
+                                                        ),
                                                         [
                                                             (
                                                                 None,
@@ -107,7 +117,9 @@ expression: parsed.generate_hypothesis_tree()
                     },
                     Node {
                         expression: Call(
-                            "ddply",
+                            Variable(
+                                "ddply",
+                            ),
                             [
                                 (
                                     None,
@@ -136,7 +148,9 @@ expression: parsed.generate_hypothesis_tree()
                                         "Speed.mean",
                                     ),
                                     Call(
-                                        "mean",
+                                        Variable(
+                                            "mean",
+                                        ),
                                         [
                                             (
                                                 None,
@@ -152,7 +166,9 @@ expression: parsed.generate_hypothesis_tree()
                                         "Speed.sd",
                                     ),
                                     Call(
-                                        "sd",
+                                        Variable(
+                                            "sd",
+                                        ),
                                         [
                                             (
                                                 None,
@@ -170,7 +186,9 @@ expression: parsed.generate_hypothesis_tree()
                 ],
                 Some(
                     Hypothesis {
-                        left: "Speed",
+                        left: Variable(
+                            "Speed",
+                        ),
                         right: Variable(
                             "Layout",
                         ),
@@ -178,7 +196,9 @@ expression: parsed.generate_hypothesis_tree()
                 ): [
                     Node {
                         expression: Call(
-                            "hist",
+                            Variable(
+                                "hist",
+                            ),
                             [
                                 (
                                     None,
@@ -218,7 +238,9 @@ expression: parsed.generate_hypothesis_tree()
                     },
                     Node {
                         expression: Call(
-                            "hist",
+                            Variable(
+                                "hist",
+                            ),
                             [
                                 (
                                     None,
@@ -258,7 +280,9 @@ expression: parsed.generate_hypothesis_tree()
                     },
                     Node {
                         expression: Call(
-                            "shapiro.test",
+                            Variable(
+                                "shapiro.test",
+                            ),
                             [
                                 (
                                     None,
@@ -298,7 +322,9 @@ expression: parsed.generate_hypothesis_tree()
                     },
                     Node {
                         expression: Call(
-                            "shapiro.test",
+                            Variable(
+                                "shapiro.test",
+                            ),
                             [
                                 (
                                     None,
@@ -338,7 +364,9 @@ expression: parsed.generate_hypothesis_tree()
                     },
                     Node {
                         expression: Call(
-                            "shapiro.test",
+                            Variable(
+                                "shapiro.test",
+                            ),
                             [
                                 (
                                     None,
@@ -379,7 +407,9 @@ expression: parsed.generate_hypothesis_tree()
                     Node {
                         expression: Column(
                             Call(
-                                "fitdistr",
+                                Variable(
+                                    "fitdistr",
+                                ),
                                 [
                                     (
                                         None,
@@ -429,7 +459,9 @@ expression: parsed.generate_hypothesis_tree()
                     },
                     Node {
                         expression: Call(
-                            "wilcox.test",
+                            Variable(
+                                "wilcox.test",
+                            ),
                             [
                                 (
                                     None,
@@ -509,12 +541,16 @@ expression: parsed.generate_hypothesis_tree()
                             None: [
                                 Node {
                                     expression: Call(
-                                        "p.adjust",
+                                        Variable(
+                                            "p.adjust",
+                                        ),
                                         [
                                             (
                                                 None,
                                                 Call(
-                                                    "c",
+                                                    Variable(
+                                                        "c",
+                                                    ),
                                                     [
                                                         (
                                                             None,
@@ -569,7 +605,9 @@ expression: parsed.generate_hypothesis_tree()
                     },
                     Node {
                         expression: Call(
-                            "wilcox.test",
+                            Variable(
+                                "wilcox.test",
+                            ),
                             [
                                 (
                                     None,
@@ -649,12 +687,16 @@ expression: parsed.generate_hypothesis_tree()
                             None: [
                                 Node {
                                     expression: Call(
-                                        "p.adjust",
+                                        Variable(
+                                            "p.adjust",
+                                        ),
                                         [
                                             (
                                                 None,
                                                 Call(
-                                                    "c",
+                                                    Variable(
+                                                        "c",
+                                                    ),
                                                     [
                                                         (
                                                             None,
@@ -709,7 +751,9 @@ expression: parsed.generate_hypothesis_tree()
                     },
                     Node {
                         expression: Call(
-                            "wilcox.test",
+                            Variable(
+                                "wilcox.test",
+                            ),
                             [
                                 (
                                     None,
@@ -789,12 +833,16 @@ expression: parsed.generate_hypothesis_tree()
                             None: [
                                 Node {
                                     expression: Call(
-                                        "p.adjust",
+                                        Variable(
+                                            "p.adjust",
+                                        ),
                                         [
                                             (
                                                 None,
                                                 Call(
-                                                    "c",
+                                                    Variable(
+                                                        "c",
+                                                    ),
                                                     [
                                                         (
                                                             None,
@@ -849,7 +897,9 @@ expression: parsed.generate_hypothesis_tree()
                     },
                     Node {
                         expression: Call(
-                            "wilcox.test",
+                            Variable(
+                                "wilcox.test",
+                            ),
                             [
                                 (
                                     None,
@@ -929,12 +979,16 @@ expression: parsed.generate_hypothesis_tree()
                             None: [
                                 Node {
                                     expression: Call(
-                                        "p.adjust",
+                                        Variable(
+                                            "p.adjust",
+                                        ),
                                         [
                                             (
                                                 None,
                                                 Call(
-                                                    "c",
+                                                    Variable(
+                                                        "c",
+                                                    ),
                                                     [
                                                         (
                                                             None,
@@ -989,7 +1043,9 @@ expression: parsed.generate_hypothesis_tree()
                     },
                     Node {
                         expression: Call(
-                            "wilcox.test",
+                            Variable(
+                                "wilcox.test",
+                            ),
                             [
                                 (
                                     None,
@@ -1069,12 +1125,16 @@ expression: parsed.generate_hypothesis_tree()
                             None: [
                                 Node {
                                     expression: Call(
-                                        "p.adjust",
+                                        Variable(
+                                            "p.adjust",
+                                        ),
                                         [
                                             (
                                                 None,
                                                 Call(
-                                                    "c",
+                                                    Variable(
+                                                        "c",
+                                                    ),
                                                     [
                                                         (
                                                             None,
@@ -1129,7 +1189,9 @@ expression: parsed.generate_hypothesis_tree()
                     },
                     Node {
                         expression: Call(
-                            "wilcox.test",
+                            Variable(
+                                "wilcox.test",
+                            ),
                             [
                                 (
                                     None,
@@ -1209,12 +1271,16 @@ expression: parsed.generate_hypothesis_tree()
                             None: [
                                 Node {
                                     expression: Call(
-                                        "p.adjust",
+                                        Variable(
+                                            "p.adjust",
+                                        ),
                                         [
                                             (
                                                 None,
                                                 Call(
-                                                    "c",
+                                                    Variable(
+                                                        "c",
+                                                    ),
                                                     [
                                                         (
                                                             None,
@@ -1270,7 +1336,9 @@ expression: parsed.generate_hypothesis_tree()
                 ],
                 Some(
                     Hypothesis {
-                        left: "logSpeed",
+                        left: Variable(
+                            "logSpeed",
+                        ),
                         right: Variable(
                             "Layout",
                         ),
@@ -1278,7 +1346,9 @@ expression: parsed.generate_hypothesis_tree()
                 ): [
                     Node {
                         expression: Call(
-                            "shapiro.test",
+                            Variable(
+                                "shapiro.test",
+                            ),
                             [
                                 (
                                     None,
@@ -1321,12 +1391,16 @@ expression: parsed.generate_hypothesis_tree()
         },
         Node {
             expression: Call(
-                "qqnorm",
+                Variable(
+                    "qqnorm",
+                ),
                 [
                     (
                         None,
                         Call(
-                            "residuals",
+                            Variable(
+                                "residuals",
+                            ),
                             [
                                 (
                                     None,
@@ -1343,12 +1417,16 @@ expression: parsed.generate_hypothesis_tree()
         },
         Node {
             expression: Call(
-                "qqnorm",
+                Variable(
+                    "qqnorm",
+                ),
                 [
                     (
                         None,
                         Call(
-                            "residuals",
+                            Variable(
+                                "residuals",
+                            ),
                             [
                                 (
                                     None,
@@ -1366,7 +1444,9 @@ expression: parsed.generate_hypothesis_tree()
     ],
     Some(
         Hypothesis {
-            left: "pairwise",
+            left: Variable(
+                "pairwise",
+            ),
             right: Variable(
                 "Layout",
             ),
@@ -1374,12 +1454,16 @@ expression: parsed.generate_hypothesis_tree()
     ): [
         Node {
             expression: Call(
-                "summary",
+                Variable(
+                    "summary",
+                ),
                 [
                     (
                         None,
                         Call(
-                            "glht",
+                            Variable(
+                                "glht",
+                            ),
                             [
                                 (
                                     None,
@@ -1390,7 +1474,9 @@ expression: parsed.generate_hypothesis_tree()
                                 (
                                     None,
                                     Call(
-                                        "lsm",
+                                        Variable(
+                                            "lsm",
+                                        ),
                                         [
                                             (
                                                 None,
@@ -1416,7 +1502,9 @@ expression: parsed.generate_hypothesis_tree()
                             "test",
                         ),
                         Call(
-                            "adjusted",
+                            Variable(
+                                "adjusted",
+                            ),
                             [
                                 (
                                     Some(
