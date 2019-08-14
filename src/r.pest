@@ -9,7 +9,7 @@ assignment = { (expression ~ ("<-" | "=") ~ NEWLINE*)+ ~ expression}
 if_statement = { "if" ~ "(" ~ expression ~ ")" ~ block ~ (NEWLINE* ~ "else" ~ block)? }
 while_statement = { "while" ~ "(" ~ expression ~ ")" ~ block }
 for_statement = { "for" ~ "(" ~ expression ~ "in" ~ expression ~ ")" ~ block }
-block = { NEWLINE* ~ ("{" ~ NEWLINE* ~ lines ~ NEWLINE* ~ "}" | NEWLINE* ~ line) }
+block = { NEWLINE* ~ ("{" ~ NEWLINE* ~ lines ~ NEWLINE* ~ "}" | NEWLINE* ~ "(" ~ NEWLINE* ~ line ~ NEWLINE* ~ ")" | NEWLINE* ~ line) }
 
 comment = @{ "#" ~ character* }
 character = _{ !NEWLINE ~ ANY }

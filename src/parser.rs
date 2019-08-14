@@ -960,7 +960,10 @@ else {
 if (FALSE)
     is_false()
 else
-    is_true()";
+    is_true()
+if (TRUE)
+    cry()
+else (why <- 1)";
         let result = test_parse(code);
         let expected = vec![
             RStmt::If(
@@ -1009,6 +1012,18 @@ else
                     RExp::boxed_variable("is_true"),
                     vec![],
                 ))])),
+            ),
+            RStmt::If(
+                RExp::constant("TRUE"),
+                Lines::from(vec![RStmt::Expression(RExp::Call(
+                    RExp::boxed_variable("cry"),
+                    vec![],
+                ))]),
+                Some(Lines::from(vec![RStmt::Assignment(
+                    RExp::variable("why"),
+                    vec![],
+                    RExp::constant("1"),
+                )])),
             ),
         ];
         assert_eq!(expected, result);
