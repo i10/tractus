@@ -579,6 +579,7 @@ break_down(
     \"argument\"
     , \"chains\"
     )
+weird(\"name\" = 1)
 name::space()
 higher_order()(10)";
         let result = test_parse(code);
@@ -603,6 +604,10 @@ higher_order()(10)";
                     (None, RExp::constant("\"argument\"")),
                     (None, RExp::constant("\"chains\"")),
                 ],
+            )),
+            RStmt::Expression(RExp::Call(
+                RExp::boxed_variable("weird"),
+                vec![(Some("\"name\"".into()), RExp::constant("1"))],
             )),
             RStmt::Expression(RExp::Call(RExp::boxed_variable("name::space"), vec![])),
             RStmt::Expression(RExp::Call(
