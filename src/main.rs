@@ -2,6 +2,7 @@
 extern crate horrorshow;
 extern crate structopt;
 
+use std::hash::Hash;
 use std::io;
 use std::io::{Read, Write};
 use std::path::PathBuf;
@@ -10,7 +11,7 @@ use horrorshow::helper::doctype;
 use horrorshow::prelude::*;
 use structopt::StructOpt;
 
-use tractus::{HypothesisTree, RExp};
+use tractus::{HypothesisTree, Parsed, RExpression};
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "tractus")]
@@ -27,9 +28,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let opt = Opt::from_args();
     let code = read(opt.input)?;
 
-    let parsed = tractus::parse(&code).unwrap_or_else(|e| panic!("{}", e));
-    let hypotheses_map = tractus::parse_hypotheses_map(&parsed);
-    let dependency_graph = tractus::DependencyGraph::parse(&parsed);
+    let parsed = Parsed::from(&code).unwrap_or_else(|e| panic!("{}", e));
+    let hypotheses_map = tractus::parse_hypotheses_map(parsed.iter());
+    let dependency_graph = tractus::DependencyGraph::parse(parsed.iter());
     let hypotheses = tractus::parse_hypothesis_tree(&hypotheses_map, &dependency_graph);
 
     let html = render(&hypotheses).into_string()?;
@@ -61,7 +62,7 @@ fn read(file: Option<PathBuf>) -> Result<String, Box<dyn std::error::Error>> {
     Ok(code)
 }
 
-fn render<'a>(tree: &'a HypothesisTree) -> Box<Render + 'a> {
+fn render<'a, T: Eq + Hash>(tree: &'a HypothesisTree<T>) -> Box<Render + 'a> {
     box_html! {
         : doctype::HTML ;
         html {
@@ -168,7 +169,7 @@ fn render<'a>(tree: &'a HypothesisTree) -> Box<Render + 'a> {
     }
 }
 
-fn render_hypothesis_tree<'a>(tree: &'a HypothesisTree) -> Box<Render + 'a> {
+fn render_hypothesis_tree<'a, T: Eq + Hash>(tree: &'a HypothesisTree<T>) -> Box<Render + 'a> {
     box_html! {
         ol(class="hypotheses") {
             @ for (maybe_hypothesis, nodes) in tree.iter() { // TODO: Consider sorting.
@@ -191,14 +192,15 @@ fn render_hypothesis_tree<'a>(tree: &'a HypothesisTree) -> Box<Render + 'a> {
     }
 }
 
-fn render_preferrably_as_function(expression: &RExp) -> String {
+fn render_preferrably_as_function<T>(expression: &RExpression<T>) -> String {
     extract_function_name(expression).unwrap_or_else(|| format!("{}", expression))
 }
 
-fn extract_function_name(expression: &RExp) -> Option<String> {
+fn extract_function_name<T>(expression: &RExpression<T>) -> Option<String> {
+    use RExpression::*;
     match expression {
-        RExp::Call(name, _) => name.extract_variable_name(),
-        RExp::Column(left, _) => extract_function_name(left),
+        Call(name, _, _) => name.extract_variable_name(),
+        Column(left, _, _) => extract_function_name(left),
         _ => None,
     }
 }

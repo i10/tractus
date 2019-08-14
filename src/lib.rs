@@ -6,23 +6,23 @@ mod hypotheses;
 mod parser;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::hash::Hash;
 
 pub use crate::dependency_graph::DependencyGraph;
 use crate::hypotheses::{detect_hypotheses, Hypothesis};
-pub use crate::parser::{parse, RExp, RFormula, RStmt};
+pub use crate::parser::{Parsed, RStatement, RExpression};
 
-pub fn parse_hypotheses_map(input: &[RStmt]) -> HashMap<&RExp, HashSet<Hypothesis>> {
+pub fn parse_hypotheses_map<'a, T:Eq+Hash>(input: impl Iterator<Item=&'a RStatement<T>>) -> HashMap<&'a RExpression<T>, HashSet<Hypothesis<'a, T>>> {
     input
-        .iter()
         .filter_map(|statement| statement.expression())
         .map(|expression| (expression, detect_hypotheses(expression)))
         .collect()
 }
 
-pub fn parse_hypothesis_tree<'a, HSet, HMap>(
-    hypotheses_map: &'a HashMap<&RExp, HashSet<Hypothesis<'a>, HSet>, HMap>,
-    dependency_graph: &DependencyGraph<'a>,
-) -> HypothesisTree<'a>
+pub fn parse_hypothesis_tree<'a, T:Eq+Hash,HSet, HMap>(
+    hypotheses_map: &'a HashMap<&RExpression<T>, HashSet<Hypothesis<'a,T>, HSet>, HMap>,
+    dependency_graph: &DependencyGraph<'a,T>,
+) -> HypothesisTree<'a,T>
 where
     HMap: std::hash::BuildHasher,
     HSet: std::hash::BuildHasher,
@@ -35,22 +35,22 @@ where
     hypothesis_tree_from_nodes(sources, &dependency_graph, &hypotheses_map)
 }
 
-pub type HypothesisTree<'a> = BTreeMap<Option<Hypothesis<'a>>, Vec<Node<'a>>>;
+pub type HypothesisTree<'a,T> = BTreeMap<Option<&'a Hypothesis<'a,T>>, Vec<Node<'a,T>>>;
 
 #[derive(Debug, PartialEq)]
-pub struct Node<'a> {
-    pub expression: &'a RExp,
-    pub children: HypothesisTree<'a>,
+pub struct Node<'a,T:Eq+Hash> {
+    pub expression: &'a RExpression<T>,
+    pub children: HypothesisTree<'a,T>,
 }
 
-pub fn hypothesis_tree_from_nodes<'a, S, T>(
+pub fn hypothesis_tree_from_nodes<'a, T:Eq+Hash,SSet, SMap>(
     nodes: Vec<dependency_graph::NodeIndex>,
-    dependency_graph: &DependencyGraph<'a>,
-    hypotheses_map: &'a HashMap<&'a RExp, HashSet<Hypothesis, T>, S>,
-) -> HypothesisTree<'a>
+    dependency_graph: &DependencyGraph<'a,T>,
+    hypotheses_map: &'a HashMap<&'a RExpression<T>, HashSet<Hypothesis<T>, SSet>, SMap>,
+) -> HypothesisTree<'a,T>
 where
-    S: std::hash::BuildHasher,
-    T: std::hash::BuildHasher,
+    SSet: std::hash::BuildHasher,
+    SMap: std::hash::BuildHasher,
 {
     let mut tree = BTreeMap::new();
     for node_id in nodes.iter() {
@@ -61,7 +61,7 @@ where
 
         let hypothesis = hypotheses_map
             .get(expression)
-            .and_then(|hypotheses| hypotheses.iter().cloned().next()); // Ignore all but first hypotheses.
+            .and_then(|hypotheses| hypotheses.iter().next()); // Ignore all but first hypotheses.
                                                                        // TODO: Add all hypotheses to tree.
         tree.entry(hypothesis).or_insert_with(|| vec![]).push(Node {
             expression,
@@ -76,51 +76,49 @@ mod tests {
     use pretty_assertions::assert_eq;
     use std::iter::FromIterator;
 
-    use crate::parser::RFormula;
-
     use super::*;
 
     #[test]
     fn simple_hypothesis_tree() {
         let input = vec![
-            RStmt::Assignment(RExp::variable("kbd"), vec![], RExp::constant("data frame")),
-            RStmt::Assignment(
-                RExp::Column(
-                    Box::new(RExp::variable("kbd")),
-                    Box::new(RExp::constant("ParticipantID")),
+            RStatement::Assignment(RExpression::variable("kbd"), vec![], RExpression::constant("data frame"),()),
+            RStatement::Assignment(
+                RExpression::Column(
+                    Box::new(RExpression::variable("kbd")),
+                    Box::new(RExpression::constant("ParticipantID")),()
                 ),
                 vec![],
-                RExp::Call(
-                    RExp::boxed_variable("factor"),
+                RExpression::Call(
+                    RExpression::boxed_variable("factor"),
                     vec![(
                         None,
-                        RExp::Column(
-                            Box::new(RExp::variable("kbd")),
-                            Box::new(RExp::constant("ParticipantID")),
+                        RExpression::Column(
+                            Box::new(RExpression::variable("kbd")),
+                            Box::new(RExpression::constant("ParticipantID")),()
                         ),
-                    )],
-                ),
+                    )],()
+                ),()
             ),
-            RStmt::Expression(RExp::Call(
-                RExp::boxed_variable("plot"),
+            RStatement::Expression(RExpression::Call(
+                RExpression::boxed_variable("plot"),
                 vec![
                     (
                         None,
-                        RExp::Formula(RFormula::TwoSided(
-                            Box::new(RExp::variable("Speed")),
-                            Box::new(RExp::variable("Layout")),
-                        )),
+                        RExpression::TwoSidedFormula(
+                            Box::new(RExpression::variable("Speed")),
+                            Box::new(RExpression::variable("Layout")),()
+                        ),
                     ),
-                    (Some("data".into()), RExp::variable("kbd")),
-                ],
-            )),
-            RStmt::Expression(RExp::Call(
-                RExp::boxed_variable("summary"),
-                vec![(None, RExp::variable("kbd"))],
-            )),
+                    (Some("data".into()), RExpression::variable("kbd")),
+                ],()
+            ),()),
+            RStatement::Expression(RExpression::Call(
+                RExpression::boxed_variable("summary"),
+                vec![(None, RExpression::variable("kbd"))],()
+            ),()),
         ];
 
-        let hypotheses_map = parse_hypotheses_map(&input);
+        let hypotheses_map = parse_hypotheses_map(input.iter());
         let dependency_graph = DependencyGraph::parse(&input);
         let tree = parse_hypothesis_tree(&hypotheses_map, &dependency_graph);
         // Need to build from the inside out.
@@ -132,15 +130,15 @@ mod tests {
             expression: input[2].expression().unwrap(),
             children: BTreeMap::new(),
         };
-        let speed = RExp::variable("Speed");
-        let layout = RExp::variable("Layout");
+        let speed = RExpression::variable("Speed");
+        let layout = RExpression::variable("Layout");
         let hyp = Hypothesis {
             left: &speed,
             right: &layout,
         };
         let n2 = Node {
             expression: input[1].expression().unwrap(),
-            children: BTreeMap::from_iter(vec![(Some(hyp), vec![n3]), (None, vec![n4])]),
+            children: BTreeMap::from_iter(vec![(Some(&hyp), vec![n3]), (None, vec![n4])]),
         };
         let n1 = Node {
             expression: input[0].expression().unwrap(),

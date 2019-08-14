@@ -1,17 +1,18 @@
 use std::collections::HashMap;
+use std::hash::Hash;
 
 use petgraph;
 
-use crate::parser::{RExp, RIdentifier, RStmt};
+use crate::parser::{RIdentifier, RStatement, RExpression};
 
 type NodeIndexType = petgraph::graph::DefaultIx;
 pub type NodeIndex = petgraph::graph::NodeIndex<NodeIndexType>;
-type Graph<'a> = petgraph::Graph<&'a RExp, String, petgraph::Directed, NodeIndexType>;
+type Graph<'a, T> = petgraph::Graph<&'a RExpression<T>, String, petgraph::Directed, NodeIndexType>;
 
 #[derive(Default, Debug)]
-pub struct DependencyGraph<'a> {
-    graph: Graph<'a>,
-    map: HashMap<&'a RExp, NodeIndex>,
+pub struct DependencyGraph<'a, T:Eq+Hash> {
+    graph: Graph<'a, T>,
+    map: HashMap<&'a RExpression<T>, NodeIndex>,
     variables: VariableMap,
 }
 
@@ -36,7 +37,7 @@ impl VariableMap {
     }
 }
 
-impl<'a> DependencyGraph<'a> {
+impl<'a,T:Eq+Hash> DependencyGraph<'a,T> {
     pub fn new() -> Self {
         DependencyGraph {
             graph: Graph::new(),
@@ -45,10 +46,10 @@ impl<'a> DependencyGraph<'a> {
         }
     }
 
-    pub fn parse(input: &'a[RStmt]) -> Self {
-        let mut dependency_graph: DependencyGraph = DependencyGraph::new();
+    pub fn parse(input: impl IntoIterator<Item=&'a RStatement<T>>) -> Self {
+        let mut dependency_graph: DependencyGraph<T> = DependencyGraph::new();
 
-        for statement in input.iter() {
+        for statement in input {
             parse_statement(statement, &mut dependency_graph);
         }
 
@@ -56,33 +57,33 @@ impl<'a> DependencyGraph<'a> {
     }
 
 
-    pub fn graph(&self) -> &Graph<'a> {
+    pub fn graph(&self) -> &Graph<'a,T> {
         &self.graph
     }
 
-    pub fn graph_mut(&mut self) -> &mut Graph<'a> {
+    pub fn graph_mut(&mut self) -> &mut Graph<'a,T> {
         &mut self.graph
     }
 
-    pub fn id(&self, expression: &RExp) -> Option<NodeIndex> {
+    pub fn id(&self, expression: &RExpression<T>) -> Option<NodeIndex> {
         self.map.get(expression).cloned()
     }
 
-    pub fn graphviz(&self) -> petgraph::dot::Dot<&Graph<'a>>{
+    pub fn graphviz(&self) -> petgraph::dot::Dot<&Graph<'a,T>>{
             petgraph::dot::Dot::new(&self.graph)
     }
 }
 
-fn parse_statement<'a>(
-    statement: &'a RStmt,
-    dependency_graph: &mut DependencyGraph<'a>,
+fn parse_statement<'a,T:Eq+Hash>(
+    statement: &'a RStatement<T>,
+    dependency_graph: &mut DependencyGraph<'a,T>,
 ) {
-    use RStmt::*;
+    use RStatement::*;
     match statement {
-        Expression(expression) => {
+        Expression(expression, _) => {
             register_dependencies(expression, dependency_graph);
         }
-        Assignment(left, additional, right) => {
+        Assignment(left, additional, right, _) => {
             let mut assigned = vec![left];
             assigned.append(&mut additional.iter().collect());
             for variable in assigned {
@@ -96,16 +97,16 @@ fn parse_statement<'a>(
                 };
             }
         }
-        TailComment(statement, _) => parse_statement(statement, dependency_graph),
+        TailComment(statement, _, _) => parse_statement(statement, dependency_graph),
         _ => (),
     };
 }
 
-fn register_dependencies<'a>(
-    expression: &'a RExp,
-    dependency_graph: &mut DependencyGraph<'a>,
+fn register_dependencies<'a,T:Eq+Hash>(
+    expression: &'a RExpression<T>,
+    dependency_graph: &mut DependencyGraph<'a,T>,
 ) -> NodeIndex {
-    let dependencies = extract_dependencies(&expression);
+    let dependencies = extract_dependencies(expression);
     let node_id = dependency_graph.graph.add_node(expression);
     dependency_graph.map.insert(expression, node_id);
     for dependency in dependencies {
@@ -119,32 +120,32 @@ fn register_dependencies<'a>(
     node_id
 }
 
-fn extract_dependencies(expression: &RExp) -> Vec<RIdentifier> {
-    use RExp::*;
+fn extract_dependencies<T>(expression: &RExpression<T>) -> Vec<RIdentifier> {
+    use RExpression::*;
     match expression {
-        Variable(name) => vec![name.clone()],
-        Call(_, arguments) => arguments
+        Variable(name,_) => vec![name.clone()],
+        Call(_, arguments,_) => arguments
             .iter()
             .flat_map(|(_, exp)| extract_dependencies(exp))
             .collect(),
-        Column(left, _) => extract_dependencies(left),
-        Index(left, _) => extract_dependencies(left),
+        Column(left, _, _) => extract_dependencies(left),
+        Index(left, _, _) => extract_dependencies(left),
         _ => vec![],
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use pretty_assertions::assert_eq;
     use std::collections::HashSet;
+    use std::fmt::Debug;
+    use pretty_assertions::assert_eq;
 
     use petgraph::visit::Walker;
 
     use super::*;
-    use crate::parser::{RExp, RStmt};
 
 
-    fn compare_graphs(expected: &DependencyGraph, actual: &DependencyGraph) {
+    fn compare_graphs<T:Eq+Hash+Debug>(expected: &DependencyGraph<T>, actual: &DependencyGraph<T>) {
         let expected = &expected.graph();
         let actual = &actual.graph();
         let walk_expected = petgraph::visit::Topo::new(expected);
@@ -155,12 +156,12 @@ mod tests {
                     .neighbors(expected_id)
                     .flat_map(|n_id| expected.node_weight(n_id))
                     .cloned()
-                    .collect::<HashSet<&RExp>>(),
+                    .collect::<HashSet<&RExpression<T>>>(),
                 actual
                     .neighbors(actual_id)
                     .flat_map(|n_id| actual.node_weight(n_id))
                     .cloned()
-                    .collect::<HashSet<&RExp>>(),
+                    .collect::<HashSet<&RExpression<T>>>(),
                 "Nodes {:?} and {:?} have different neighbors.",
                 expected.node_weight(expected_id),
                 actual.node_weight(actual_id)
@@ -171,48 +172,48 @@ mod tests {
     #[test]
     fn detects_linear_graph() {
         let input = vec![
-            RStmt::Assignment(RExp::variable("x"), vec![], RExp::constant("1")),
-            RStmt::Assignment(
-                RExp::variable("y"),
+            RStatement::Assignment(RExpression::variable("x"), vec![], RExpression::constant("1"),()),
+            RStatement::Assignment(
+                RExpression::variable("y"),
                 vec![],
-                RExp::Call(
-                    RExp::boxed_variable("transform"),
-                    vec![(None, RExp::variable("x"))],
-                ),
+                RExpression::Call(
+                    RExpression::boxed_variable("transform"),
+                    vec![(None, RExpression::variable("x"))],()
+                ),()
             ),
-            RStmt::TailComment(
-                Box::new(RStmt::Expression(RExp::Call(
-                    RExp::boxed_variable("modify"),
-                    vec![(None, RExp::variable("y"))],
-                ))),
-                "# modifies y".into(),
+            RStatement::TailComment(
+                Box::new(RStatement::Expression(RExpression::Call(
+                    RExpression::boxed_variable("modify"),
+                    vec![(None, RExpression::variable("y"))],()
+                ),())),
+                "# modifies y".into(),()
             ),
-            RStmt::Expression(RExp::Call(
-                RExp::boxed_variable("change"),
-                vec![(None, RExp::variable("y"))],
-            )),
+            RStatement::Expression(RExpression::Call(
+                RExpression::boxed_variable("change"),
+                vec![(None, RExpression::variable("y"))],()
+            ),()),
         ];
         let graph = DependencyGraph::parse(&input);
 
         let mut expected = DependencyGraph::new();
         let expected_graph = expected.graph_mut();
-        let e1 = RExp::constant("1");
+        let e1 = RExpression::constant("1");
         let n1 = expected_graph.add_node(&e1);
-        let e2 = RExp::Call(
-            RExp::boxed_variable("transform"),
-            vec![(None, RExp::variable("x"))],
+        let e2 = RExpression::Call(
+            RExpression::boxed_variable("transform"),
+            vec![(None, RExpression::variable("x"))],()
         );
         let n2 = expected_graph.add_node(&e2);
         expected_graph.add_edge(n1, n2, "x".into());
-        let e3 = RExp::Call(
-            RExp::boxed_variable("modify"),
-            vec![(None, RExp::variable("y"))],
+        let e3 = RExpression::Call(
+            RExpression::boxed_variable("modify"),
+            vec![(None, RExpression::variable("y"))],()
         );
         let n3 = expected_graph.add_node(&e3);
         expected_graph.add_edge(n2, n3, "y".into());
-        let e4 = RExp::Call(
-            RExp::boxed_variable("change"),
-            vec![(None, RExp::variable("y"))],
+        let e4 = RExpression::Call(
+            RExpression::boxed_variable("change"),
+            vec![(None, RExpression::variable("y"))],()
         );
         let n4 = expected_graph.add_node(&e4);
         expected_graph.add_edge(n2, n4, "y".into());
@@ -222,50 +223,50 @@ mod tests {
     #[test]
     fn detects_mutations() {
         let input = vec![
-            RStmt::Assignment(RExp::variable("x"), vec![], RExp::constant("data frame")),
-            RStmt::Assignment(
-                RExp::Column(
-                    Box::new(RExp::variable("x")),
-                    Box::new(RExp::constant("column")),
+            RStatement::Assignment(RExpression::variable("x"), vec![], RExpression::constant("data frame"),()),
+            RStatement::Assignment(
+                RExpression::Column(
+                    Box::new(RExpression::variable("x")),
+                    Box::new(RExpression::constant("column")),()
                 ),
                 vec![],
-                RExp::Call(
-                    RExp::boxed_variable("factor"),
+                RExpression::Call(
+                    RExpression::boxed_variable("factor"),
                     vec![(
                         None,
-                        RExp::Column(
-                            Box::new(RExp::variable("x")),
-                            Box::new(RExp::constant("column")),
+                        RExpression::Column(
+                            Box::new(RExpression::variable("x")),
+                            Box::new(RExpression::constant("column")),()
                         ),
-                    )],
-                ),
+                    )],()
+                ),()
             ),
-            RStmt::Expression(RExp::Call(
-                RExp::boxed_variable("summary"),
-                vec![(None, RExp::variable("x"))],
-            )),
+            RStatement::Expression(RExpression::Call(
+                RExpression::boxed_variable("summary"),
+                vec![(None, RExpression::variable("x"))],()
+            ),()),
         ];
         let graph = DependencyGraph::parse(&input);
 
         let mut expected = DependencyGraph::new();
         let expected_graph = expected.graph_mut();
-        let e1 = RExp::constant("data frame");
+        let e1 = RExpression::constant("data frame");
         let n1 = expected_graph.add_node(&e1);
-        let e2 = RExp::Call(
-            RExp::boxed_variable("factor"),
+        let e2 = RExpression::Call(
+            RExpression::boxed_variable("factor"),
             vec![(
                 None,
-                RExp::Column(
-                    Box::new(RExp::variable("x")),
-                    Box::new(RExp::constant("column")),
-                ),
-            )],
+                RExpression::Column(
+                    Box::new(RExpression::variable("x")),
+                    Box::new(RExpression::constant("column")),()
+                )
+            )],()
         );
         let n2 = expected_graph.add_node(&e2);
         expected_graph.add_edge(n1, n2, "x".into());
-        let e3 = RExp::Call(
-            RExp::boxed_variable("summary"),
-            vec![(None, RExp::variable("x"))],
+        let e3 = RExpression::Call(
+            RExpression::boxed_variable("summary"),
+            vec![(None, RExpression::variable("x"))],()
         );
         let n3 = expected_graph.add_node(&e3);
         expected_graph.add_edge(n2, n3, "x".into());
@@ -276,43 +277,43 @@ mod tests {
     #[test]
     fn detects_sibling_dependencies() {
         let input = vec![
-            RStmt::Assignment(RExp::variable("x"), vec![], RExp::constant("data frame")),
-            RStmt::Expression(RExp::Call(
-                RExp::boxed_variable("factor"),
+            RStatement::Assignment(RExpression::variable("x"), vec![], RExpression::constant("data frame"),()),
+            RStatement::Expression(RExpression::Call(
+                RExpression::boxed_variable("factor"),
                 vec![(
                     None,
-                    RExp::Column(
-                        Box::new(RExp::variable("x")),
-                        Box::new(RExp::constant("column")),
+                    RExpression::Column(
+                        Box::new(RExpression::variable("x")),
+                        Box::new(RExpression::constant("column")),()
                     ),
-                )],
-            )),
-            RStmt::Expression(RExp::Call(
-                RExp::boxed_variable("summary"),
-                vec![(None, RExp::variable("x"))],
-            )),
+                )],()
+            ),()),
+            RStatement::Expression(RExpression::Call(
+                RExpression::boxed_variable("summary"),
+                vec![(None, RExpression::variable("x"))],()
+            ),()),
         ];
         let graph = DependencyGraph::parse(&input);
 
         let mut expected = DependencyGraph::new();
         let expected_graph = expected.graph_mut();
-        let e1 = RExp::constant("data frame");
+        let e1 = RExpression::constant("data frame");
         let n1 = expected_graph.add_node(&e1);
-        let e2 = RExp::Call(
-            RExp::boxed_variable("factor"),
+        let e2 = RExpression::Call(
+            RExpression::boxed_variable("factor"),
             vec![(
                 None,
-                RExp::Column(
-                    Box::new(RExp::variable("x")),
-                    Box::new(RExp::constant("column")),
+                RExpression::Column(
+                    Box::new(RExpression::variable("x")),
+                    Box::new(RExpression::constant("column")),()
                 ),
-            )],
+            )],()
         );
         let n2 = expected_graph.add_node(&e2);
         expected_graph.add_edge(n1, n2, "x".into());
-        let e3 = RExp::Call(
-            RExp::boxed_variable("summary"),
-            vec![(None, RExp::variable("x"))],
+        let e3 = RExpression::Call(
+            RExpression::boxed_variable("summary"),
+            vec![(None, RExpression::variable("x"))],()
         );
         let n3 = expected_graph.add_node(&e3);
         expected_graph.add_edge(n1, n3, "x".into());
@@ -321,26 +322,25 @@ mod tests {
     }
 
     mod dependencies {
-        use crate::parser::RExp;
-
-        use super::super::extract_dependencies;
+    use pretty_assertions::assert_eq;
+        use super::*;
 
         #[test]
         fn finds_variables() {
-            let expression = RExp::variable("x");
+            let expression = RExpression::variable("x");
             let result = extract_dependencies(&expression);
             assert_eq!(vec!["x".to_string()], result);
         }
 
         #[test]
         fn finds_call_args() {
-            let expression = RExp::Call(
-                RExp::boxed_variable("func"),
+            let expression = RExpression::Call(
+                RExpression::boxed_variable("func"),
                 vec![
-                    (None, RExp::constant("1")),
-                    (None, RExp::variable("x")),
-                    (None, RExp::variable("y")),
-                ],
+                    (None, RExpression::constant("1")),
+                    (None, RExpression::variable("x")),
+                    (None, RExpression::variable("y")),
+                ],()
             );
             let result = extract_dependencies(&expression);
             assert_eq!(vec!["x".to_string(), "y".to_string()], result);
@@ -348,9 +348,9 @@ mod tests {
 
         #[test]
         fn finds_column() {
-            let expression = RExp::Column(
-                Box::new(RExp::variable("x")),
-                Box::new(RExp::constant("test")),
+            let expression = RExpression::Column(
+                Box::new(RExpression::variable("x")),
+                Box::new(RExpression::constant("test")),()
             );
             let result = extract_dependencies(&expression);
             assert_eq!(vec!["x".to_string()], result);
@@ -358,15 +358,15 @@ mod tests {
 
         #[test]
         fn finds_column_in_call() {
-            let expression = RExp::Call(
-                RExp::boxed_variable("factor"),
+            let expression = RExpression::Call(
+                RExpression::boxed_variable("factor"),
                 vec![(
                     None,
-                    RExp::Column(
-                        Box::new(RExp::variable("x")),
-                        Box::new(RExp::constant("column")),
+                    RExpression::Column(
+                        Box::new(RExpression::variable("x")),
+                        Box::new(RExpression::constant("column")),()
                     ),
-                )],
+                )],()
             );
             let result = extract_dependencies(&expression);
             assert_eq!(vec!["x".to_string()], result);
@@ -374,9 +374,9 @@ mod tests {
 
         #[test]
         fn finds_index() {
-            let expression = RExp::Index(
-                Box::new(RExp::variable("x")),
-                vec![Some(RExp::constant("1"))],
+            let expression = RExpression::Index(
+                Box::new(RExpression::variable("x")),
+                vec![Some(RExpression::constant("1"))],()
             );
             let result = extract_dependencies(&expression);
             assert_eq!(vec!["x".to_string()], result);
@@ -386,28 +386,28 @@ mod tests {
     #[test]
     fn gives_index_for_expression() {
         let input = vec![
-            RStmt::Assignment(RExp::variable("x"), vec![], RExp::constant("data frame")),
-            RStmt::Assignment(
-                RExp::Column(
-                    Box::new(RExp::variable("x")),
-                    Box::new(RExp::constant("column")),
+            RStatement::Assignment(RExpression::variable("x"), vec![], RExpression::constant("data frame"),()),
+            RStatement::Assignment(
+                RExpression::Column(
+                    Box::new(RExpression::variable("x")),
+                    Box::new(RExpression::constant("column")),()
                 ),
                 vec![],
-                RExp::Call(
-                    RExp::boxed_variable("factor"),
+                RExpression::Call(
+                    RExpression::boxed_variable("factor"),
                     vec![(
                         None,
-                        RExp::Column(
-                            Box::new(RExp::variable("x")),
-                            Box::new(RExp::constant("column")),
+                        RExpression::Column(
+                            Box::new(RExpression::variable("x")),
+                            Box::new(RExpression::constant("column")),()
                         ),
-                    )],
-                ),
+                    )],()
+                ),()
             ),
-            RStmt::Expression(RExp::Call(
-                RExp::boxed_variable("summary"),
-                vec![(None, RExp::variable("x"))],
-            )),
+            RStatement::Expression(RExpression::Call(
+                RExpression::boxed_variable("summary"),
+                vec![(None, RExpression::variable("x"))],()
+            ),()),
         ];
         let graph = DependencyGraph::parse(&input);
 
@@ -418,6 +418,6 @@ mod tests {
         assert_expression_is_found(0);
         assert_expression_is_found(1);
         assert_expression_is_found(2);
-        assert_eq!(None, graph.id(&RExp::variable("nonexistant")));
+        assert_eq!(None, graph.id(&RExpression::variable("nonexistant")));
     }
 }

@@ -63,7 +63,7 @@ fn test_snapshot(snapshot_path: &path::PathBuf, maybe_prefix: Option<&'static st
     let mut code = String::new();
     file.read_to_string(&mut code).unwrap();
 
-    let parsed = tractus::parse(&code)
+    let parsed = tractus::Parsed::from(&code)
         .unwrap_or_else(|e| panic!("Parsing failed on file {}: {}", snapshot_path.display(), e));
     let file_stem = snapshot_path
         .as_path()
@@ -74,8 +74,8 @@ fn test_snapshot(snapshot_path: &path::PathBuf, maybe_prefix: Option<&'static st
         .map(|prefix| format!("{}-{}", prefix, file_stem))
         .unwrap_or_else(|| file_stem.into_owned());
     assert_debug_snapshot_matches!(format!("{}-parsed", snapshot_name), parsed);
-    let hypotheses_map = tractus::parse_hypotheses_map(&parsed);
-    let dependency_graph = tractus::DependencyGraph::parse(&parsed);
+    let hypotheses_map = tractus::parse_hypotheses_map(parsed.iter());
+    let dependency_graph = tractus::DependencyGraph::parse(parsed.iter());
     assert_debug_snapshot_matches!(
         format!("{}-dependencies", snapshot_name),
         tractus::parse_hypothesis_tree(&hypotheses_map, &dependency_graph)
