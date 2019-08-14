@@ -576,7 +576,8 @@ single(1)
 with_args(1, x, name = value)
 break_down(
     \"long\",
-    argument=\"chains\"
+    \"argument\"
+    , \"chains\"
     )
 name::space()
 higher_order()(10)";
@@ -599,7 +600,8 @@ higher_order()(10)";
                 RExp::boxed_variable("break_down"),
                 vec![
                     (None, RExp::constant("\"long\"")),
-                    (Some("argument".to_string()), RExp::constant("\"chains\"")),
+                    (None, RExp::constant("\"argument\"")),
+                    (None, RExp::constant("\"chains\"")),
                 ],
             )),
             RStmt::Expression(RExp::Call(RExp::boxed_variable("name::space"), vec![])),
