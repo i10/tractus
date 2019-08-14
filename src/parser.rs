@@ -799,7 +799,8 @@ func1 <- function () {
 }
 func2 <- function (with, arguments)
     { 2 }
-func3 <- function (with, default = 'arguments') {
+func3 <- function (with,
+ default = 'arguments') {
     a <- other()
     a
 } ";

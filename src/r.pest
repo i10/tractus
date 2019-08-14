@@ -37,8 +37,8 @@ constant = ${ number | string | "TRUE" | "FALSE" }
 number = @{ (ASCII_DIGIT* ~ ".")? ~ ASCII_DIGIT+ ~ ("e" ~ ("+" | "-") ~ ASCII_DIGIT+)? }
 string = @{ "\"" ~ ("\\\"" | !"\"" ~ ANY)* ~ "\"" | "'" ~ ("\\'" | !"'" ~ ANY)* ~ "'" | "`" ~ ("\\`" | !"`" ~ ANY)* ~ "`" }
 
-function_definition = { "function" ~ "(" ~ parameters ~ ")" ~ block }
-parameters = { parameter? ~ ("," ~ parameter)* }
+function_definition = { "function" ~ "(" ~ NEWLINE* ~ parameters ~ NEWLINE* ~ ")" ~ block }
+parameters = { parameter? ~ (NEWLINE* ~ "," ~ NEWLINE* ~ parameter)* }
 parameter = _{ parameter_with_default | required_parameter }
 required_parameter = { identifier }
 parameter_with_default = { identifier ~ "=" ~ expression }
