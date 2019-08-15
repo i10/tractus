@@ -1,5 +1,6 @@
 use std::borrow::Borrow;
-use std::fmt::{Write, Display};
+use std::fmt::{Display, Write};
+use std::hash::{Hash, Hasher};
 use std::iter::FromIterator;
 
 use itertools::Itertools;
@@ -10,7 +11,7 @@ use pest::Parser;
 #[grammar = "r.pest"]
 struct RParser;
 
-#[derive(PartialEq, Eq, Debug, Clone, Hash)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum RStatement<Meta> {
     Empty(Meta),
     Comment(String, Meta),
@@ -36,6 +37,41 @@ pub enum RStatement<Meta> {
     ),
     Library(RIdentifier, Meta),
     Expression(RExpression<Meta>, Meta),
+}
+
+impl<T> Hash for RStatement<T> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        use RStatement::*;
+        match self {
+            Empty(_) => ().hash(state),
+            Comment(text, _) => text.hash(state),
+            TailComment(statement, text, _) => {
+                statement.hash(state);
+                text.hash(state);
+            }
+            Assignment(left, additional, right, _) => {
+                left.hash(state);
+                additional.hash(state);
+                right.hash(state);
+            }
+            If(cond, body, else_body, _) => {
+                cond.hash(state);
+                body.hash(state);
+                else_body.hash(state);
+            }
+            While(cond, body, _) => {
+                cond.hash(state);
+                body.hash(state);
+            }
+            For(var, range, body, _) => {
+                var.hash(state);
+                range.hash(state);
+                body.hash(state);
+            }
+            Library(name, _) => name.hash(state),
+            Expression(exp, _) => exp.hash(state),
+        }
+    }
 }
 
 pub type Statement = RStatement<Span>;
@@ -150,7 +186,7 @@ impl<'a, T> From<&'a Vec<RStatement<T>>> for Lines<'a, T> {
     }
 }
 
-#[derive(PartialEq, Eq, Debug, Clone, Hash)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum RExpression<Meta> {
     Constant(String, Meta),
     Variable(RIdentifier, Meta),
@@ -171,6 +207,50 @@ pub enum RExpression<Meta> {
     ),
     Prefix(String, Box<RExpression<Meta>>, Meta),
     Infix(String, Box<RExpression<Meta>>, Box<RExpression<Meta>>, Meta),
+}
+
+impl<T> Hash for RExpression<T> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        use RExpression::*;
+        match self {
+            Constant(value, _) => value.hash(state),
+            Variable(id, _) => id.hash(state),
+            Call(exp, args, _) => {
+                exp.hash(state);
+                args.hash(state);
+            }
+            Column(left, right, _) => {
+                left.hash(state);
+                right.hash(state);
+            }
+            Index(left, right, _) => {
+                left.hash(state);
+                right.hash(state);
+            }
+            ListIndex(left, right, _) => {
+                left.hash(state);
+                right.hash(state);
+            }
+            OneSidedFormula(exp, _) => exp.hash(state),
+            TwoSidedFormula(left, right, _) => {
+                left.hash(state);
+                right.hash(state);
+            }
+            Function(params, body, _) => {
+                params.hash(state);
+                body.hash(state);
+            }
+            Prefix(op, exp, _) => {
+                op.hash(state);
+                exp.hash(state);
+            }
+            Infix(op, left, right, _) => {
+                op.hash(state);
+                left.hash(state);
+                right.hash(state);
+            }
+        }
+    }
 }
 
 pub type RExp = RExpression<()>;
@@ -351,13 +431,21 @@ impl<T> Display for RExpression<T> {
     }
 }
 
-pub struct LineDisplay<'a, P>(&'a P) where P: Extract<Span> + Display;
-impl<'a, P> From<&'a P> for LineDisplay<'a, P> where P: Extract<Span> + Display{
+pub struct LineDisplay<'a, P>(&'a P)
+where
+    P: Extract<Span> + Display;
+impl<'a, P> From<&'a P> for LineDisplay<'a, P>
+where
+    P: Extract<Span> + Display,
+{
     fn from(other: &'a P) -> Self {
         LineDisplay(other)
     }
 }
-impl<'a, P> Display for LineDisplay<'a, P> where P: Extract<Span> + Display{
+impl<'a, P> Display for LineDisplay<'a, P>
+where
+    P: Extract<Span> + Display,
+{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let expression = self.0.borrow();
         let span = expression.extract();
@@ -408,7 +496,6 @@ impl<T> Extract<T> for RExpression<T> {
         }
     }
 }
-
 
 pub type RIdentifier = String;
 

@@ -1,74 +1,45 @@
-use std::cmp::Ordering;
-use std::hash::Hash;
 use std::collections::HashSet;
 use std::iter::FromIterator;
 
-use crate::parser::{RExpression};
+use crate::parser::RExpression;
 
-#[derive(PartialEq, Eq, Hash, Debug, Clone)]
-pub struct Hypothesis<'a, T: Eq> {
-    pub left: &'a RExpression<T>,
-    pub right: &'a RExpression<T>
-}
+pub type Hypothesis = String;
 
-impl<'a, T:Eq> std::fmt::Display for Hypothesis<'a,T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} ~ {}", self.left, self.right)
-    }
-}
-
-impl<'a,T:Eq> Ord for Hypothesis<'a,T> {
-    fn cmp(&self, other: &Self) -> Ordering {
-        format!("{}", self).cmp(&format!("{}", other))
-    }
-}
-
-impl<'a,T:Eq> PartialOrd for Hypothesis<'a,T> {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-pub fn detect_hypotheses<T:Eq+ Hash>(expression: &RExpression<T>) -> HashSet<Hypothesis<T>> {
+pub fn detect_hypotheses<T>(expression: &RExpression<T>) -> HashSet<Hypothesis> {
     use RExpression::*;
     match expression {
-        TwoSidedFormula(left, right, _) => HashSet::from_iter(vec![Hypothesis {
-            left: left,
-            right: right,
-        }]),
+        TwoSidedFormula(left, right, _) => {
+            HashSet::from_iter(vec![format!("{} ~ {}", left, right)])
+        }
 
-        // variable[variable$independent == "level",]$dependent
-        // |----------------left--------------------|
-        //          |-----------inner--------------|
-        //          |----inner_left----|
+        // Reference magic to work around Box. The box pattern is currently only available in nightly.
         Column(left, dependent, _) => match &**left {
-            // Reference magic to work around Box. The box pattern is currently only available in nightly.
-            Index(variable, inner, _) => match inner.as_slice() {
-                [Some(Infix(operator, inner_left, _, _)), None] => {
+            Index(variable, inner, _) => {
+                // variable[variable$independent == "level",]$dependent
+                // |----------------left--------------------|
+                //          |-----------inner--------------|
+                //          |----inner_left----|
+                // If the column matches the above format, then return the hypotheses, else return nothing.
+                if let [Some(Infix(operator, inner_left, _, _)), None] = inner.as_slice() {
                     if operator == "==" {
-                        match &**inner_left {
-                            Column(inner_variable, independent, _) => {
-                                if let Variable(_, _) = &**independent {
-                                    if inner_variable == variable {
-                                        HashSet::from_iter(vec![Hypothesis {
-                                            left: dependent,
-                                            right: independent,
-                                        }])
-                                    } else {
-                                        HashSet::new()
+                        if let Column(inner_variable, independent, _) = &**inner_left {
+                            if let Variable(_, _) = &**independent {
+                                if let (Variable(first, _), Variable(second, _)) =
+                                    (&**variable, &**inner_variable)
+                                {
+                                    if first == second {
+                                        return HashSet::from_iter(vec![format!(
+                                            "{} ~ {}",
+                                            dependent, independent
+                                        )]);
                                     }
-                                } else {
-                                    HashSet::new()
                                 }
                             }
-                            _ => HashSet::new(),
                         }
-                    } else {
-                        HashSet::new()
                     }
                 }
-                _ => HashSet::new(),
-            },
+                HashSet::new()
+            }
 
             left => detect_hypotheses(left),
         },
@@ -86,123 +57,45 @@ pub fn detect_hypotheses<T:Eq+ Hash>(expression: &RExpression<T>) -> HashSet<Hyp
 mod tests {
     use pretty_assertions::assert_eq;
 
+    use crate::parser::Parsed;
+
     use super::*;
 
     #[test]
     fn parses_formula() {
-        let expression = RExpression::TwoSidedFormula(
-            Box::new(RExpression::variable("dependent")),
-            Box::new(RExpression::variable("independent")),()
-        );
-        let result = detect_hypotheses(&expression);
-        let left = RExpression::variable("dependent");
-        let right = RExpression::variable("independent");
-        let expected = HashSet::from_iter(vec![Hypothesis {
-            left: &left,
-            right: &right,
-        }]);
-        assert_eq!(expected, result);
+        let code = r#"dependent ~ independent"#;
+        let expected = HashSet::from_iter(vec!["dependent ~ independent".to_string()]);
+        test_hypothesis(expected, code);
     }
 
     #[test]
     fn parses_formula_notation_in_call() {
-        let expression = RExpression::Call(
-            RExpression::boxed_variable("test"),
-            vec![(
-                None,
-                RExpression::TwoSidedFormula(
-                    Box::new(RExpression::variable("speed")),
-                    Box::new(RExpression::Infix(
-                        "+".into(),
-                        Box::new(RExpression::variable("layout")),
-                        Box::new(RExpression::variable("age")),()
-                    )),()
-                ),
-            )],()
-        );
-        let result = detect_hypotheses(&expression);
-        let left = RExpression::variable("speed");
-        let right = RExpression::Infix(
-            "+".into(),
-            Box::new(RExpression::variable("layout")),
-            Box::new(RExpression::variable("age")),()
-        );
-        let expected = HashSet::from_iter(vec![Hypothesis {
-            left: &left,
-            right: &right,
-        }]);
-        assert_eq!(expected, result);
+        let code = r#"test(speed ~ layout + age)"#;
+        let expected = HashSet::from_iter(vec!["speed ~ layout + age".to_string()]);
+        test_hypothesis(expected, code);
     }
 
     #[test]
     fn parses_column_hypothesis() {
-        // variable[variable$independent == "level",]$dependent
-        let expression = RExpression::Column(
-            Box::new(RExpression::Index(
-                Box::new(RExpression::variable("variable")),
-                vec![
-                    Some(RExpression::Infix(
-                        "==".into(),
-                        Box::new(RExpression::Column(
-                            Box::new(RExpression::variable("variable")),
-                            Box::new(RExpression::variable("independent")),()
-                        )),
-                        Box::new(RExpression::constant("\"level\"")),()
-                    )),
-                    None,
-                ],()
-            )),
-            Box::new(RExpression::variable("dependent")),()
-        );
-        let result = detect_hypotheses(&expression);
-        let left = RExpression::variable("dependent");
-        let right = RExpression::variable("independent");
-        let expected = HashSet::from_iter(vec![Hypothesis {
-            left: &left,
-            right: &right,
-        }]);
-        assert_eq!(expected, result);
+        let code = r#"variable[variable$independent == "level",]$dependent"#;
+        let expected = HashSet::from_iter(vec!["dependent ~ independent".to_string()]);
+        test_hypothesis(expected, code);
     }
 
     #[test]
     fn parses_column_hypothesis_in_call() {
-        // fitdistr(kbd[kbd$Layout == "QWERTY",]$Speed, "lognormal")$estimate
-        let expression = RExpression::Column(
-            Box::new(RExpression::Call(
-                RExpression::boxed_variable("fitdistr"),
-                vec![
-                    (
-                        None,
-                        RExpression::Column(
-                            Box::new(RExpression::Index(
-                                Box::new(RExpression::variable("kbd")),
-                                vec![
-                                    Some(RExpression::Infix(
-                                        "==".into(),
-                                        Box::new(RExpression::Column(
-                                            Box::new(RExpression::variable("kbd")),
-                                            Box::new(RExpression::variable("Layout")),()
-                                        )),
-                                        Box::new(RExpression::constant("\"QWERTY\"")),()
-                                    )),
-                                    None,
-                                ],()
-                            )),
-                            Box::new(RExpression::variable("Speed")),()
-                        ),
-                    ),
-                    (None, RExpression::constant("\"lognormal\""))
-                ],()
-            )),
-            Box::new(RExpression::variable("estimate")),()
-        );
-        let result = detect_hypotheses(&expression);
-        let left = RExpression::variable("Speed");
-        let right = RExpression::variable("Layout");
-        let expected = HashSet::from_iter(vec![Hypothesis {
-            left: &left,
-            right: &right,
-        }]);
+        let code = r#"fitdistr(kbd[kbd$Layout == "QWERTY",]$Speed, "lognormal")$estimate"#;
+        let expected = HashSet::from_iter(vec!["Speed ~ Layout".to_string()]);
+        test_hypothesis(expected, code);
+    }
+
+    fn test_hypothesis(expected: HashSet<Hypothesis>, code: &'static str) {
+        let parsed = Parsed::from(code).unwrap();
+        let stmt = parsed.into_iter().next().unwrap();
+        let exp = stmt.expression().unwrap();
+        let result = detect_hypotheses(exp);
+
         assert_eq!(expected, result);
     }
+
 }

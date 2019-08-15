@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::hash::Hash;
 
 use petgraph;
 
@@ -10,7 +9,7 @@ pub type NodeIndex = petgraph::graph::NodeIndex<NodeIndexType>;
 type Graph<'a, T> = petgraph::Graph<&'a RExpression<T>, String, petgraph::Directed, NodeIndexType>;
 
 #[derive(Default, Debug)]
-pub struct DependencyGraph<'a, T: Eq + Hash> {
+pub struct DependencyGraph<'a, T: Eq> {
     graph: Graph<'a, T>,
     map: HashMap<&'a RExpression<T>, NodeIndex>,
     variables: VariableMap,
@@ -37,7 +36,7 @@ impl VariableMap {
     }
 }
 
-impl<'a, T: Eq + Hash> DependencyGraph<'a, T> {
+impl<'a, T: Eq> DependencyGraph<'a, T> {
     pub fn new() -> Self {
         DependencyGraph {
             graph: Graph::new(),
@@ -86,7 +85,7 @@ impl<'a> std::fmt::Display for GraphLineDisplay<'a> {
     }
 }
 
-fn parse_statement<'a, T: Eq + Hash>(
+fn parse_statement<'a, T: Eq>(
     statement: &'a RStatement<T>,
     dependency_graph: &mut DependencyGraph<'a, T>,
 ) {
@@ -114,7 +113,7 @@ fn parse_statement<'a, T: Eq + Hash>(
     };
 }
 
-fn register_dependencies<'a, T: Eq + Hash>(
+fn register_dependencies<'a, T: Eq>(
     expression: &'a RExpression<T>,
     dependency_graph: &mut DependencyGraph<'a, T>,
 ) -> NodeIndex {
@@ -158,10 +157,7 @@ mod tests {
 
     use super::*;
 
-    fn compare_graphs<T: Eq + Hash + Debug>(
-        expected: &DependencyGraph<T>,
-        actual: &DependencyGraph<T>,
-    ) {
+    fn compare_graphs<T: Eq + Debug>(expected: &DependencyGraph<T>, actual: &DependencyGraph<T>) {
         let expected = &expected.graph();
         let actual = &actual.graph();
         let walk_expected = petgraph::visit::Topo::new(expected);

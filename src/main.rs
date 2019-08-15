@@ -13,9 +13,7 @@ use horrorshow::prelude::*;
 use log::{debug, info};
 use structopt::StructOpt;
 
-use tractus::{
-    GraphLineDisplay, HypothesisTree, LineDisplay, Parsed, RExpression, RStatement, Span,
-};
+use tractus::{HypothesisTree, Parsed, RExpression};
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "tractus")]
@@ -39,14 +37,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Parsing...");
     let parsed = Parsed::from(&code).unwrap_or_else(|e| panic!("{}", e));
     debug!("Parsing hypotheses map...");
-    let hypotheses_map = tractus::parse_hypotheses_map(parsed.iter());
     debug!("Parsing dependency graph...");
     let dependency_graph = tractus::DependencyGraph::parse(parsed.iter());
     debug!("Parsing hypothesis tree...");
-    let hypotheses = tractus::parse_hypothesis_tree(&hypotheses_map, &dependency_graph);
+    let hypotheses = tractus::parse_hypothesis_tree(parsed.iter(), &dependency_graph);
 
     debug!("Rendering...");
-    let html = GraphLineDisplay::from(&dependency_graph).to_string();
+    let html = render(&hypotheses).into_string()?;
     info!("Outputting...");
     match opt.output {
         Some(path) => {
@@ -187,12 +184,13 @@ fn render<'a, T: Eq + Hash>(tree: &'a HypothesisTree<T>) -> Box<Render + 'a> {
 fn render_hypothesis_tree<'a, T: Eq + Hash>(tree: &'a HypothesisTree<T>) -> Box<Render + 'a> {
     box_html! {
         ol(class="hypotheses") {
-            @ for (maybe_hypothesis, nodes) in tree.iter() { // TODO: Consider sorting.
+            @ for (hypotheses, nodes) in tree.iter() { // TODO: Consider sorting.
                 li {
-                    span(class="hypothesis") { : match maybe_hypothesis {
-                        Some(hypothesis) => format!("{}", hypothesis),
-                        None => "No hypothesis".to_string()
-                    } ; }
+                    span(class="hypothesis") { : if hypotheses.set().is_empty() {
+                        "None".to_string()
+                    } else {
+                        hypotheses.set().iter().cloned().collect::<Vec<String>>().join(", ")
+                    }; }
                     ol(class="nodes") {
                         @ for node in nodes.iter() {
                             li {
