@@ -13,7 +13,9 @@ use horrorshow::prelude::*;
 use log::{debug, info};
 use structopt::StructOpt;
 
-use tractus::{HypothesisTree, Parsed, RExpression};
+use tractus::{
+    GraphLineDisplay, HypothesisTree, LineDisplay, Parsed, RExpression, RStatement, Span,
+};
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "tractus")]
@@ -44,7 +46,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let hypotheses = tractus::parse_hypothesis_tree(&hypotheses_map, &dependency_graph);
 
     debug!("Rendering...");
-    let html = render(&hypotheses).into_string()?;
+    let html = GraphLineDisplay::from(&dependency_graph).to_string();
     info!("Outputting...");
     match opt.output {
         Some(path) => {

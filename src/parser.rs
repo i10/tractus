@@ -1,5 +1,5 @@
 use std::borrow::Borrow;
-use std::fmt::Write;
+use std::fmt::{Write, Display};
 use std::iter::FromIterator;
 
 use itertools::Itertools;
@@ -97,7 +97,7 @@ impl<T> RStatement<T> {
     }
 }
 
-impl<T> std::fmt::Display for RStatement<T> {
+impl<T> Display for RStatement<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use RStatement::*;
         match self {
@@ -138,7 +138,7 @@ impl<T> std::fmt::Display for RStatement<T> {
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub struct Lines<'a, T>(&'a Vec<RStatement<T>>);
 
-impl<'a, T> std::fmt::Display for Lines<'a, T> {
+impl<'a, T> Display for Lines<'a, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0.iter().join("\n"))
     }
@@ -284,7 +284,7 @@ impl<T> RExpression<T> {
     }
 }
 
-impl<T> std::fmt::Display for RExpression<T> {
+impl<T> Display for RExpression<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use RExpression::*;
         match self {
@@ -350,6 +350,65 @@ impl<T> std::fmt::Display for RExpression<T> {
         }
     }
 }
+
+pub struct LineDisplay<'a, P>(&'a P) where P: Extract<Span> + Display;
+impl<'a, P> From<&'a P> for LineDisplay<'a, P> where P: Extract<Span> + Display{
+    fn from(other: &'a P) -> Self {
+        LineDisplay(other)
+    }
+}
+impl<'a, P> Display for LineDisplay<'a, P> where P: Extract<Span> + Display{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let expression = self.0.borrow();
+        let span = expression.extract();
+        write!(f, "{}", span.from.line)?;
+        if span.to.line > span.from.line {
+            write!(f, "-{}", span.to.line)?;
+        }
+        write!(f, ": {}", self.0)
+    }
+}
+
+pub trait Extract<T> {
+    fn extract(&self) -> &T;
+}
+
+impl<T> Extract<T> for RStatement<T> {
+    fn extract(&self) -> &T {
+        use RStatement::*;
+        match self.borrow() {
+            Empty(m) => m,
+            Comment(_, m) => m,
+            TailComment(_, _, m) => m,
+            Assignment(_, _, _, m) => m,
+            If(_, _, _, m) => m,
+            While(_, _, m) => m,
+            For(_, _, _, m) => m,
+            Library(_, m) => m,
+            Expression(_, m) => m,
+        }
+    }
+}
+
+impl<T> Extract<T> for RExpression<T> {
+    fn extract(&self) -> &T {
+        use RExpression::*;
+        match self.borrow() {
+            Constant(_, m) => m,
+            Variable(_, m) => m,
+            Call(_, _, m) => m,
+            Column(_, _, m) => m,
+            Index(_, _, m) => m,
+            ListIndex(_, _, m) => m,
+            OneSidedFormula(_, m) => m,
+            TwoSidedFormula(_, _, m) => m,
+            Function(_, _, m) => m,
+            Prefix(_, _, m) => m,
+            Infix(_, _, _, m) => m,
+        }
+    }
+}
+
 
 pub type RIdentifier = String;
 

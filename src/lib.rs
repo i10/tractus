@@ -6,6 +6,6 @@ mod hypotheses;
 mod hypotheses_tree;
 mod parser;
 
-pub use crate::dependency_graph::DependencyGraph;
-pub use crate::parser::{Parsed, RExpression, RStatement};
-pub use crate::hypotheses_tree::{HypothesisTree, parse_hypotheses_map, parse_hypothesis_tree};
+pub use crate::dependency_graph::{DependencyGraph, GraphLineDisplay};
+pub use crate::hypotheses_tree::{parse_hypotheses_map, parse_hypothesis_tree, HypothesisTree};
+pub use crate::parser::{LineDisplay, Parsed, RExpression, RStatement, Span};

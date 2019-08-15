@@ -6,17 +6,32 @@ use crate::hypotheses::{detect_hypotheses, Hypothesis};
 use crate::parser::{RExpression, RStatement};
 use dependency_graph::DependencyGraph;
 
+type HypothesesMap<
+    'a,
+    T,
+    HSet = std::collections::hash_map::RandomState,
+    HMap = std::collections::hash_map::RandomState,
+> = HashMap<&'a RExpression<T>, HashSet<Hypothesis<'a, T>, HSet>, HMap>;
+
 pub fn parse_hypotheses_map<'a, T: Eq + Hash>(
     input: impl Iterator<Item = &'a RStatement<T>>,
-) -> HashMap<&'a RExpression<T>, HashSet<Hypothesis<'a, T>>> {
+) -> HypothesesMap<'a, T> {
     input
         .filter_map(|statement| statement.expression())
         .map(|expression| (expression, detect_hypotheses(expression)))
         .collect()
 }
 
+pub type HypothesisTree<'a, T> = BTreeMap<Option<&'a Hypothesis<'a, T>>, Vec<Node<'a, T>>>;
+
+#[derive(Debug, PartialEq)]
+pub struct Node<'a, T: Eq + Hash> {
+    pub expression: &'a RExpression<T>,
+    pub children: HypothesisTree<'a, T>,
+}
+
 pub fn parse_hypothesis_tree<'a, T: Eq + Hash, HSet, HMap>(
-    hypotheses_map: &'a HashMap<&RExpression<T>, HashSet<Hypothesis<'a, T>, HSet>, HMap>,
+    hypotheses_map: &'a HypothesesMap<'a, T, HSet, HMap>,
     dependency_graph: &DependencyGraph<'a, T>,
 ) -> HypothesisTree<'a, T>
 where
@@ -29,14 +44,6 @@ where
         .collect();
     sources.sort_unstable(); // Node indices are ascending in source code order. I. e., this sorts by line number.
     hypothesis_tree_from_nodes(sources, &dependency_graph, &hypotheses_map)
-}
-
-pub type HypothesisTree<'a, T> = BTreeMap<Option<&'a Hypothesis<'a, T>>, Vec<Node<'a, T>>>;
-
-#[derive(Debug, PartialEq)]
-pub struct Node<'a, T: Eq + Hash> {
-    pub expression: &'a RExpression<T>,
-    pub children: HypothesisTree<'a, T>,
 }
 
 pub fn hypothesis_tree_from_nodes<'a, T: Eq + Hash, SSet, SMap>(
