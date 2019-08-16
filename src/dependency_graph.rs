@@ -45,14 +45,41 @@ impl<'a, T: Eq> DependencyGraph<'a, T> {
         }
     }
 
-    pub fn parse(input: impl IntoIterator<Item = &'a RStatement<T>>) -> Self {
-        let mut dependency_graph: DependencyGraph<T> = DependencyGraph::new();
+    pub fn from_input(input: impl Iterator<Item = &'a RStatement<T>>) -> Self {
+        let mut graph = Self::new();
+        graph.batch_insert(input);
+        graph
+    }
 
+    pub fn insert(&mut self, statement: &'a RStatement<T>) {
+        use RStatement::*;
+        match statement {
+            Expression(expression, _) => {
+                register_dependencies(expression, self);
+            }
+            Assignment(left, additional, right, _) => {
+                let mut assigned = vec![left];
+                assigned.append(&mut additional.iter().collect());
+                for variable in assigned {
+                    let node_id = register_dependencies(right, self);
+                    match variable.extract_variable_name() {
+                        Some(name) => self.variables.push(name, node_id),
+                        None => panic!(
+                        "Could not find a variable in {}, in the left side of the assignment {}.",
+                        variable, statement
+                    ),
+                    };
+                }
+            }
+            TailComment(statement, _, _) => self.insert(statement),
+            _ => (),
+        };
+    }
+
+    pub fn batch_insert(&mut self, input: impl Iterator<Item = &'a RStatement<T>>) {
         for statement in input {
-            parse_statement(statement, &mut dependency_graph);
+            self.insert(statement)
         }
-
-        dependency_graph
     }
 
     pub fn graph(&self) -> &Graph<'a, T> {
@@ -83,34 +110,6 @@ impl<'a> std::fmt::Display for GraphLineDisplay<'a> {
         let display_graph = petgraph::dot::Dot::new(&mapped);
         write!(f, "{}", display_graph)
     }
-}
-
-fn parse_statement<'a, T: Eq>(
-    statement: &'a RStatement<T>,
-    dependency_graph: &mut DependencyGraph<'a, T>,
-) {
-    use RStatement::*;
-    match statement {
-        Expression(expression, _) => {
-            register_dependencies(expression, dependency_graph);
-        }
-        Assignment(left, additional, right, _) => {
-            let mut assigned = vec![left];
-            assigned.append(&mut additional.iter().collect());
-            for variable in assigned {
-                let node_id = register_dependencies(right, dependency_graph);
-                match variable.extract_variable_name() {
-                    Some(name) => dependency_graph.variables.push(name, node_id),
-                    None => panic!(
-                        "Could not find a variable in {}, in the left side of the assignment {}.",
-                        variable, statement
-                    ),
-                };
-            }
-        }
-        TailComment(statement, _, _) => parse_statement(statement, dependency_graph),
-        _ => (),
-    };
 }
 
 fn register_dependencies<'a, T: Eq>(
@@ -221,7 +220,7 @@ mod tests {
                 (),
             ),
         ];
-        let graph = DependencyGraph::parse(&input);
+        let graph = DependencyGraph::from_input(input.iter());
 
         let mut expected = DependencyGraph::new();
         let expected_graph = expected.graph_mut();
@@ -290,7 +289,7 @@ mod tests {
                 (),
             ),
         ];
-        let graph = DependencyGraph::parse(&input);
+        let graph = DependencyGraph::from_input(input.iter());
 
         let mut expected = DependencyGraph::new();
         let expected_graph = expected.graph_mut();
@@ -354,7 +353,7 @@ mod tests {
                 (),
             ),
         ];
-        let graph = DependencyGraph::parse(&input);
+        let graph = DependencyGraph::from_input(input.iter());
 
         let mut expected = DependencyGraph::new();
         let expected_graph = expected.graph_mut();
@@ -491,7 +490,7 @@ mod tests {
                 (),
             ),
         ];
-        let graph = DependencyGraph::parse(&input);
+        let graph = DependencyGraph::from_input(input.iter());
 
         let assert_expression_is_found = |index: usize| {
             let e = input[index].expression().unwrap();

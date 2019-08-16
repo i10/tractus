@@ -30,7 +30,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Parsing...");
     let parsed = Parsed::from(&code).unwrap_or_else(|e| panic!("{}", e));
     debug!("Parsing dependency graph...");
-    let dependency_graph = tractus::DependencyGraph::parse(parsed.iter());
+    let dependency_graph = tractus::DependencyGraph::from_input(parsed.iter());
     debug!("Parsing hypothesis tree...");
     let hypotheses = tractus::parse_hypothesis_tree(parsed.iter(), &dependency_graph);
 

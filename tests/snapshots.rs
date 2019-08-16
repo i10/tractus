@@ -75,7 +75,7 @@ fn test_snapshot(snapshot_path: &path::PathBuf, maybe_prefix: Option<&'static st
         .map(|prefix| format!("{}-{}", prefix, file_stem))
         .unwrap_or_else(|| file_stem.into_owned());
     assert_debug_snapshot_matches!(format!("{}-parsed", snapshot_name), parsed);
-    let dependency_graph = tractus::DependencyGraph::parse(parsed.iter());
+    let dependency_graph = tractus::DependencyGraph::from_input(parsed.iter());
     assert_debug_snapshot_matches!(
         format!("{}-dependencies", snapshot_name),
         tractus::parse_hypothesis_tree(parsed.iter(), &dependency_graph)

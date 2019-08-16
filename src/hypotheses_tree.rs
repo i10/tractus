@@ -316,7 +316,7 @@ mod tests {
             ),
         ];
 
-        let dependency_graph = DependencyGraph::parse(&input);
+        let dependency_graph = DependencyGraph::from_input(input.iter());
         let tree = parse_hypothesis_tree(input.iter(), &dependency_graph);
 
         // Need to build from the inside out.
