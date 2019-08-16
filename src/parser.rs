@@ -457,7 +457,10 @@ where
         write!(f, ": {}", self.0)
     }
 }
-impl<'a, P> Serialize for LineDisplay<'a, P> where &'a P: Extract<Span> + Display{
+impl<'a, P> Serialize for LineDisplay<'a, P>
+where
+    &'a P: Extract<Span> + Display,
+{
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,

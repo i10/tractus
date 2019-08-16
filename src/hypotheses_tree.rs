@@ -1,9 +1,9 @@
-use std::cell::RefCell;
+use std::cell::RefCell; 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::rc::Rc;
 
 use petgraph::Direction;
-use serde::{Serialize};
+use serde::Serialize;
 
 use crate::dependency_graph;
 use crate::hypotheses::{detect_hypotheses, Hypothesis};
@@ -19,14 +19,14 @@ pub struct HypothesisTree<'a, T: Eq> {
 #[derive(Serialize)]
 pub struct LineTree<'a> {
     root: Branches<LineDisplay<'a, RExpression<Span>>>,
-    hypotheses: &'a HashMap<HypothesesId, Hypotheses>
+    hypotheses: &'a HashMap<HypothesesId, Hypotheses>,
 }
 
-impl<'a> From<&'a HypothesisTree<'a,Span>> for LineTree<'a> {
-    fn from(other: &'a HypothesisTree<'a,Span>) -> Self {
+impl<'a> From<&'a HypothesisTree<'a, Span>> for LineTree<'a> {
+    fn from(other: &'a HypothesisTree<'a, Span>) -> Self {
         LineTree {
             root: map_branches(&other.root, &mut |e| LineDisplay::from(*e)),
-            hypotheses: &other.hypotheses
+            hypotheses: &other.hypotheses,
         }
     }
 }
@@ -66,7 +66,7 @@ pub type Branches<C> = BTreeMap<HypothesesId, Vec<Node<C>>>;
 
 #[derive(Debug, PartialEq, Eq, Serialize)]
 pub struct Node<C> {
-    #[serde(rename ="expression")]
+    #[serde(rename = "expression")]
     pub content: C,
     pub children: Branches<C>,
 }
