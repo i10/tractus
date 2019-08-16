@@ -6,12 +6,13 @@ use std::iter::FromIterator;
 use itertools::Itertools;
 use log::debug;
 use pest::Parser;
+use serde::Serialize;
 
 #[derive(Parser)]
 #[grammar = "r.pest"]
 struct RParser;
 
-#[derive(PartialEq, Eq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone, Serialize)]
 pub enum RStatement<Meta> {
     Empty(Meta),
     Comment(String, Meta),
@@ -186,7 +187,7 @@ impl<'a, T> From<&'a Vec<RStatement<T>>> for Lines<'a, T> {
     }
 }
 
-#[derive(PartialEq, Eq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone, Serialize)]
 pub enum RExpression<Meta> {
     Constant(String, Meta),
     Variable(RIdentifier, Meta),
@@ -499,7 +500,7 @@ impl<T> Extract<T> for RExpression<T> {
 
 pub type RIdentifier = String;
 
-#[derive(PartialEq, Eq, Debug, Clone, Hash)]
+#[derive(PartialEq, Eq, Debug, Clone, Hash, Serialize)]
 pub struct Span {
     from: Position,
     to: Position,
@@ -515,7 +516,7 @@ impl<'i, P: Borrow<pest::iterators::Pair<'i, Rule>>> From<P> for Span {
     }
 }
 
-#[derive(PartialEq, Eq, Debug, Clone, Hash)]
+#[derive(PartialEq, Eq, Debug, Clone, Hash, Serialize)]
 pub struct Position {
     line: usize,
     column: usize,

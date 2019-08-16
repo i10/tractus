@@ -3,24 +3,62 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::rc::Rc;
 
 use petgraph::Direction;
+use serde::{Serialize};
 
 use crate::dependency_graph;
 use crate::hypotheses::{detect_hypotheses, Hypothesis};
 use crate::parser::{RExpression, RStatement};
 use dependency_graph::{DependencyGraph, NodeIndex};
 
-pub type HypothesisTree<'a, T> = BTreeMap<Hypotheses, Vec<Node<'a, T>>>;
+#[derive(Debug, Serialize)]
+pub struct HypothesisTree<'a, T: Eq> {
+    root: Branches<'a, T>,
+    hypotheses: HashMap<HypothesesId, Hypotheses>,
+}
 
-#[derive(Debug, PartialEq, Eq)]
+pub struct HypothesesMap(Vec<(Hypotheses)>);
+impl HypothesesMap {
+    pub fn new() -> Self {
+        HypothesesMap(Vec::new())
+    }
+
+    pub fn insert(&mut self, item: Hypotheses) -> HypothesesId {
+        match self.0.iter().position(|hyp| hyp == &item) {
+            Some(index) => index,
+            None => {
+                self.0.push(item);
+                self.0.len() - 1 // The id of the just inserted item.
+            }
+        }
+    }
+
+    pub fn get(&mut self, id: HypothesesId) -> Option<&mut Hypotheses> {
+        if id < self.0.len() {
+            Some(&mut self.0[id])
+        } else {
+            None
+        }
+    }
+
+    pub fn into_map(self) -> HashMap<HypothesesId, Hypotheses> {
+        self.0.into_iter().enumerate().collect()
+    }
+}
+
+pub type HypothesesId = usize;
+
+pub type Branches<'a, T> = BTreeMap<HypothesesId, Vec<Node<'a, T>>>;
+
+#[derive(Debug, PartialEq, Eq, Serialize)]
 pub struct Node<'a, T: Eq> {
     pub expression: &'a RExpression<T>,
-    pub children: HypothesisTree<'a, T>,
+    pub children: Branches<'a, T>,
 }
 
 #[derive(Debug)]
 struct RefNode {
     id: NodeIndex,
-    children: BTreeMap<Hypotheses, Vec<Rc<RefCell<RefNode>>>>,
+    children: BTreeMap<HypothesesId, Vec<Rc<RefCell<RefNode>>>>,
 }
 
 fn convert<'a, T: Eq>(ref_node: RefNode, dependency_graph: &DependencyGraph<'a, T>) -> Node<'a, T> {
@@ -41,14 +79,8 @@ fn convert<'a, T: Eq>(ref_node: RefNode, dependency_graph: &DependencyGraph<'a, 
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize)]
 pub struct Hypotheses(HashSet<Hypothesis>);
-
-impl Hypotheses {
-    pub fn set(&self) -> &HashSet<Hypothesis> {
-        &self.0
-    }
-}
 
 impl std::cmp::Ord for Hypotheses {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
@@ -75,14 +107,20 @@ pub fn parse_hypothesis_tree<'a, T: Eq>(
     input: impl Iterator<Item = &'a RStatement<T>>,
     dependency_graph: &DependencyGraph<'a, T>,
 ) -> HypothesisTree<'a, T> {
-    let mut root: BTreeMap<Hypotheses, Vec<Rc<RefCell<RefNode>>>> = BTreeMap::new();
-    let mut hypotheses_map = HashMap::new();
+    let mut root: BTreeMap<HypothesesId, Vec<Rc<RefCell<RefNode>>>> = BTreeMap::new();
+    let mut expression_map: HashMap<&'a RExpression<T>, HypothesesId> = HashMap::new();
+    let mut hypotheses_map: HypothesesMap = HypothesesMap::new();
     let mut node_map: HashMap<NodeIndex, Rc<RefCell<RefNode>>> = HashMap::new();
 
     let expressions = input.filter_map(|statement| statement.expression());
     for expression in expressions {
-        collect_hypotheses(expression, &mut hypotheses_map, &dependency_graph);
-        let hypotheses = hypotheses_map.get(expression).unwrap(); // This expression's hypotheses were just collected.
+        collect_hypotheses(
+            expression,
+            &mut hypotheses_map,
+            &mut expression_map,
+            &dependency_graph,
+        );
+        let hypotheses_id = expression_map.get(expression).unwrap(); // This expression's hypotheses were just collected.
         let node_id = dependency_graph.id(expression).unwrap(); // Expression must be inside dependency graph.
         let ref_node = Rc::new(RefCell::new(RefNode {
             id: node_id,
@@ -90,7 +128,8 @@ pub fn parse_hypothesis_tree<'a, T: Eq>(
         }));
         let mut parents: Vec<NodeIndex> = dependency_graph
             .graph()
-            .neighbors_directed(node_id, Direction::Incoming).collect();
+            .neighbors_directed(node_id, Direction::Incoming)
+            .collect();
         parents.sort_unstable();
         match parents.last() {
             Some(id) => {
@@ -98,13 +137,13 @@ pub fn parse_hypothesis_tree<'a, T: Eq>(
                 let mut parent = parent_ref.borrow_mut();
                 parent
                     .children
-                    .entry(hypotheses.clone())
+                    .entry(*hypotheses_id)
                     .or_insert_with(|| vec![])
                     .push(ref_node.clone());
                 node_map.insert(node_id, ref_node);
             }
             None => {
-                root.entry(hypotheses.clone())
+                root.entry(*hypotheses_id)
                     .or_insert_with(|| vec![])
                     .push(ref_node.clone());
                 node_map.insert(node_id, ref_node);
@@ -114,21 +153,28 @@ pub fn parse_hypothesis_tree<'a, T: Eq>(
 
     drop(node_map);
 
-    root.into_iter()
-        .map(|(h, ids)| {
-            (
-                h,
-                ids.into_iter()
-                    .map(|id| convert(Rc::try_unwrap(id).unwrap().into_inner(), dependency_graph))
-                    .collect(),
-            )
-        })
-        .collect()
+    HypothesisTree {
+        root: root
+            .into_iter()
+            .map(|(h, ids)| {
+                (
+                    h,
+                    ids.into_iter()
+                        .map(|id| {
+                            convert(Rc::try_unwrap(id).unwrap().into_inner(), dependency_graph)
+                        })
+                        .collect(),
+                )
+            })
+            .collect(),
+        hypotheses: hypotheses_map.into_map(),
+    }
 }
 
 fn collect_hypotheses<'a, T: Eq>(
     expression: &'a RExpression<T>,
-    hypotheses_map: &mut HashMap<&'a RExpression<T>, Hypotheses>,
+    hypotheses_map: &mut HypothesesMap,
+    expression_map: &mut HashMap<&'a RExpression<T>, HypothesesId>,
     dependency_graph: &DependencyGraph<'a, T>,
 ) {
     let node_id = dependency_graph.id(expression).unwrap(); // Expression must be inside dependency graph.
@@ -137,23 +183,39 @@ fn collect_hypotheses<'a, T: Eq>(
         .neighbors_directed(node_id, Direction::Incoming)
         .map(|id| {
             let exp = dependency_graph.graph()[id];
-            let inherited_hypotheses = hypotheses_map
-                .entry(exp)
-                .or_insert_with(|| Hypotheses(detect_hypotheses(exp)));
-            inherited_hypotheses
-                .0
-                .iter()
-                .cloned()
-                .collect::<Vec<Hypothesis>>()
+            expression_map
+                .get(exp)
+                .map(|id| {
+                    hypotheses_map
+                        .get(*id)
+                        .unwrap()
+                        .0
+                        .iter()
+                        .cloned()
+                        .collect::<Vec<Hypothesis>>()
+                })
+                .unwrap_or_else(|| Hypotheses(detect_hypotheses(exp)).0.into_iter().collect())
         })
         .flatten()
         .collect();
-    let own_hypotheses = hypotheses_map
-        .entry(expression)
-        .or_insert_with(|| Hypotheses(detect_hypotheses(expression)));
-    for hyp in inherited_hypotheses {
-        own_hypotheses.0.insert(hyp);
-    }
+    let hypotheses_id = match expression_map.get(expression) {
+        Some(id) => {
+            let id = *id;
+            let hypotheses = hypotheses_map.get(id).unwrap();
+            for hyp in inherited_hypotheses {
+                hypotheses.0.insert(hyp);
+            }
+            id
+        }
+        None => {
+            let mut hypotheses = Hypotheses(detect_hypotheses(expression));
+            for hyp in inherited_hypotheses {
+                hypotheses.0.insert(hyp);
+            }
+            hypotheses_map.insert(hypotheses)
+        }
+    };
+    expression_map.insert(expression, hypotheses_id);
 }
 
 #[cfg(test)]
@@ -223,6 +285,7 @@ mod tests {
 
         let dependency_graph = DependencyGraph::parse(&input);
         let tree = parse_hypothesis_tree(input.iter(), &dependency_graph);
+
         // Need to build from the inside out.
         let n4 = Node {
             expression: input[3].expression().unwrap(),
@@ -232,22 +295,25 @@ mod tests {
             expression: input[2].expression().unwrap(),
             children: BTreeMap::new(),
         };
-        let mut hyp = HashSet::new();
-        hyp.insert("Speed ~ Layout".to_string());
         let n2 = Node {
             expression: input[1].expression().unwrap(),
             children: BTreeMap::from_iter(vec![
-                (Hypotheses(hyp), vec![n3]),
-                (Hypotheses(HashSet::new()), vec![n4]),
+                (find_hyp(&["Speed ~ Layout"], &tree), vec![n3]),
+                (find_hyp(&[] ,&tree), vec![n4]),
             ]),
         };
         let n1 = Node {
             expression: input[0].expression().unwrap(),
-            children: BTreeMap::from_iter(vec![(Hypotheses(HashSet::new()), vec![n2])]),
+            children: BTreeMap::from_iter(vec![(find_hyp(&[], &tree), vec![n2])]),
         };
         let mut expected = BTreeMap::new();
-        expected.insert(Hypotheses(HashSet::new()), vec![n1]);
+        expected.insert(find_hyp(&[], &tree), vec![n1]);
 
-        assert_eq!(expected, tree);
+        assert_eq!(expected, tree.root);
+    }
+
+    fn find_hyp<'a,T:Eq>(hyp: &[&'static str], tree: &HypothesisTree<'a, T>) -> HypothesesId {
+        let hypotheses = hyp.iter().map(|h| h.to_string()).collect::<HashSet<String>>();
+        *tree.hypotheses.iter().find(|(_, other)| other.0 == hypotheses).expect("Could not find hypotheses.").0
     }
 }
