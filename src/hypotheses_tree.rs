@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, BTreeSet};
 use std::rc::Rc;
 
 use petgraph::Direction;
@@ -113,7 +113,7 @@ fn convert<'a, T: Eq>(
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize)]
-pub struct Hypotheses(HashSet<Hypothesis>);
+pub struct Hypotheses(BTreeSet<Hypothesis>);
 
 impl std::cmp::Ord for Hypotheses {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
@@ -349,7 +349,7 @@ mod tests {
         let hypotheses = hyp
             .iter()
             .map(|h| h.to_string())
-            .collect::<HashSet<String>>();
+            .collect::<BTreeSet<String>>();
         *tree
             .hypotheses
             .iter()

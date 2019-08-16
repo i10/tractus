@@ -1,15 +1,15 @@
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 use std::iter::FromIterator;
 
 use crate::parser::RExpression;
 
 pub type Hypothesis = String;
 
-pub fn detect_hypotheses<T>(expression: &RExpression<T>) -> HashSet<Hypothesis> {
+pub fn detect_hypotheses<T>(expression: &RExpression<T>) -> BTreeSet<Hypothesis> {
     use RExpression::*;
     match expression {
         TwoSidedFormula(left, right, _) => {
-            HashSet::from_iter(vec![format!("{} ~ {}", left, right)])
+            BTreeSet::from_iter(vec![format!("{} ~ {}", left, right)])
         }
 
         // Reference magic to work around Box. The box pattern is currently only available in nightly.
@@ -28,7 +28,7 @@ pub fn detect_hypotheses<T>(expression: &RExpression<T>) -> HashSet<Hypothesis> 
                                     (&**variable, &**inner_variable)
                                 {
                                     if first == second {
-                                        return HashSet::from_iter(vec![format!(
+                                        return BTreeSet::from_iter(vec![format!(
                                             "{} ~ {}",
                                             dependent, independent
                                         )]);
@@ -38,7 +38,7 @@ pub fn detect_hypotheses<T>(expression: &RExpression<T>) -> HashSet<Hypothesis> 
                         }
                     }
                 }
-                HashSet::new()
+                BTreeSet::new()
             }
 
             left => detect_hypotheses(left),
@@ -49,7 +49,7 @@ pub fn detect_hypotheses<T>(expression: &RExpression<T>) -> HashSet<Hypothesis> 
             .map(|(_, exp)| detect_hypotheses(exp))
             .flatten()
             .collect(),
-        _ => HashSet::new(),
+        _ => BTreeSet::new(),
     }
 }
 
@@ -64,32 +64,32 @@ mod tests {
     #[test]
     fn parses_formula() {
         let code = r#"dependent ~ independent"#;
-        let expected = HashSet::from_iter(vec!["dependent ~ independent".to_string()]);
+        let expected = BTreeSet::from_iter(vec!["dependent ~ independent".to_string()]);
         test_hypothesis(expected, code);
     }
 
     #[test]
     fn parses_formula_notation_in_call() {
         let code = r#"test(speed ~ layout + age)"#;
-        let expected = HashSet::from_iter(vec!["speed ~ layout + age".to_string()]);
+        let expected = BTreeSet::from_iter(vec!["speed ~ layout + age".to_string()]);
         test_hypothesis(expected, code);
     }
 
     #[test]
     fn parses_column_hypothesis() {
         let code = r#"variable[variable$independent == "level",]$dependent"#;
-        let expected = HashSet::from_iter(vec!["dependent ~ independent".to_string()]);
+        let expected = BTreeSet::from_iter(vec!["dependent ~ independent".to_string()]);
         test_hypothesis(expected, code);
     }
 
     #[test]
     fn parses_column_hypothesis_in_call() {
         let code = r#"fitdistr(kbd[kbd$Layout == "QWERTY",]$Speed, "lognormal")$estimate"#;
-        let expected = HashSet::from_iter(vec!["Speed ~ Layout".to_string()]);
+        let expected = BTreeSet::from_iter(vec!["Speed ~ Layout".to_string()]);
         test_hypothesis(expected, code);
     }
 
-    fn test_hypothesis(expected: HashSet<Hypothesis>, code: &'static str) {
+    fn test_hypothesis(expected: BTreeSet<Hypothesis>, code: &'static str) {
         let parsed = Parsed::parse(code).unwrap();
         let stmt = parsed.into_iter().next().unwrap();
         let exp = stmt.expression().unwrap();

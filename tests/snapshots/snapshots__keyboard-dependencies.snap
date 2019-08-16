@@ -1,5 +1,5 @@
 ---
-created: "2019-08-16T12:02:52.742840806Z"
+created: "2019-08-16T14:38:45.331188600Z"
 creator: insta@0.8.2
 source: tests/snapshots.rs
 expression: "tractus::parse_hypothesis_tree(parsed.iter(), &dependency_graph)"
@@ -5091,17 +5091,17 @@ HypothesisTree {
         ],
     },
     hypotheses: {
-        2: Hypotheses(
-            {
-                "logSpeed ~ Layout",
-            },
-        ),
         0: Hypotheses(
             {},
         ),
         1: Hypotheses(
             {
                 "Speed ~ Layout",
+            },
+        ),
+        2: Hypotheses(
+            {
+                "logSpeed ~ Layout",
             },
         ),
         3: Hypotheses(
