@@ -9,7 +9,7 @@ use log::{debug, info};
 use serde_json;
 use structopt::StructOpt;
 
-use tractus::Parsed;
+use tractus::{Parsed, LineTree};
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "tractus")]
@@ -35,7 +35,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let hypotheses = tractus::parse_hypothesis_tree(parsed.iter(), &dependency_graph);
 
     debug!("Serializing...");
-    let output = serde_json::to_string_pretty(&hypotheses)?;
+    let output = serde_json::to_string_pretty(&LineTree::from(&hypotheses))?;
     info!("Outputting...");
     let stdout = io::stdout();
     let mut handle = stdout.lock();

@@ -6,7 +6,7 @@ use std::iter::FromIterator;
 use itertools::Itertools;
 use log::debug;
 use pest::Parser;
-use serde::Serialize;
+use serde::{Serialize, Serializer};
 
 #[derive(Parser)]
 #[grammar = "r.pest"]
@@ -434,10 +434,10 @@ impl<T> Display for RExpression<T> {
 
 pub struct LineDisplay<'a, P>(&'a P)
 where
-    P: Extract<Span> + Display;
+    &'a P: Extract<Span> + Display;
 impl<'a, P> From<&'a P> for LineDisplay<'a, P>
 where
-    P: Extract<Span> + Display,
+    &'a P: Extract<Span> + Display,
 {
     fn from(other: &'a P) -> Self {
         LineDisplay(other)
@@ -445,7 +445,7 @@ where
 }
 impl<'a, P> Display for LineDisplay<'a, P>
 where
-    P: Extract<Span> + Display,
+    &'a P: Extract<Span> + Display,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let expression = self.0.borrow();
@@ -457,15 +457,23 @@ where
         write!(f, ": {}", self.0)
     }
 }
+impl<'a, P> Serialize for LineDisplay<'a, P> where &'a P: Extract<Span> + Display{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
 
 pub trait Extract<T> {
     fn extract(&self) -> &T;
 }
 
-impl<T> Extract<T> for RStatement<T> {
+impl<T> Extract<T> for &RStatement<T> {
     fn extract(&self) -> &T {
         use RStatement::*;
-        match self.borrow() {
+        match self {
             Empty(m) => m,
             Comment(_, m) => m,
             TailComment(_, _, m) => m,
@@ -479,10 +487,10 @@ impl<T> Extract<T> for RStatement<T> {
     }
 }
 
-impl<T> Extract<T> for RExpression<T> {
+impl<T> Extract<T> for &RExpression<T> {
     fn extract(&self) -> &T {
         use RExpression::*;
-        match self.borrow() {
+        match self {
             Constant(_, m) => m,
             Variable(_, m) => m,
             Call(_, _, m) => m,

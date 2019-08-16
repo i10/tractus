@@ -7,13 +7,28 @@ use serde::{Serialize};
 
 use crate::dependency_graph;
 use crate::hypotheses::{detect_hypotheses, Hypothesis};
-use crate::parser::{RExpression, RStatement};
+use crate::parser::{LineDisplay, RExpression, RStatement, Span};
 use dependency_graph::{DependencyGraph, NodeIndex};
 
 #[derive(Debug, Serialize)]
 pub struct HypothesisTree<'a, T: Eq> {
-    root: Branches<'a, T>,
+    root: Branches<&'a RExpression<T>>,
     hypotheses: HashMap<HypothesesId, Hypotheses>,
+}
+
+#[derive(Serialize)]
+pub struct LineTree<'a> {
+    root: Branches<LineDisplay<'a, RExpression<Span>>>,
+    hypotheses: &'a HashMap<HypothesesId, Hypotheses>
+}
+
+impl<'a> From<&'a HypothesisTree<'a,Span>> for LineTree<'a> {
+    fn from(other: &'a HypothesisTree<'a,Span>) -> Self {
+        LineTree {
+            root: map_branches(&other.root, &mut |e| LineDisplay::from(*e)),
+            hypotheses: &other.hypotheses
+        }
+    }
 }
 
 pub struct HypothesesMap(Vec<(Hypotheses)>);
@@ -47,12 +62,27 @@ impl HypothesesMap {
 
 pub type HypothesesId = usize;
 
-pub type Branches<'a, T> = BTreeMap<HypothesesId, Vec<Node<'a, T>>>;
+pub type Branches<C> = BTreeMap<HypothesesId, Vec<Node<C>>>;
 
 #[derive(Debug, PartialEq, Eq, Serialize)]
-pub struct Node<'a, T: Eq> {
-    pub expression: &'a RExpression<T>,
-    pub children: Branches<'a, T>,
+pub struct Node<C> {
+    #[serde(rename ="expression")]
+    pub content: C,
+    pub children: Branches<C>,
+}
+
+fn map_branches<C, N, F: FnMut(&C) -> N>(branches: &Branches<C>, mapping: &mut F) -> Branches<N> {
+    branches
+        .iter()
+        .map(|(id, children)| (*id, children.iter().map(|n| map_node(n, mapping)).collect()))
+        .collect()
+}
+
+fn map_node<C, N, F: FnMut(&C) -> N>(node: &Node<C>, mapping: &mut F) -> Node<N> {
+    Node {
+        content: mapping(&node.content),
+        children: map_branches(&node.children, mapping),
+    }
 }
 
 #[derive(Debug)]
@@ -61,9 +91,12 @@ struct RefNode {
     children: BTreeMap<HypothesesId, Vec<Rc<RefCell<RefNode>>>>,
 }
 
-fn convert<'a, T: Eq>(ref_node: RefNode, dependency_graph: &DependencyGraph<'a, T>) -> Node<'a, T> {
+fn convert<'a, T: Eq>(
+    ref_node: RefNode,
+    dependency_graph: &DependencyGraph<'a, T>,
+) -> Node<&'a RExpression<T>> {
     Node {
-        expression: dependency_graph.graph()[ref_node.id],
+        content: dependency_graph.graph()[ref_node.id],
         children: ref_node
             .children
             .into_iter()
@@ -288,22 +321,22 @@ mod tests {
 
         // Need to build from the inside out.
         let n4 = Node {
-            expression: input[3].expression().unwrap(),
+            content: input[3].expression().unwrap(),
             children: BTreeMap::new(),
         };
         let n3 = Node {
-            expression: input[2].expression().unwrap(),
+            content: input[2].expression().unwrap(),
             children: BTreeMap::new(),
         };
         let n2 = Node {
-            expression: input[1].expression().unwrap(),
+            content: input[1].expression().unwrap(),
             children: BTreeMap::from_iter(vec![
                 (find_hyp(&["Speed ~ Layout"], &tree), vec![n3]),
-                (find_hyp(&[] ,&tree), vec![n4]),
+                (find_hyp(&[], &tree), vec![n4]),
             ]),
         };
         let n1 = Node {
-            expression: input[0].expression().unwrap(),
+            content: input[0].expression().unwrap(),
             children: BTreeMap::from_iter(vec![(find_hyp(&[], &tree), vec![n2])]),
         };
         let mut expected = BTreeMap::new();
@@ -312,8 +345,16 @@ mod tests {
         assert_eq!(expected, tree.root);
     }
 
-    fn find_hyp<'a,T:Eq>(hyp: &[&'static str], tree: &HypothesisTree<'a, T>) -> HypothesesId {
-        let hypotheses = hyp.iter().map(|h| h.to_string()).collect::<HashSet<String>>();
-        *tree.hypotheses.iter().find(|(_, other)| other.0 == hypotheses).expect("Could not find hypotheses.").0
+    fn find_hyp<'a, T: Eq>(hyp: &[&'static str], tree: &HypothesisTree<'a, T>) -> HypothesesId {
+        let hypotheses = hyp
+            .iter()
+            .map(|h| h.to_string())
+            .collect::<HashSet<String>>();
+        *tree
+            .hypotheses
+            .iter()
+            .find(|(_, other)| other.0 == hypotheses)
+            .expect("Could not find hypotheses.")
+            .0
     }
 }

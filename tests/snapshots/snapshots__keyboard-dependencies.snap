@@ -1,5 +1,5 @@
 ---
-created: "2019-08-16T09:35:42.067489946Z"
+created: "2019-08-16T12:02:52.742840806Z"
 creator: insta@0.8.2
 source: tests/snapshots.rs
 expression: "tractus::parse_hypothesis_tree(parsed.iter(), &dependency_graph)"
@@ -8,7 +8,7 @@ HypothesisTree {
     root: {
         0: [
             Node {
-                expression: Call(
+                content: Call(
                     Variable(
                         "read.csv",
                         Span {
@@ -54,7 +54,7 @@ HypothesisTree {
                 children: {
                     0: [
                         Node {
-                            expression: Call(
+                            content: Call(
                                 Variable(
                                     "View",
                                     Span {
@@ -100,7 +100,7 @@ HypothesisTree {
                             children: {},
                         },
                         Node {
-                            expression: Call(
+                            content: Call(
                                 Variable(
                                     "factor",
                                     Span {
@@ -171,7 +171,7 @@ HypothesisTree {
                             children: {
                                 0: [
                                     Node {
-                                        expression: Call(
+                                        content: Call(
                                             Variable(
                                                 "summary",
                                                 Span {
@@ -217,7 +217,7 @@ HypothesisTree {
                                         children: {},
                                     },
                                     Node {
-                                        expression: Call(
+                                        content: Call(
                                             Variable(
                                                 "ddply",
                                                 Span {
@@ -394,7 +394,7 @@ HypothesisTree {
                                         children: {},
                                     },
                                     Node {
-                                        expression: Call(
+                                        content: Call(
                                             Variable(
                                                 "ddply",
                                                 Span {
@@ -580,7 +580,7 @@ HypothesisTree {
                                         children: {},
                                     },
                                     Node {
-                                        expression: Call(
+                                        content: Call(
                                             Variable(
                                                 "log",
                                                 Span {
@@ -651,7 +651,7 @@ HypothesisTree {
                                         children: {
                                             0: [
                                                 Node {
-                                                    expression: Call(
+                                                    content: Call(
                                                         Variable(
                                                             "View",
                                                             Span {
@@ -699,7 +699,7 @@ HypothesisTree {
                                             ],
                                             1: [
                                                 Node {
-                                                    expression: Call(
+                                                    content: Call(
                                                         Variable(
                                                             "leveneTest",
                                                             Span {
@@ -806,7 +806,7 @@ HypothesisTree {
                                                     children: {},
                                                 },
                                                 Node {
-                                                    expression: Call(
+                                                    content: Call(
                                                         Variable(
                                                             "aov",
                                                             Span {
@@ -895,7 +895,7 @@ HypothesisTree {
                                                     children: {
                                                         1: [
                                                             Node {
-                                                                expression: Call(
+                                                                content: Call(
                                                                     Variable(
                                                                         "anova",
                                                                         Span {
@@ -941,7 +941,7 @@ HypothesisTree {
                                                                 children: {},
                                                             },
                                                             Node {
-                                                                expression: Call(
+                                                                content: Call(
                                                                     Variable(
                                                                         "summary",
                                                                         Span {
@@ -1117,7 +1117,7 @@ HypothesisTree {
                                                         ],
                                                         3: [
                                                             Node {
-                                                                expression: Call(
+                                                                content: Call(
                                                                     Variable(
                                                                         "summary",
                                                                         Span {
@@ -1317,7 +1317,7 @@ HypothesisTree {
                                                     },
                                                 },
                                                 Node {
-                                                    expression: Call(
+                                                    content: Call(
                                                         Variable(
                                                             "plot",
                                                             Span {
@@ -1406,7 +1406,7 @@ HypothesisTree {
                                                     children: {},
                                                 },
                                                 Node {
-                                                    expression: Call(
+                                                    content: Call(
                                                         Variable(
                                                             "kruskal_test",
                                                             Span {
@@ -1513,7 +1513,7 @@ HypothesisTree {
                                                     children: {},
                                                 },
                                                 Node {
-                                                    expression: Call(
+                                                    content: Call(
                                                         Variable(
                                                             "wilcox.test",
                                                             Span {
@@ -1805,7 +1805,7 @@ HypothesisTree {
                                                     children: {},
                                                 },
                                                 Node {
-                                                    expression: Call(
+                                                    content: Call(
                                                         Variable(
                                                             "wilcox.test",
                                                             Span {
@@ -2097,7 +2097,7 @@ HypothesisTree {
                                                     children: {},
                                                 },
                                                 Node {
-                                                    expression: Call(
+                                                    content: Call(
                                                         Variable(
                                                             "wilcox.test",
                                                             Span {
@@ -2389,7 +2389,7 @@ HypothesisTree {
                                                     children: {
                                                         1: [
                                                             Node {
-                                                                expression: Call(
+                                                                content: Call(
                                                                     Variable(
                                                                         "p.adjust",
                                                                         Span {
@@ -2593,7 +2593,7 @@ HypothesisTree {
                                                     },
                                                 },
                                                 Node {
-                                                    expression: Call(
+                                                    content: Call(
                                                         Variable(
                                                             "posthoc.kruskal.conover.test",
                                                             Span {
@@ -2702,7 +2702,7 @@ HypothesisTree {
                                             ],
                                             2: [
                                                 Node {
-                                                    expression: Call(
+                                                    content: Call(
                                                         Variable(
                                                             "shapiro.test",
                                                             Span {
@@ -2854,7 +2854,7 @@ HypothesisTree {
                                                     children: {},
                                                 },
                                                 Node {
-                                                    expression: Call(
+                                                    content: Call(
                                                         Variable(
                                                             "aov",
                                                             Span {
@@ -2943,7 +2943,7 @@ HypothesisTree {
                                                     children: {
                                                         2: [
                                                             Node {
-                                                                expression: Call(
+                                                                content: Call(
                                                                     Variable(
                                                                         "shapiro.test",
                                                                         Span {
@@ -3019,7 +3019,7 @@ HypothesisTree {
                                                                 children: {},
                                                             },
                                                             Node {
-                                                                expression: Call(
+                                                                content: Call(
                                                                     Variable(
                                                                         "qqnorm",
                                                                         Span {
@@ -3095,7 +3095,7 @@ HypothesisTree {
                                                                 children: {},
                                                             },
                                                             Node {
-                                                                expression: Call(
+                                                                content: Call(
                                                                     Variable(
                                                                         "qqline",
                                                                         Span {
@@ -3174,7 +3174,7 @@ HypothesisTree {
                                                     },
                                                 },
                                                 Node {
-                                                    expression: Call(
+                                                    content: Call(
                                                         Variable(
                                                             "kruskal_test",
                                                             Span {
@@ -3286,7 +3286,7 @@ HypothesisTree {
                                 ],
                                 1: [
                                     Node {
-                                        expression: Call(
+                                        content: Call(
                                             Variable(
                                                 "hist",
                                                 Span {
@@ -3438,7 +3438,7 @@ HypothesisTree {
                                         children: {},
                                     },
                                     Node {
-                                        expression: Call(
+                                        content: Call(
                                             Variable(
                                                 "hist",
                                                 Span {
@@ -3590,7 +3590,7 @@ HypothesisTree {
                                         children: {},
                                     },
                                     Node {
-                                        expression: Call(
+                                        content: Call(
                                             Variable(
                                                 "hist",
                                                 Span {
@@ -3742,7 +3742,7 @@ HypothesisTree {
                                         children: {},
                                     },
                                     Node {
-                                        expression: Call(
+                                        content: Call(
                                             Variable(
                                                 "plot",
                                                 Span {
@@ -3831,7 +3831,7 @@ HypothesisTree {
                                         children: {},
                                     },
                                     Node {
-                                        expression: Call(
+                                        content: Call(
                                             Variable(
                                                 "shapiro.test",
                                                 Span {
@@ -3983,7 +3983,7 @@ HypothesisTree {
                                         children: {},
                                     },
                                     Node {
-                                        expression: Call(
+                                        content: Call(
                                             Variable(
                                                 "shapiro.test",
                                                 Span {
@@ -4135,7 +4135,7 @@ HypothesisTree {
                                         children: {},
                                     },
                                     Node {
-                                        expression: Call(
+                                        content: Call(
                                             Variable(
                                                 "shapiro.test",
                                                 Span {
@@ -4287,7 +4287,7 @@ HypothesisTree {
                                         children: {},
                                     },
                                     Node {
-                                        expression: Call(
+                                        content: Call(
                                             Variable(
                                                 "aov",
                                                 Span {
@@ -4376,7 +4376,7 @@ HypothesisTree {
                                         children: {
                                             1: [
                                                 Node {
-                                                    expression: Call(
+                                                    content: Call(
                                                         Variable(
                                                             "shapiro.test",
                                                             Span {
@@ -4452,7 +4452,7 @@ HypothesisTree {
                                                     children: {},
                                                 },
                                                 Node {
-                                                    expression: Call(
+                                                    content: Call(
                                                         Variable(
                                                             "qqnorm",
                                                             Span {
@@ -4528,7 +4528,7 @@ HypothesisTree {
                                                     children: {},
                                                 },
                                                 Node {
-                                                    expression: Call(
+                                                    content: Call(
                                                         Variable(
                                                             "qqline",
                                                             Span {
@@ -4607,7 +4607,7 @@ HypothesisTree {
                                         },
                                     },
                                     Node {
-                                        expression: Column(
+                                        content: Column(
                                             Call(
                                                 Variable(
                                                     "fitdistr",
@@ -4800,7 +4800,7 @@ HypothesisTree {
                                         children: {
                                             1: [
                                                 Node {
-                                                    expression: Call(
+                                                    content: Call(
                                                         Variable(
                                                             "ks.test",
                                                             Span {
@@ -5091,6 +5091,14 @@ HypothesisTree {
         ],
     },
     hypotheses: {
+        2: Hypotheses(
+            {
+                "logSpeed ~ Layout",
+            },
+        ),
+        0: Hypotheses(
+            {},
+        ),
         1: Hypotheses(
             {
                 "Speed ~ Layout",
@@ -5098,16 +5106,8 @@ HypothesisTree {
         ),
         3: Hypotheses(
             {
-                "pairwise ~ Layout",
                 "Speed ~ Layout",
-            },
-        ),
-        0: Hypotheses(
-            {},
-        ),
-        2: Hypotheses(
-            {
-                "logSpeed ~ Layout",
+                "pairwise ~ Layout",
             },
         ),
     },
