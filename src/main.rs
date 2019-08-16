@@ -24,8 +24,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     debug!("Started processing.");
     let opt = Opt::from_args();
+    if let Some(path) = opt.input {
+        let mut handle = std::fs::File::open(path)?;
+        process(&mut handle)?;
+    } else {
+        let stdin = io::stdin();
+        let mut handle = stdin.lock();
+        process(&mut handle)?;
+    }
+
+    Ok(())
+}
+
+fn process(handle: &mut impl Read) -> Result<(), Box<dyn std::error::Error>> {
     debug!("Reading from input...");
-    let code = read(opt.input)?;
+    let mut code = String::new();
+    handle.read_to_string(&mut code)?;
 
     info!("Parsing...");
     let parsed = Parsed::from(&code).unwrap_or_else(|e| panic!("{}", e));
@@ -36,25 +50,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     debug!("Serializing...");
     let output = serde_json::to_string_pretty(&LineTree::from(&hypotheses))?;
-    info!("Outputting...");
+    debug!("Outputting...");
     let stdout = io::stdout();
     let mut handle = stdout.lock();
     handle.write_all(output.as_bytes())?;
 
     info!("Done.");
     Ok(())
-}
-
-fn read(file: Option<PathBuf>) -> Result<String, Box<dyn std::error::Error>> {
-    let code = match file {
-        Some(path) => std::fs::read_to_string(path)?,
-        None => {
-            let stdin = io::stdin();
-            let mut handle = stdin.lock();
-            let mut code = String::new();
-            handle.read_to_string(&mut code)?;
-            code
-        }
-    };
-    Ok(code)
 }

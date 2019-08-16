@@ -51,7 +51,13 @@ impl<'a, T: Eq> DependencyGraph<'a, T> {
         graph
     }
 
-    pub fn insert(&mut self, statement: &'a RStatement<T>) {
+    pub fn batch_insert(&mut self, input: impl Iterator<Item = &'a RStatement<T>>) {
+        for statement in input {
+            self.insert(statement)
+        }
+    }
+
+    fn insert(&mut self, statement: &'a RStatement<T>) {
         use RStatement::*;
         match statement {
             Expression(expression, _) => {
@@ -74,12 +80,6 @@ impl<'a, T: Eq> DependencyGraph<'a, T> {
             TailComment(statement, _, _) => self.insert(statement),
             _ => (),
         };
-    }
-
-    pub fn batch_insert(&mut self, input: impl Iterator<Item = &'a RStatement<T>>) {
-        for statement in input {
-            self.insert(statement)
-        }
     }
 
     pub fn graph(&self) -> &Graph<'a, T> {
