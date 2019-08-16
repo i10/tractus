@@ -1,4 +1,4 @@
-use std::cell::RefCell; 
+use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::rc::Rc;
 
@@ -13,13 +13,13 @@ use dependency_graph::{DependencyGraph, NodeIndex};
 #[derive(Debug, Serialize)]
 pub struct HypothesisTree<'a, T: Eq> {
     root: Branches<&'a RExpression<T>>,
-    hypotheses: HashMap<HypothesesId, Hypotheses>,
+    hypotheses: BTreeMap<HypothesesId, Hypotheses>,
 }
 
 #[derive(Serialize)]
 pub struct LineTree<'a> {
     root: Branches<LineDisplay<'a, RExpression<Span>>>,
-    hypotheses: &'a HashMap<HypothesesId, Hypotheses>,
+    hypotheses: &'a BTreeMap<HypothesesId, Hypotheses>,
 }
 
 impl<'a> From<&'a HypothesisTree<'a, Span>> for LineTree<'a> {
@@ -55,7 +55,7 @@ impl HypothesesMap {
         }
     }
 
-    pub fn into_map(self) -> HashMap<HypothesesId, Hypotheses> {
+    pub fn into_map(self) -> BTreeMap<HypothesesId, Hypotheses> {
         self.0.into_iter().enumerate().collect()
     }
 }
