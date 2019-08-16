@@ -90,7 +90,7 @@ mod tests {
     }
 
     fn test_hypothesis(expected: HashSet<Hypothesis>, code: &'static str) {
-        let parsed = Parsed::from(code).unwrap();
+        let parsed = Parsed::parse(code).unwrap();
         let stmt = parsed.into_iter().next().unwrap();
         let exp = stmt.expression().unwrap();
         let result = detect_hypotheses(exp);

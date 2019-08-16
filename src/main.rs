@@ -5,7 +5,7 @@ use std::io::{Read, Write};
 use std::path::PathBuf;
 
 use env_logger;
-use log::{debug, info};
+use log::{debug,trace, info};
 use serde_json;
 use structopt::StructOpt;
 
@@ -22,27 +22,31 @@ struct Opt {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
 
-    debug!("Started processing.");
     let opt = Opt::from_args();
     if let Some(path) = opt.input {
-        let mut handle = std::fs::File::open(path)?;
-        process(&mut handle)?;
+        debug!("Reading from file {}", path.display());
+        let mut file = std::fs::File::open(path)?;
+        parse(&mut file)?;
     } else {
+        debug!("Reading from stdin.");
         let stdin = io::stdin();
         let mut handle = stdin.lock();
-        process(&mut handle)?;
-    }
+        parse(&mut handle)?;
+    };
 
     Ok(())
 }
 
-fn process(handle: &mut impl Read) -> Result<(), Box<dyn std::error::Error>> {
-    debug!("Reading from input...");
+fn parse(handle: &mut impl Read) -> Result<(), Box<dyn std::error::Error>> {
+    trace!("Reading...");
     let mut code = String::new();
     handle.read_to_string(&mut code)?;
+    process(&code)
+}
 
+fn process(code: &str) -> Result<(), Box<dyn std::error::Error>> {
     info!("Parsing...");
-    let parsed = Parsed::from(&code).unwrap_or_else(|e| panic!("{}", e));
+    let parsed = Parsed::parse(&code).unwrap_or_else(|e| panic!("{}", e));
     debug!("Parsing dependency graph...");
     let dependency_graph = tractus::DependencyGraph::from_input(parsed.iter());
     debug!("Parsing hypothesis tree...");

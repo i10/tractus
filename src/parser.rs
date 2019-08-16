@@ -553,21 +553,36 @@ macro_rules! unexpected_rule {
     };
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Parsed(Vec<Statement>);
 
 impl Parsed {
-    pub fn from(code: &str) -> Result<Self, Error> {
+    pub fn new() -> Self {
+        Parsed(vec![])
+    }
+
+    pub fn parse(code: &str) -> Result<Self, Error> {
+        let mut parsed = Self::new();
+        parsed.append(code)?;
+        Ok(parsed)
+    }
+
+    pub fn append(&mut self, code: &str) -> Result<&[Statement], Error> {
         debug!("Pest parsing...");
-        let parse_result = RParser::parse(Rule::file, code)?;
+        let parsed = RParser::parse(Rule::r_code, code)?;
 
         debug!("Assembling AST...");
-        Ok(parse_result
+        let mut new_statements: Vec<Statement> = parsed
             .filter_map(|token| match token.as_rule() {
                 Rule::EOI => None,
                 _ => Some(parse_line(token)),
             })
-            .collect())
+            .collect();
+
+        let added = new_statements.len();
+        self.0.append(&mut new_statements);
+        let len = self.0.len();
+        Ok(&self.0[len - added..])
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &Statement> {
@@ -835,7 +850,7 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     fn test_parse(code: &'static str) -> Vec<RStatement<()>> {
-        Parsed::from(code)
+        Parsed::parse(code)
             .unwrap_or_else(|e| panic!("{}", e))
             .into_iter()
             .map(|stmt| stmt.map(&mut |_| ()))

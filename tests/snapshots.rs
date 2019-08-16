@@ -64,7 +64,7 @@ fn test_snapshot(snapshot_path: &path::PathBuf, maybe_prefix: Option<&'static st
     let mut code = String::new();
     file.read_to_string(&mut code).unwrap();
 
-    let parsed = tractus::Parsed::from(&code)
+    let parsed = tractus::Parsed::parse(&code)
         .unwrap_or_else(|e| panic!("Parsing failed on file {}: {}", snapshot_path.display(), e));
     let file_stem = snapshot_path
         .as_path()
