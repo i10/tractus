@@ -10,6 +10,7 @@ use std::sync::mpsc;
 
 use clap_verbosity_flag;
 use env_logger;
+use ctrlc;
 use log::{debug, trace, info, warn};
 use notify;
 use serde_json;
@@ -50,6 +51,10 @@ enum Subcommand {
 }
 
 fn main() -> Res {
+    ctrlc::set_handler(move || {
+        println!("Stopping tractus.");
+    })?;
+
     let opt = Opt::from_args();
     let verbosity = opt.verbose.log_level().to_level_filter();
     init_logger(verbosity);
