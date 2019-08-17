@@ -5,17 +5,19 @@ use std::io;
 use std::io::{Read, Write};
 use std::path;
 use std::path::PathBuf;
+use std::sync::mpsc;
 
 use clap_verbosity_flag;
 use env_logger;
-use log::{debug, warn, info};
+use log::{debug, trace, info, warn};
+use notify;
 use serde_json;
 use structopt::StructOpt;
 
 use tractus::{LineTree, Parsed};
 
-#[derive(Debug, StructOpt)]
-#[structopt(name = "tractus")]
+#[derive(StructOpt)]
+#[structopt(name = "tractus", about = "Generate a hypotheses tree from R code.")]
 struct Opt {
     /// Input file, stdin if not present
     #[structopt(short = "i", parse(from_os_str))]
@@ -28,6 +30,22 @@ struct Opt {
     /// Force overwriting the output, without prompting
     #[structopt(short = "f")]
     overwrite: bool,
+    #[structopt(subcommand)]
+    subcmd: Option<Subcommand>,
+}
+
+#[derive(StructOpt)]
+enum Subcommand {
+    #[structopt(name = "watch")]
+    /// Watch an input file and update the output file on changes
+    Watch {
+        /// Input file, stdin if not present
+        #[structopt(short = "i", parse(from_os_str))]
+        input: PathBuf,
+        /// Output file that will be overwritten whenever the input changes
+        #[structopt(short = "o", parse(from_os_str))]
+        output: PathBuf,
+    },
 }
 
 fn main() -> Res {
@@ -35,17 +53,42 @@ fn main() -> Res {
     let verbosity = opt.verbose.log_level().to_level_filter();
     init_logger(verbosity);
 
-    let code = read_from(&opt.input)?;
-    let result = process(&code)?;
-    output(&opt.output, opt.overwrite, result)?;
+    if let Some(subcmd) = opt.subcmd {
+        debug!("Watch is enabled.");
+        let Subcommand::Watch {
+            input: input_path,
+            output: output_path,
+        } = subcmd;
+        let out = Some(output_path);
+
+        use notify::{DebouncedEvent,RecommendedWatcher, RecursiveMode, Watcher};
+        use std::time::Duration;
+        let (tx, rx) = mpsc::channel();
+        let mut watcher: RecommendedWatcher = Watcher::new(tx, Duration::from_millis(500))?;
+        watcher.watch(&input_path, RecursiveMode::NonRecursive)?;
+        println!("Watching file {}.", &input_path.display());
+        for event in rx {
+            trace!("Received new file event.");
+            if let DebouncedEvent::Write(input) = event
+            {
+                debug!("File changed: {}", input.display());
+                let code = read_from(&Some(input))?;
+                let result = process(&code)?;
+                output(&out, true, result)?;
+            }
+        }
+    } else {
+        debug!("Watch is disabled.");
+        let code = read_from(&opt.input)?;
+        let result = process(&code)?;
+        output(&opt.output, opt.overwrite, result)?;
+    }
 
     Ok(())
 }
 
 fn init_logger(level: log::LevelFilter) {
-    env_logger::Builder::new()
-        .filter_level(level)
-        .init();
+    env_logger::Builder::new().filter_level(level).init();
 }
 
 fn read_from(input: &Option<PathBuf>) -> Result<String, Box<dyn std::error::Error>> {
