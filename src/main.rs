@@ -1,6 +1,7 @@
 extern crate structopt;
 
 use std::fs;
+use std::borrow::Borrow;
 use std::io;
 use std::io::{Read, Write};
 use std::path;
@@ -59,29 +60,30 @@ fn main() -> Res {
             input: input_path,
             output: output_path,
         } = subcmd;
-        let out = Some(output_path);
 
+        // Set up watcher.
         use notify::{DebouncedEvent,RecommendedWatcher, RecursiveMode, Watcher};
         use std::time::Duration;
         let (tx, rx) = mpsc::channel();
         let mut watcher: RecommendedWatcher = Watcher::new(tx, Duration::from_millis(500))?;
         watcher.watch(&input_path, RecursiveMode::NonRecursive)?;
+
+        // Run once initially.
+        let out = Some(output_path);
+        execute(&Some(&input_path), &out, true)?;
+
         println!("Watching file {}.", &input_path.display());
         for event in rx {
             trace!("Received new file event.");
             if let DebouncedEvent::Write(input) = event
             {
                 debug!("File changed: {}", input.display());
-                let code = read_from(&Some(input))?;
-                let result = process(&code)?;
-                output(&out, true, result)?;
+                execute(&Some(&input), &out,true)?;
             }
         }
     } else {
         debug!("Watch is disabled.");
-        let code = read_from(&opt.input)?;
-        let result = process(&code)?;
-        output(&opt.output, opt.overwrite, result)?;
+        execute(&opt.input, &opt.output, opt.overwrite)?;
     }
 
     Ok(())
@@ -91,8 +93,17 @@ fn init_logger(level: log::LevelFilter) {
     env_logger::Builder::new().filter_level(level).init();
 }
 
-fn read_from(input: &Option<PathBuf>) -> Result<String, Box<dyn std::error::Error>> {
+fn execute(input_path: &Option<impl Borrow<PathBuf>>, output_path: &Option<impl Borrow<PathBuf>>, overwrite: bool) -> Res {
+    let code = read_from(input_path)?;
+    let result = process(&code)?;
+    output(output_path, overwrite, result)?;
+
+    Ok(())
+}
+
+fn read_from(input: &Option<impl Borrow<PathBuf>>) -> Result<String, Box<dyn std::error::Error>> {
     if let Some(path) = input {
+        let path = path.borrow();
         debug!("Reading from file {}", path.display());
         let mut file = std::fs::File::open(path)?;
         read(&mut file)
@@ -124,12 +135,13 @@ fn process(code: &str) -> Result<String, Box<dyn std::error::Error>> {
     Ok(result)
 }
 
-fn output(to: &Option<PathBuf>, force: bool, output: String) -> Res {
+fn output(to: &Option<impl Borrow<PathBuf>>, force: bool, output: String) -> Res {
     if let Some(watch_path) = to {
-        if path::Path::exists(&watch_path) {
+        let watch_path = watch_path.borrow();
+        if path::Path::exists(watch_path) {
             warn!("Path {} already exists.", watch_path.display());
             if !force {
-                debug!("Force not enabled, asking user how to proceed.");
+                debug!("Overwrite not enforced, asking user how to proceed.");
                 let mut confirmation = dialoguer::Confirmation::new();
                 confirmation.with_text(&format!(
                     "The file {} already exists. Do you want to overwrite it?",
@@ -140,7 +152,7 @@ fn output(to: &Option<PathBuf>, force: bool, output: String) -> Res {
                     return Ok(());
                 }
             } else {
-                debug!("Force enabled, overwriting output file.");
+                debug!("Overwrite enforced, overwriting output file.");
             }
         }
         println!("Outputting to file {}.", watch_path.display());
