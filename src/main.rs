@@ -6,8 +6,9 @@ use std::io::{Read, Write};
 use std::path;
 use std::path::PathBuf;
 
+use clap_verbosity_flag;
 use env_logger;
-use log::{debug, info};
+use log::{debug, warn, info};
 use serde_json;
 use structopt::StructOpt;
 
@@ -22,21 +23,29 @@ struct Opt {
     /// Output file, stdout if not present
     #[structopt(short = "o", parse(from_os_str))]
     output: Option<PathBuf>,
+    #[structopt(flatten)]
+    verbose: clap_verbosity_flag::Verbosity,
     /// Force overwriting the output, without prompting
     #[structopt(short = "f")]
     overwrite: bool,
 }
 
 fn main() -> Res {
-    env_logger::init();
-
     let opt = Opt::from_args();
+    let verbosity = opt.verbose.log_level().to_level_filter();
+    init_logger(verbosity);
 
     let code = read_from(&opt.input)?;
     let result = process(&code)?;
     output(&opt.output, opt.overwrite, result)?;
 
     Ok(())
+}
+
+fn init_logger(level: log::LevelFilter) {
+    env_logger::Builder::new()
+        .filter_level(level)
+        .init();
 }
 
 fn read_from(input: &Option<PathBuf>) -> Result<String, Box<dyn std::error::Error>> {
