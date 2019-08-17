@@ -83,15 +83,21 @@ fn process(code: &str) -> Result<String, Box<dyn std::error::Error>> {
 
 fn output(to: &Option<PathBuf>, force: bool, output: String) -> Res {
     if let Some(watch_path) = to {
-        if path::Path::exists(&watch_path) && !force {
-            let mut confirmation = dialoguer::Confirmation::new();
-            confirmation.with_text(&format!(
-                "The file {} already exists. Do you want to overwrite it?",
-                watch_path.display()
-            ));
-            if !confirmation.interact()? {
-                println!("Canceled.");
-                return Ok(());
+        if path::Path::exists(&watch_path) {
+            warn!("Path {} already exists.", watch_path.display());
+            if !force {
+                debug!("Force not enabled, asking user how to proceed.");
+                let mut confirmation = dialoguer::Confirmation::new();
+                confirmation.with_text(&format!(
+                    "The file {} already exists. Do you want to overwrite it?",
+                    watch_path.display()
+                ));
+                if !confirmation.interact()? {
+                    println!("Canceled.");
+                    return Ok(());
+                }
+            } else {
+                debug!("Force enabled, overwriting output file.");
             }
         }
         println!("Outputting to file {}.", watch_path.display());
