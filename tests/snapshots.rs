@@ -78,6 +78,6 @@ fn test_snapshot(snapshot_path: &path::PathBuf, maybe_prefix: Option<&'static st
     let dependency_graph = tractus::DependencyGraph::from_input(parsed.iter().cloned());
     assert_debug_snapshot_matches!(
         format!("{}-dependencies", snapshot_name),
-        tractus::parse_hypothesis_tree(parsed.iter().cloned(), &dependency_graph)
+        tractus::parse_hypothesis_tree(&dependency_graph)
     );
 }

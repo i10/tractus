@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::fmt::Debug;
 use std::rc::Rc;
 
 use petgraph::Direction;
@@ -7,7 +8,7 @@ use serde::Serialize;
 
 use crate::dependency_graph;
 use crate::hypotheses::{detect_hypotheses, Hypothesis};
-use crate::parser::{LineDisplay, RExpression, RStatement, Span};
+use crate::parser::{LineDisplay, RExpression, Span};
 use dependency_graph::{DependencyGraph, NodeIndex};
 
 #[derive(Debug, Serialize)]
@@ -37,7 +38,9 @@ impl<'a> LineTree<'a> {
     }
 }
 
+#[derive(Default)]
 pub struct HypothesesMap(Vec<(Hypotheses)>);
+
 impl HypothesesMap {
     pub fn new() -> Self {
         HypothesesMap(Vec::new())
@@ -142,9 +145,7 @@ impl PartialOrd for Hypotheses {
     }
 }
 
-pub fn parse_hypothesis_tree<T: Eq>(
-    dependency_graph: &DependencyGraph<T>,
-) -> HypothesisTree<T> {
+pub fn parse_hypothesis_tree<T: Eq>(dependency_graph: &DependencyGraph<T>) -> HypothesisTree<T> {
     let mut root: BTreeMap<HypothesesId, Vec<Rc<RefCell<RefNode>>>> = BTreeMap::new();
     let mut expression_map: HashMap<NodeIndex, HypothesesId> = HashMap::new();
     let mut hypotheses_map: HypothesesMap = HypothesesMap::new();
@@ -171,23 +172,22 @@ pub fn parse_hypothesis_tree<T: Eq>(
             .collect();
         parents.sort_unstable();
         match parents.last() {
-            Some(id) => {
-                let parent_ref = Rc::clone(node_map.get(&id).unwrap()); // Parent must be in node_map.
+            Some(parent_id) => {
+                let parent_ref = Rc::clone(node_map.get(&parent_id).unwrap()); // Parent must be in node_map.
                 let mut parent = parent_ref.borrow_mut();
                 parent
                     .children
                     .entry(*hypotheses_id)
                     .or_insert_with(|| vec![])
                     .push(ref_node.clone());
-                node_map.insert(*id, ref_node);
             }
             None => {
                 root.entry(*hypotheses_id)
                     .or_insert_with(|| vec![])
                     .push(ref_node.clone());
-                node_map.insert(id, ref_node);
             }
         }
+        node_map.insert(id, ref_node);
     }
 
     drop(node_map);
@@ -256,6 +256,8 @@ fn collect_hypotheses<T: Eq>(
     };
     expression_map.insert(id, hypotheses_id);
 }
+
+/*
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -331,3 +333,4 @@ mod tests {
             .0
     }
 }
+*/
