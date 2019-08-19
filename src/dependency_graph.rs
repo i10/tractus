@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use std::ops::Deref;
+use std::rc::Rc;
 
 use petgraph;
 
@@ -6,12 +8,12 @@ use crate::parser::{LineDisplay, RExpression, RIdentifier, RStatement, Span};
 
 type NodeIndexType = petgraph::graph::DefaultIx;
 pub type NodeIndex = petgraph::graph::NodeIndex<NodeIndexType>;
-type Graph<'a, T> = petgraph::Graph<&'a RExpression<T>, String, petgraph::Directed, NodeIndexType>;
+type Graph<T> = petgraph::Graph<Rc<RExpression<T>>, String, petgraph::Directed, NodeIndexType>;
 
 #[derive(Default, Debug)]
-pub struct DependencyGraph<'a, T: Eq> {
-    graph: Graph<'a, T>,
-    map: HashMap<&'a RExpression<T>, NodeIndex>,
+pub struct DependencyGraph<T: Eq> {
+    graph: Graph<T>,
+    map: HashMap<Rc<RExpression<T>>, NodeIndex>,
     variables: VariableMap,
 }
 
@@ -36,7 +38,7 @@ impl VariableMap {
     }
 }
 
-impl<'a, T: Eq> DependencyGraph<'a, T> {
+impl<T: Eq> DependencyGraph<T> {
     pub fn new() -> Self {
         DependencyGraph {
             graph: Graph::new(),
@@ -45,21 +47,21 @@ impl<'a, T: Eq> DependencyGraph<'a, T> {
         }
     }
 
-    pub fn from_input(input: impl Iterator<Item = &'a RStatement<T>>) -> Self {
+    pub fn from_input(input: impl Iterator<Item = Rc<RStatement<T>>>) -> Self {
         let mut graph = Self::new();
         graph.batch_insert(input);
         graph
     }
 
-    pub fn batch_insert(&mut self, input: impl Iterator<Item = &'a RStatement<T>>) {
+    pub fn batch_insert(&mut self, input: impl Iterator<Item = Rc<RStatement<T>>>) {
         for statement in input {
             self.insert(statement)
         }
     }
 
-    fn insert(&mut self, statement: &'a RStatement<T>) {
+    fn insert(&mut self, statement: Rc<RStatement<T>>) {
         use RStatement::*;
-        match statement {
+        match &*statement {
             Expression(expression, _) => {
                 register_dependencies(expression, self);
             }
@@ -77,16 +79,16 @@ impl<'a, T: Eq> DependencyGraph<'a, T> {
                     };
                 }
             }
-            TailComment(statement, _, _) => self.insert(statement),
+            TailComment(statement, _, _) => self.insert(statement.clone()),
             _ => (),
         };
     }
 
-    pub fn graph(&self) -> &Graph<'a, T> {
+    pub fn graph(&self) -> &Graph<T> {
         &self.graph
     }
 
-    pub fn graph_mut(&mut self) -> &mut Graph<'a, T> {
+    pub fn graph_mut(&mut self) -> &mut Graph<T> {
         &mut self.graph
     }
 
@@ -95,9 +97,9 @@ impl<'a, T: Eq> DependencyGraph<'a, T> {
     }
 }
 
-pub struct GraphLineDisplay<'a>(&'a DependencyGraph<'a, Span>);
-impl<'a> From<&'a DependencyGraph<'a, Span>> for GraphLineDisplay<'a> {
-    fn from(other: &'a DependencyGraph<'a, Span>) -> Self {
+pub struct GraphLineDisplay<'a>(&'a DependencyGraph<Span>);
+impl<'a> From<&'a DependencyGraph<Span>> for GraphLineDisplay<'a> {
+    fn from(other: &'a DependencyGraph<Span>) -> Self {
         GraphLineDisplay(other)
     }
 }
@@ -106,19 +108,19 @@ impl<'a> std::fmt::Display for GraphLineDisplay<'a> {
         let dependency_graph = self.0;
         let mapped = dependency_graph
             .graph()
-            .map(|_, n| LineDisplay::from(*n), |_, e| e);
+            .map(|_, n| LineDisplay::from(n), |_, e| e);
         let display_graph = petgraph::dot::Dot::new(&mapped);
         write!(f, "{}", display_graph)
     }
 }
 
-fn register_dependencies<'a, T: Eq>(
-    expression: &'a RExpression<T>,
-    dependency_graph: &mut DependencyGraph<'a, T>,
+fn register_dependencies<T: Eq>(
+    expression: &Rc<RExpression<T>>,
+    dependency_graph: &mut DependencyGraph<T>,
 ) -> NodeIndex {
-    let dependencies = extract_dependencies(expression);
-    let node_id = dependency_graph.graph.add_node(expression);
-    dependency_graph.map.insert(expression, node_id);
+    let dependencies = extract_dependencies(&expression);
+    let node_id = dependency_graph.graph.add_node(expression.clone());
+    dependency_graph.map.insert(expression.clone(), node_id);
     for dependency in dependencies {
         if let Some(parent) = dependency_graph.variables.get(&dependency) {
             dependency_graph
@@ -132,9 +134,9 @@ fn register_dependencies<'a, T: Eq>(
     node_id
 }
 
-fn extract_dependencies<T>(expression: &RExpression<T>) -> Vec<RIdentifier> {
+fn extract_dependencies<T>(expression: &Rc<RExpression<T>>) -> Vec<RIdentifier> {
     use RExpression::*;
-    match expression {
+    match expression.deref() {
         Variable(name, _) => vec![name.clone()],
         Call(_, arguments, _) => arguments
             .iter()
@@ -145,7 +147,7 @@ fn extract_dependencies<T>(expression: &RExpression<T>) -> Vec<RIdentifier> {
         _ => vec![],
     }
 }
-
+/*
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -502,3 +504,5 @@ mod tests {
         assert_eq!(None, graph.id(&RExpression::variable("nonexistant")));
     }
 }
+
+*/

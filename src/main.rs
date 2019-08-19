@@ -1,7 +1,8 @@
 extern crate structopt;
+extern crate tractus;
 
-use std::fs;
 use std::borrow::Borrow;
+use std::fs;
 use std::io;
 use std::io::{Read, Write};
 use std::path;
@@ -9,9 +10,9 @@ use std::path::PathBuf;
 use std::sync::mpsc;
 
 use clap_verbosity_flag;
-use env_logger;
 use ctrlc;
-use log::{debug, trace, info, warn};
+use env_logger;
+use log::{debug, info, trace, warn};
 use notify;
 use serde_json;
 use structopt::StructOpt;
@@ -67,7 +68,7 @@ fn main() -> Res {
         } = subcmd;
 
         // Set up watcher.
-        use notify::{DebouncedEvent,RecommendedWatcher, RecursiveMode, Watcher};
+        use notify::{DebouncedEvent, RecommendedWatcher, RecursiveMode, Watcher};
         use std::time::Duration;
         let (tx, rx) = mpsc::channel();
         let mut watcher: RecommendedWatcher = Watcher::new(tx, Duration::from_millis(500))?;
@@ -80,10 +81,9 @@ fn main() -> Res {
         println!("Watching file {}.", &input_path.display());
         for event in rx {
             trace!("Received new file event.");
-            if let DebouncedEvent::Write(input) = event
-            {
+            if let DebouncedEvent::Write(input) = event {
                 debug!("File changed: {}", input.display());
-                execute(&Some(&input), &out,true)?;
+                execute(&Some(&input), &out, true)?;
             }
         }
     } else {
@@ -98,7 +98,11 @@ fn init_logger(level: log::LevelFilter) {
     env_logger::Builder::new().filter_level(level).init();
 }
 
-fn execute(input_path: &Option<impl Borrow<PathBuf>>, output_path: &Option<impl Borrow<PathBuf>>, overwrite: bool) -> Res {
+fn execute(
+    input_path: &Option<impl Borrow<PathBuf>>,
+    output_path: &Option<impl Borrow<PathBuf>>,
+    overwrite: bool,
+) -> Res {
     let code = read_from(input_path)?;
     let result = process(&code)?;
     output(output_path, overwrite, result)?;
@@ -130,9 +134,9 @@ fn process(code: &str) -> Result<String, Box<dyn std::error::Error>> {
     info!("Parsing...");
     let parsed = Parsed::parse(&code).unwrap_or_else(|e| panic!("{}", e));
     debug!("Parsing dependency graph...");
-    let dependency_graph = tractus::DependencyGraph::from_input(parsed.iter());
+    let dependency_graph = tractus::DependencyGraph::from_input(parsed.iter().cloned());
     debug!("Parsing hypothesis tree...");
-    let hypotheses = tractus::parse_hypothesis_tree(parsed.iter(), &dependency_graph);
+    let hypotheses = tractus::parse_hypothesis_tree(parsed.iter().cloned(), &dependency_graph);
 
     debug!("Serializing...");
     let result = serde_json::to_string_pretty(&LineTree::from(&hypotheses))?;

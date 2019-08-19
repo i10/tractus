@@ -11,21 +11,21 @@ use crate::parser::{LineDisplay, RExpression, RStatement, Span};
 use dependency_graph::{DependencyGraph, NodeIndex};
 
 #[derive(Debug, Serialize)]
-pub struct HypothesisTree<'a, T: Eq> {
-    root: Branches<&'a RExpression<T>>,
+pub struct HypothesisTree<T: Eq> {
+    root: Branches<Rc<RExpression<T>>>,
     hypotheses: BTreeMap<HypothesesId, Hypotheses>,
 }
 
 #[derive(Serialize)]
 pub struct LineTree<'a> {
-    root: Branches<LineDisplay<'a, RExpression<Span>>>,
+    root: Branches<String>,
     hypotheses: &'a BTreeMap<HypothesesId, Hypotheses>,
 }
 
-impl<'a> From<&'a HypothesisTree<'a, Span>> for LineTree<'a> {
-    fn from(other: &'a HypothesisTree<'a, Span>) -> Self {
+impl<'a> From<&'a HypothesisTree<Span>> for LineTree<'a> {
+    fn from(other: &'a HypothesisTree<Span>) -> Self {
         LineTree {
-            root: map_branches(&other.root, &mut |e| LineDisplay::from(*e)),
+            root: map_branches(&other.root, &mut |e| format!("{}", LineDisplay::from(e))),
             hypotheses: &other.hypotheses,
         }
     }
@@ -91,12 +91,12 @@ struct RefNode {
     children: BTreeMap<HypothesesId, Vec<Rc<RefCell<RefNode>>>>,
 }
 
-fn convert<'a, T: Eq>(
+fn convert<T: Eq>(
     ref_node: RefNode,
-    dependency_graph: &DependencyGraph<'a, T>,
-) -> Node<&'a RExpression<T>> {
+    dependency_graph: &DependencyGraph<T>,
+) -> Node<Rc<RExpression<T>>> {
     Node {
-        content: dependency_graph.graph()[ref_node.id],
+        content: dependency_graph.graph()[ref_node.id].clone(),
         children: ref_node
             .children
             .into_iter()
@@ -136,25 +136,25 @@ impl PartialOrd for Hypotheses {
     }
 }
 
-pub fn parse_hypothesis_tree<'a, T: Eq>(
-    input: impl Iterator<Item = &'a RStatement<T>>,
-    dependency_graph: &DependencyGraph<'a, T>,
-) -> HypothesisTree<'a, T> {
+pub fn parse_hypothesis_tree<T: Eq>(
+    input: impl Iterator<Item = Rc<RStatement<T>>>,
+    dependency_graph: &DependencyGraph<T>,
+) -> HypothesisTree<T> {
     let mut root: BTreeMap<HypothesesId, Vec<Rc<RefCell<RefNode>>>> = BTreeMap::new();
-    let mut expression_map: HashMap<&'a RExpression<T>, HypothesesId> = HashMap::new();
+    let mut expression_map: HashMap<Rc<RExpression<T>>, HypothesesId> = HashMap::new();
     let mut hypotheses_map: HypothesesMap = HypothesesMap::new();
     let mut node_map: HashMap<NodeIndex, Rc<RefCell<RefNode>>> = HashMap::new();
 
     let expressions = input.filter_map(|statement| statement.expression());
     for expression in expressions {
         collect_hypotheses(
-            expression,
+            &expression,
             &mut hypotheses_map,
             &mut expression_map,
             &dependency_graph,
         );
-        let hypotheses_id = expression_map.get(expression).unwrap(); // This expression's hypotheses were just collected.
-        let node_id = dependency_graph.id(expression).unwrap(); // Expression must be inside dependency graph.
+        let hypotheses_id = expression_map.get(&expression).unwrap(); // This expression's hypotheses were just collected.
+        let node_id = dependency_graph.id(&expression).unwrap(); // Expression must be inside dependency graph.
         let ref_node = Rc::new(RefCell::new(RefNode {
             id: node_id,
             children: BTreeMap::new(),
@@ -205,17 +205,17 @@ pub fn parse_hypothesis_tree<'a, T: Eq>(
 }
 
 fn collect_hypotheses<'a, T: Eq>(
-    expression: &'a RExpression<T>,
+    expression: &Rc<RExpression<T>>,
     hypotheses_map: &mut HypothesesMap,
-    expression_map: &mut HashMap<&'a RExpression<T>, HypothesesId>,
-    dependency_graph: &DependencyGraph<'a, T>,
+    expression_map: &mut HashMap<Rc<RExpression<T>>, HypothesesId>,
+    dependency_graph: &DependencyGraph<T>,
 ) {
     let node_id = dependency_graph.id(expression).unwrap(); // Expression must be inside dependency graph.
     let inherited_hypotheses: Vec<Hypothesis> = dependency_graph
         .graph()
         .neighbors_directed(node_id, Direction::Incoming)
         .map(|id| {
-            let exp = dependency_graph.graph()[id];
+            let exp = &dependency_graph.graph()[id];
             expression_map
                 .get(exp)
                 .map(|id| {
@@ -227,7 +227,7 @@ fn collect_hypotheses<'a, T: Eq>(
                         .cloned()
                         .collect::<Vec<Hypothesis>>()
                 })
-                .unwrap_or_else(|| Hypotheses(detect_hypotheses(exp)).0.into_iter().collect())
+                .unwrap_or_else(|| Hypotheses(detect_hypotheses(&exp)).0.into_iter().collect())
         })
         .flatten()
         .collect();
@@ -241,16 +241,16 @@ fn collect_hypotheses<'a, T: Eq>(
             id
         }
         None => {
-            let mut hypotheses = Hypotheses(detect_hypotheses(expression));
+            let mut hypotheses = Hypotheses(detect_hypotheses(&expression));
             for hyp in inherited_hypotheses {
                 hypotheses.0.insert(hyp);
             }
             hypotheses_map.insert(hypotheses)
         }
     };
-    expression_map.insert(expression, hypotheses_id);
+    expression_map.insert(expression.clone(), hypotheses_id);
 }
-
+/*
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -269,8 +269,8 @@ mod tests {
             ),
             RStatement::Assignment(
                 RExpression::Column(
-                    Box::new(RExpression::variable("kbd")),
-                    Box::new(RExpression::constant("ParticipantID")),
+                    Rc::new(RExpression::variable("kbd")),
+                    Rc::new(RExpression::constant("ParticipantID")),
                     (),
                 ),
                 vec![],
@@ -279,8 +279,8 @@ mod tests {
                     vec![(
                         None,
                         RExpression::Column(
-                            Box::new(RExpression::variable("kbd")),
-                            Box::new(RExpression::constant("ParticipantID")),
+                            Rc::new(RExpression::variable("kbd")),
+                            Rc::new(RExpression::constant("ParticipantID")),
                             (),
                         ),
                     )],
@@ -295,8 +295,8 @@ mod tests {
                         (
                             None,
                             RExpression::TwoSidedFormula(
-                                Box::new(RExpression::variable("Speed")),
-                                Box::new(RExpression::variable("Layout")),
+                                Rc::new(RExpression::variable("Speed")),
+                                Rc::new(RExpression::variable("Layout")),
                                 (),
                             ),
                         ),
@@ -358,3 +358,5 @@ mod tests {
             .0
     }
 }
+
+*/
