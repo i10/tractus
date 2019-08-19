@@ -204,7 +204,7 @@ pub fn parse_hypothesis_tree<T: Eq>(
     }
 }
 
-fn collect_hypotheses<'a, T: Eq>(
+fn collect_hypotheses<T: Eq>(
     expression: &Rc<RExpression<T>>,
     hypotheses_map: &mut HypothesesMap,
     expression_map: &mut HashMap<Rc<RExpression<T>>, HypothesesId>,

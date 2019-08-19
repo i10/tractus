@@ -1,9 +1,8 @@
 use std::borrow::Borrow;
-use std::ops::Deref;
 use std::fmt::{Display, Write};
-use std::rc::Rc;
 use std::hash::{Hash, Hasher};
 use std::iter::FromIterator;
+use std::rc::Rc;
 
 use itertools::Itertools;
 use log::debug;
@@ -100,7 +99,9 @@ impl<T> RStatement<T> {
             If(exp, body, else_body, m) => If(
                 exp.map(mapping),
                 body.iter().map(|stmt| stmt.map(mapping)).collect(),
-                else_body.as_ref().map(|b| b.iter().map(|stmt| stmt.map(mapping)).collect()),
+                else_body
+                    .as_ref()
+                    .map(|b| b.iter().map(|stmt| stmt.map(mapping)).collect()),
                 mapping(m),
             ),
             While(condition, body, m) => While(
@@ -116,8 +117,7 @@ impl<T> RStatement<T> {
             ),
             Library(id, m) => Library(id.clone(), mapping(m)),
             Expression(exp, m) => Expression(exp.map(mapping), mapping(m)),
-        }
-        )
+        })
     }
 
     pub fn expression(&self) -> Option<Rc<RExpression<T>>> {
@@ -200,8 +200,16 @@ pub enum RExpression<Meta> {
         Meta,
     ),
     Column(Rc<RExpression<Meta>>, Rc<RExpression<Meta>>, Meta),
-    Index(Rc<RExpression<Meta>>, Vec<Option<Rc<RExpression<Meta>>>>, Meta),
-    ListIndex(Rc<RExpression<Meta>>, Vec<Option<Rc<RExpression<Meta>>>>, Meta),
+    Index(
+        Rc<RExpression<Meta>>,
+        Vec<Option<Rc<RExpression<Meta>>>>,
+        Meta,
+    ),
+    ListIndex(
+        Rc<RExpression<Meta>>,
+        Vec<Option<Rc<RExpression<Meta>>>>,
+        Meta,
+    ),
     OneSidedFormula(Rc<RExpression<Meta>>, Meta),
     TwoSidedFormula(Rc<RExpression<Meta>>, Rc<RExpression<Meta>>, Meta),
     Function(
@@ -294,11 +302,7 @@ impl<T> RExpression<T> {
                     .collect(),
                 mapping(m),
             ),
-            Column(left, right, m) => Column(
-                left.map(mapping),
-                right.map(mapping),
-                mapping(m),
-            ),
+            Column(left, right, m) => Column(left.map(mapping), right.map(mapping), mapping(m)),
             Index(left, right, m) => Index(
                 left.map(mapping),
                 right
@@ -315,20 +319,18 @@ impl<T> RExpression<T> {
                     .collect(),
                 mapping(m),
             ),
-            OneSidedFormula(formula, m) => {
-                OneSidedFormula(formula.map(mapping), mapping(m))
+            OneSidedFormula(formula, m) => OneSidedFormula(formula.map(mapping), mapping(m)),
+            TwoSidedFormula(left, right, m) => {
+                TwoSidedFormula(left.map(mapping), right.map(mapping), mapping(m))
             }
-            TwoSidedFormula(left, right, m) => TwoSidedFormula(
-                left.map(mapping),
-                right.map(mapping),
-                mapping(m),
-            ),
             Function(args, body, m) => Function(
                 args.iter()
                     .map(|(name, maybe_statement)| {
                         (
                             name.clone(),
-                            maybe_statement.as_ref().map(|statement| statement.map(mapping)),
+                            maybe_statement
+                                .as_ref()
+                                .map(|statement| statement.map(mapping)),
                         )
                     })
                     .collect(),
@@ -344,8 +346,7 @@ impl<T> RExpression<T> {
                 right.map(mapping),
                 mapping(m),
             ),
-        }
-        )
+        })
     }
 
     pub fn extract_variable_name(&self) -> Option<RIdentifier> {
@@ -763,13 +764,7 @@ fn parse_expression(expression_pair: pest::iterators::Pair<Rule>) -> Rc<Expressi
         let infix_span = Span::from(&infix);
         rexp = Rc::new(match infix.as_rule() {
             Rule::function_call => parse_function_expression(rexp, infix),
-            Rule::column => {
-                RExpression::Column(
-                    rexp,
-                    parse_expression(infix),
-                    infix_span,
-                )
-            }
+            Rule::column => RExpression::Column(rexp, parse_expression(infix), infix_span),
             Rule::index => {
                 let indices = infix
                     .into_inner()
@@ -804,11 +799,7 @@ fn parse_expression(expression_pair: pest::iterators::Pair<Rule>) -> Rc<Expressi
                 )
             }
             Rule::formula => {
-                RExpression::TwoSidedFormula(
-                    rexp,
-                    parse_expression(infix),
-                    infix_span,
-                )
+                RExpression::TwoSidedFormula(rexp, parse_expression(infix), infix_span)
             }
             r => unexpected_rule!(r, infix),
         });
