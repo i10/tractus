@@ -250,93 +250,60 @@ fn collect_hypotheses<T: Eq>(
     };
     expression_map.insert(expression.clone(), hypotheses_id);
 }
-/*
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
     use std::iter::FromIterator;
 
     use super::*;
+    use crate::{assignment, call, column, constant, expression, two_sided_formula, variable};
 
     #[test]
     fn simple_hypothesis_tree() {
         let input = vec![
-            RStatement::Assignment(
-                RExpression::variable("kbd"),
+            assignment!(variable!("kbd"), vec![], constant!("data frame")),
+            assignment!(
+                column!(variable!("kbd"), constant!("ParticipantID")),
                 vec![],
-                RExpression::constant("data frame"),
-                (),
+                call!(
+                    variable!("factor"),
+                    vec![(None, column!(variable!("kbd"), constant!("ParticipantID")))]
+                )
             ),
-            RStatement::Assignment(
-                RExpression::Column(
-                    Rc::new(RExpression::variable("kbd")),
-                    Rc::new(RExpression::constant("ParticipantID")),
-                    (),
-                ),
-                vec![],
-                RExpression::Call(
-                    RExpression::boxed_variable("factor"),
-                    vec![(
+            expression!(call!(
+                variable!("plot"),
+                vec![
+                    (
                         None,
-                        RExpression::Column(
-                            Rc::new(RExpression::variable("kbd")),
-                            Rc::new(RExpression::constant("ParticipantID")),
-                            (),
-                        ),
-                    )],
-                    (),
-                ),
-                (),
-            ),
-            RStatement::Expression(
-                RExpression::Call(
-                    RExpression::boxed_variable("plot"),
-                    vec![
-                        (
-                            None,
-                            RExpression::TwoSidedFormula(
-                                Rc::new(RExpression::variable("Speed")),
-                                Rc::new(RExpression::variable("Layout")),
-                                (),
-                            ),
-                        ),
-                        (Some("data".into()), RExpression::variable("kbd")),
-                    ],
-                    (),
-                ),
-                (),
-            ),
-            RStatement::Expression(
-                RExpression::Call(
-                    RExpression::boxed_variable("summary"),
-                    vec![(None, RExpression::variable("kbd"))],
-                    (),
-                ),
-                (),
-            ),
+                        two_sided_formula!(variable!("Speed"), variable!("Layout")),
+                    ),
+                    (Some("data".into()), variable!("kbd")),
+                ]
+            )),
+            expression!(call!(variable!("summary"), vec![(None, variable!("kbd"))])),
         ];
 
-        let dependency_graph = DependencyGraph::from_input(input.iter());
-        let tree = parse_hypothesis_tree(input.iter(), &dependency_graph);
+        let dependency_graph = DependencyGraph::from_input(input.iter().cloned());
+        let tree = parse_hypothesis_tree(input.iter().cloned(), &dependency_graph);
 
         // Need to build from the inside out.
         let n4 = Node {
-            content: input[3].expression().unwrap(),
+            content: input[3].expression().unwrap().clone(),
             children: BTreeMap::new(),
         };
         let n3 = Node {
-            content: input[2].expression().unwrap(),
+            content: input[2].expression().unwrap().clone(),
             children: BTreeMap::new(),
         };
         let n2 = Node {
-            content: input[1].expression().unwrap(),
+            content: input[1].expression().unwrap().clone(),
             children: BTreeMap::from_iter(vec![
                 (find_hyp(&["Speed ~ Layout"], &tree), vec![n3]),
                 (find_hyp(&[], &tree), vec![n4]),
             ]),
         };
         let n1 = Node {
-            content: input[0].expression().unwrap(),
+            content: input[0].expression().unwrap().clone(),
             children: BTreeMap::from_iter(vec![(find_hyp(&[], &tree), vec![n2])]),
         };
         let mut expected = BTreeMap::new();
@@ -345,7 +312,7 @@ mod tests {
         assert_eq!(expected, tree.root);
     }
 
-    fn find_hyp<'a, T: Eq>(hyp: &[&'static str], tree: &HypothesisTree<'a, T>) -> HypothesesId {
+    fn find_hyp<E: Eq>(hyp: &[&'static str], tree: &HypothesisTree<E>) -> HypothesesId {
         let hypotheses = hyp
             .iter()
             .map(|h| h.to_string())
@@ -358,5 +325,3 @@ mod tests {
             .0
     }
 }
-
-*/
