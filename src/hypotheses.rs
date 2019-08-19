@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
-use std::ops::Deref;
 use std::iter::FromIterator;
+use std::ops::Deref;
 
 use crate::parser::RExpression;
 
@@ -23,24 +23,24 @@ pub fn detect_hypotheses<T>(expression: &RExpression<T>) -> BTreeSet<Hypothesis>
                 // If the column matches the above format, then return the hypotheses, else return nothing.
 
                 //if let [Some(Infix(operator, inner_left, _, _)), None] = inner.as_slice() {
-                if inner.len() == 2 &&  inner[1].is_none() {
+                if inner.len() == 2 && inner[1].is_none() {
                     if let Some(infix) = &inner[0] {
-                    if let Infix(operator, inner_left, _, _) = infix.deref() {
-                    if operator == "==" {
-                        if let Column(inner_variable, independent, _) = inner_left.deref() {
-                            if let Variable(_, _) = independent.deref() {
-                                if let (Variable(first, _), Variable(second, _)) =
-                                    (variable.deref(), inner_variable.deref())
-                                {
-                                    if first == second {
-                                        return BTreeSet::from_iter(vec![format!(
-                                            "{} ~ {}",
-                                            dependent, independent
-                                        )]);
+                        if let Infix(operator, inner_left, _, _) = infix.deref() {
+                            if operator == "==" {
+                                if let Column(inner_variable, independent, _) = inner_left.deref() {
+                                    if let Variable(_, _) = independent.deref() {
+                                        if let (Variable(first, _), Variable(second, _)) =
+                                            (variable.deref(), inner_variable.deref())
+                                        {
+                                            if first == second {
+                                                return BTreeSet::from_iter(vec![format!(
+                                                    "{} ~ {}",
+                                                    dependent, independent
+                                                )]);
+                                            }
+                                        }
                                     }
                                 }
-                            }
-                        }
                             }
                         }
                     }
@@ -59,7 +59,6 @@ pub fn detect_hypotheses<T>(expression: &RExpression<T>) -> BTreeSet<Hypothesis>
         _ => BTreeSet::new(),
     }
 }
-/*
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -106,4 +105,3 @@ mod tests {
     }
 
 }
-*/
