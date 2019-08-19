@@ -7,6 +7,7 @@ use std::io;
 use std::io::{Read, Write};
 use std::path;
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::sync::mpsc;
 
 use clap_verbosity_flag;
@@ -20,7 +21,7 @@ use serde_json;
 use structopt::StructOpt;
 
 use tractus::parser;
-use tractus::Parsed;
+use tractus::{LineTree, Parsed};
 
 #[derive(StructOpt)]
 #[structopt(name = "tractus", about = "Generate a hypotheses tree from R code.")]
@@ -219,52 +220,65 @@ fn parse_from_offset(
 
     use io::BufRead;
     info!("Parsing...");
-    for line in reader.lines() {
-        let line = line?;
-        total_offset += line.len() as u64;
-        trace!(
-            "Parsing from offset {}, current offset is {}.",
-            unparsed_offset,
-            total_offset
-        );
+    let new_parsed_statements: Vec<Rc<parser::Statement>> = reader
+        .lines()
+        .map(|line| {
+            let line = line?;
+            total_offset += line.len() as u64;
+            trace!(
+                "Parsing from offset {}, current offset is {}.",
+                unparsed_offset,
+                total_offset
+            );
 
-        trace!("Parsing line: {}", line);
-        let cleaned = clean_input(line, clean);
+            trace!("Parsing line: {}", line);
+            let cleaned = clean_input(line, clean);
 
-        unparsed.push(cleaned);
+            unparsed.push(cleaned);
 
-        let to_parse = unparsed.join("\n");
-        let parsed_result = parsed.append(&to_parse);
-        if let Err(e) = parsed_result {
-            trace!("Parsing error in input: {}", e);
+            let to_parse = unparsed.join("\n");
+            let parsed_result = parsed.append(&to_parse);
+            match parsed_result {
+                Err(e) => {
+                    trace!("Parsing error in input: {}", e);
 
-            // If the parsing error occurred at the very last symbol,
-            // we assume that it is simply incomplete and will try again when we have more input.
-            if let pest::error::InputLocation::Pos(pos) = e.location {
-                trace!(
-                    "Error position is {}, last position is {}.",
-                    pos,
-                    to_parse.len()
-                );
-                if pos == to_parse.len() {
-                    debug!("Will retry with more input. Input was:\n{}", to_parse);
-                    continue; // Retry with more input by not updating the offset.
+                    // If the parsing error occurred at the very last symbol,
+                    // we assume that it is simply incomplete and will try again when we have more input.
+                    if let pest::error::InputLocation::Pos(pos) = e.location {
+                        trace!(
+                            "Error position is {}, last position is {}.",
+                            pos,
+                            to_parse.len()
+                        );
+                        if pos == to_parse.len() {
+                            debug!("Will retry with more input. Input was:\n{}", to_parse);
+                            return Ok(vec![]); // Retry with more input by not updating the offset.
+                        }
+                    }
+                    debug!("Skipping this input. Input was:\n{}", to_parse);
+                    unparsed_offset = total_offset;
+                    Ok(vec![])
+                }
+                Ok(parsed) => {
+                    debug!("Parsed input successfully. Input was:\n{}", to_parse);
+                    unparsed_offset = total_offset;
+                    unparsed.clear();
+                    Ok(parsed.to_vec())
                 }
             }
-            debug!("Skipping this input. Input was:\n{}", to_parse);
-        }
-        debug!("Parsed input successfully. Input was:\n{}", to_parse);
-        unparsed_offset = total_offset;
-        unparsed.clear();
-    }
+        })
+        .collect::<Result<Vec<Vec<Rc<parser::Statement>>>, Error>>()?
+        .into_iter()
+        .flatten()
+        .collect();
 
     debug!("Parsing dependency graph...");
-    dependency_graph.batch_insert(parsed.iter().cloned());
+    dependency_graph.batch_insert(new_parsed_statements.into_iter());
     debug!("Parsing hypothesis tree...");
-    let hypotheses = tractus::parse_hypothesis_tree(parsed.iter().cloned(), &dependency_graph);
+    let hypotheses = tractus::parse_hypothesis_tree(&dependency_graph);
 
     debug!("Serializing...");
-    let result = serde_json::to_string_pretty(&hypotheses)?;
+    let result = serde_json::to_string_pretty(&LineTree::with(&hypotheses))?;
 
     println!("Outputting to file {}.", output_path.display());
     let mut output_file = fs::File::create(output_path)?;
@@ -323,10 +337,10 @@ fn process(code: &str) -> Result<String, Error> {
     debug!("Parsing dependency graph...");
     let dependency_graph = tractus::DependencyGraph::from_input(parsed.iter().cloned());
     debug!("Parsing hypothesis tree...");
-    let hypotheses = tractus::parse_hypothesis_tree(parsed.iter().cloned(), &dependency_graph);
+    let hypotheses = tractus::parse_hypothesis_tree(&dependency_graph);
 
     debug!("Serializing...");
-    let result = serde_json::to_string_pretty(&hypotheses)?;
+    let result = serde_json::to_string_pretty(&LineTree::with_span(&hypotheses))?;
 
     Ok(result)
 }

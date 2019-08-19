@@ -22,8 +22,14 @@ pub struct LineTree<'a> {
     hypotheses: &'a BTreeMap<HypothesesId, Hypotheses>,
 }
 
-impl<'a> From<&'a HypothesisTree<Span>> for LineTree<'a> {
-    fn from(other: &'a HypothesisTree<Span>) -> Self {
+impl<'a> LineTree<'a> {
+    pub fn with<T: Eq>(other: &'a HypothesisTree<T>) -> Self {
+        LineTree {
+            root: map_branches(&other.root, &mut |e| format!("{}", e)),
+            hypotheses: &other.hypotheses,
+        }
+    }
+    pub fn with_span(other: &'a HypothesisTree<Span>) -> Self {
         LineTree {
             root: map_branches(&other.root, &mut |e| format!("{}", LineDisplay::from(e))),
             hypotheses: &other.hypotheses,
@@ -137,31 +143,31 @@ impl PartialOrd for Hypotheses {
 }
 
 pub fn parse_hypothesis_tree<T: Eq>(
-    input: impl Iterator<Item = Rc<RStatement<T>>>,
     dependency_graph: &DependencyGraph<T>,
 ) -> HypothesisTree<T> {
     let mut root: BTreeMap<HypothesesId, Vec<Rc<RefCell<RefNode>>>> = BTreeMap::new();
-    let mut expression_map: HashMap<Rc<RExpression<T>>, HypothesesId> = HashMap::new();
+    let mut expression_map: HashMap<NodeIndex, HypothesesId> = HashMap::new();
     let mut hypotheses_map: HypothesesMap = HypothesesMap::new();
     let mut node_map: HashMap<NodeIndex, Rc<RefCell<RefNode>>> = HashMap::new();
 
-    let expressions = input.filter_map(|statement| statement.expression());
-    for expression in expressions {
+    let ids = dependency_graph.lines();
+    for id in ids {
+        let expression = dependency_graph.id(id).unwrap();
         collect_hypotheses(
+            id,
             &expression,
             &mut hypotheses_map,
             &mut expression_map,
             &dependency_graph,
         );
-        let hypotheses_id = expression_map.get(&expression).unwrap(); // This expression's hypotheses were just collected.
-        let node_id = dependency_graph.id(&expression).unwrap(); // Expression must be inside dependency graph.
+        let hypotheses_id = expression_map.get(&id).unwrap(); // This expression's hypotheses were just collected.
         let ref_node = Rc::new(RefCell::new(RefNode {
-            id: node_id,
+            id,
             children: BTreeMap::new(),
         }));
         let mut parents: Vec<NodeIndex> = dependency_graph
             .graph()
-            .neighbors_directed(node_id, Direction::Incoming)
+            .neighbors_directed(id, Direction::Incoming)
             .collect();
         parents.sort_unstable();
         match parents.last() {
@@ -173,13 +179,13 @@ pub fn parse_hypothesis_tree<T: Eq>(
                     .entry(*hypotheses_id)
                     .or_insert_with(|| vec![])
                     .push(ref_node.clone());
-                node_map.insert(node_id, ref_node);
+                node_map.insert(*id, ref_node);
             }
             None => {
                 root.entry(*hypotheses_id)
                     .or_insert_with(|| vec![])
                     .push(ref_node.clone());
-                node_map.insert(node_id, ref_node);
+                node_map.insert(id, ref_node);
             }
         }
     }
@@ -205,19 +211,19 @@ pub fn parse_hypothesis_tree<T: Eq>(
 }
 
 fn collect_hypotheses<T: Eq>(
+    id: NodeIndex,
     expression: &Rc<RExpression<T>>,
     hypotheses_map: &mut HypothesesMap,
-    expression_map: &mut HashMap<Rc<RExpression<T>>, HypothesesId>,
+    expression_map: &mut HashMap<NodeIndex, HypothesesId>,
     dependency_graph: &DependencyGraph<T>,
 ) {
-    let node_id = dependency_graph.id(expression).unwrap(); // Expression must be inside dependency graph.
     let inherited_hypotheses: Vec<Hypothesis> = dependency_graph
         .graph()
-        .neighbors_directed(node_id, Direction::Incoming)
+        .neighbors_directed(id, Direction::Incoming)
         .map(|id| {
             let exp = &dependency_graph.graph()[id];
             expression_map
-                .get(exp)
+                .get(&id)
                 .map(|id| {
                     hypotheses_map
                         .get(*id)
@@ -231,7 +237,7 @@ fn collect_hypotheses<T: Eq>(
         })
         .flatten()
         .collect();
-    let hypotheses_id = match expression_map.get(expression) {
+    let hypotheses_id = match expression_map.get(&id) {
         Some(id) => {
             let id = *id;
             let hypotheses = hypotheses_map.get(id).unwrap();
@@ -248,7 +254,7 @@ fn collect_hypotheses<T: Eq>(
             hypotheses_map.insert(hypotheses)
         }
     };
-    expression_map.insert(expression.clone(), hypotheses_id);
+    expression_map.insert(id, hypotheses_id);
 }
 #[cfg(test)]
 mod tests {
@@ -284,7 +290,7 @@ mod tests {
         ];
 
         let dependency_graph = DependencyGraph::from_input(input.iter().cloned());
-        let tree = parse_hypothesis_tree(input.iter().cloned(), &dependency_graph);
+        let tree = parse_hypothesis_tree(&dependency_graph);
 
         // Need to build from the inside out.
         let n4 = Node {

@@ -13,7 +13,7 @@ type Graph<T> = petgraph::Graph<Rc<RExpression<T>>, String, petgraph::Directed, 
 #[derive(Default, Debug)]
 pub struct DependencyGraph<T: Eq> {
     graph: Graph<T>,
-    map: HashMap<Rc<RExpression<T>>, NodeIndex>,
+    lines: Vec<NodeIndex>,
     variables: VariableMap,
 }
 
@@ -42,7 +42,7 @@ impl<T: Eq> DependencyGraph<T> {
     pub fn new() -> Self {
         DependencyGraph {
             graph: Graph::new(),
-            map: HashMap::new(),
+            lines: vec![],
             variables: VariableMap::new(),
         }
     }
@@ -92,8 +92,12 @@ impl<T: Eq> DependencyGraph<T> {
         &mut self.graph
     }
 
-    pub fn id(&self, expression: &RExpression<T>) -> Option<NodeIndex> {
-        self.map.get(expression).cloned()
+    pub fn id(&self, id: NodeIndex) -> Option<&Rc<RExpression<T>>> {
+        self.graph.node_weight(id)
+    }
+
+    pub fn lines(&self) -> impl Iterator<Item = NodeIndex> {
+        self.lines.clone().into_iter()
     }
 }
 
@@ -120,7 +124,7 @@ fn register_dependencies<T: Eq>(
 ) -> NodeIndex {
     let dependencies = extract_dependencies(&expression);
     let node_id = dependency_graph.graph.add_node(expression.clone());
-    dependency_graph.map.insert(expression.clone(), node_id);
+    dependency_graph.lines.push(node_id);
     for dependency in dependencies {
         if let Some(parent) = dependency_graph.variables.get(&dependency) {
             dependency_graph

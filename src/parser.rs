@@ -1,4 +1,5 @@
 use std::borrow::Borrow;
+use std::fmt;
 use std::fmt::{Display, Write};
 use std::hash::{Hash, Hasher};
 use std::iter::FromIterator;
@@ -13,7 +14,7 @@ use serde::{Serialize, Serializer};
 #[grammar = "r.pest"]
 struct RParser;
 
-#[derive(PartialEq, Eq, Debug, Clone, Serialize)]
+#[derive(PartialEq, Eq, Clone, Serialize)]
 pub enum RStatement<Meta> {
     Empty(Meta),
     Comment(String, Meta),
@@ -39,6 +40,12 @@ pub enum RStatement<Meta> {
     ),
     Library(RIdentifier, Meta),
     Expression(Rc<RExpression<Meta>>, Meta),
+}
+
+impl<T> fmt::Debug for RStatement<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "RStmt {{ {} }}", self)
+    }
 }
 
 impl<T> Hash for RStatement<T> {
@@ -190,7 +197,7 @@ impl<'a, T> From<&'a Vec<Rc<RStatement<T>>>> for Lines<'a, T> {
     }
 }
 
-#[derive(PartialEq, Eq, Debug, Clone, Serialize)]
+#[derive(PartialEq, Eq, Clone, Serialize)]
 pub enum RExpression<Meta> {
     Constant(String, Meta),
     Variable(RIdentifier, Meta),
@@ -219,6 +226,12 @@ pub enum RExpression<Meta> {
     ),
     Prefix(String, Rc<RExpression<Meta>>, Meta),
     Infix(String, Rc<RExpression<Meta>>, Rc<RExpression<Meta>>, Meta),
+}
+
+impl<T> fmt::Debug for RExpression<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "RExp {{ {} }}", self)
+    }
 }
 
 impl<T> Hash for RExpression<T> {
