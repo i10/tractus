@@ -25,15 +25,15 @@ use tractus::Parsed;
 #[derive(StructOpt)]
 #[structopt(name = "tractus", about = "Generate a hypotheses tree from R code.")]
 struct Opt {
-    #[structopt(short = "i", parse(from_os_str))]
+    #[structopt(short, long, parse(from_os_str))]
     /// Input file, stdin if not present
     input: Option<PathBuf>,
-    #[structopt(short = "o", parse(from_os_str))]
+    #[structopt(short, long, parse(from_os_str))]
     /// Output file, stdout if not present
     output: Option<PathBuf>,
     #[structopt(flatten)]
     verbose: clap_verbosity_flag::Verbosity,
-    #[structopt(short = "f")]
+    #[structopt(short = "f", long)]
     /// Force overwriting the output, without prompting
     overwrite: bool,
     #[structopt(subcommand)]
@@ -45,10 +45,10 @@ enum Subcommand {
     #[structopt(name = "watch")]
     /// Watch an input file and update the output file on changes
     Watch {
-        #[structopt(short = "i", parse(from_os_str))]
+        #[structopt(short, long, parse(from_os_str))]
         /// Input file, stdin if not present
         input: PathBuf,
-        #[structopt(short = "o", parse(from_os_str))]
+        #[structopt(short, long, parse(from_os_str))]
         /// Output file that will be overwritten whenever the input changes
         output: PathBuf,
         #[structopt(flatten)]
@@ -59,10 +59,18 @@ enum Subcommand {
 #[derive(StructOpt)]
 struct RHistory {
     #[structopt(long, short)]
+    /// Indicate that this file will only be appended to
+    ///
+    /// Tractus can optimize the calculations, but it might stop with an error if the file is modified other than appending.
     append: bool,
     #[structopt(long, short)]
+    /// Filter the lines with a regex
+    ///
+    /// The regex syntax used is documented at https://docs.rs/regex/1.2.1/regex/#syntax.
+    /// Whatever is matched by the regex will be deleted. You can debug the regex by enabling logging at the trace level.
     clean: Option<Regex>,
     #[structopt(name = "history", long, short)]
+    /// Indicate that the input file is an RStudio `history_desktop` file.
     r_history: bool,
 }
 
