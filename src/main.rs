@@ -8,18 +8,20 @@ use std::io::{Read, Write};
 use std::path;
 use std::path::PathBuf;
 use std::rc::Rc;
-use std::sync::mpsc;
+use std::sync::{mpsc, Arc, Mutex, RwLock};
 use std::thread;
+use std::time::Duration;
 
 use clap_verbosity_flag;
 use env_logger;
 use failure::Error;
 use log::{debug, info, trace, warn};
 use notify;
+use notify::{DebouncedEvent, RecommendedWatcher, RecursiveMode, Watcher};
 use regex::Regex;
 use serde_json;
 use structopt::StructOpt;
-use websocket::sync::Server;
+use websocket::sync::{Client, Server};
 use websocket::OwnedMessage;
 
 use tractus::parser;
@@ -126,7 +128,7 @@ fn main() {
 }
 
 fn init_logger(level: log::LevelFilter) {
-    env_logger::Builder::new().filter_level(level).init();
+    env_logger::Builder::from_default_env().init(); //filter_level(level).init();
 }
 
 fn run(opt: Opt) -> Res {
@@ -170,33 +172,70 @@ fn run(opt: Opt) -> Res {
             Subcommand::Serve { input, r_history } => {
                 let options = WatchOptions::try_from(r_history)?;
 
-                let execute = || -> Res {
-                    let result = parse_entirely(&input, &options.clean)?;
+                let res = parse_entirely(&input, &options.clean)?;
+                let result: Arc<RwLock<String>> = Arc::new(RwLock::new(res));
 
-                    println!("Sending to websockets.");
+                let clients: Arc<Mutex<Vec<Client<std::net::TcpStream>>>> =
+                    Arc::new(Mutex::new(vec![]));
+
+                let result_clone = result.clone();
+                let clients_clone = clients.clone();
+                let input_clone = input.clone();
+                let execute = move || -> Res {
+                    let res = parse_entirely(&input_clone, &options.clean)?;
+
+                    let mut clients = clients_clone.lock().unwrap();
+                    for client in clients.iter_mut() {
+                        trace!("Sending to IP: {}", client.peer_addr().unwrap());
+                        let message = OwnedMessage::Text(res.clone());
+                        client.send_message(&message).unwrap();
+                    }
+
+                    let mut result_store = result_clone.write().unwrap();
+                    *result_store = res;
 
                     Ok(())
                 };
 
-                let server = Server::bind("127.0.0.1:2794").unwrap();
-
-                for request in server.filter_map(Result::ok) {
-                    // Spawn a new thread for each connection.
-                    thread::spawn(|| {
-                        if !request.protocols().contains(&"tractus-websocket".to_string()) {
+                let clients_clone2 = clients.clone();
+                let result_clone2 = result.clone();
+                thread::spawn(move || {
+                    debug!("Listening for requests.");
+                    let server = Server::bind("127.0.0.1:2794").unwrap();
+                    for request in server.filter_map(Result::ok) {
+                        trace!("New request.");
+                        if !request
+                            .protocols()
+                            .contains(&"tractus-websocket".to_string())
+                        {
+                            debug!("New request rejected.");
                             request.reject().unwrap();
-                            return;
+                        } else {
+                            let mut client =
+                                request.use_protocol("tractus-websocket").accept().unwrap();
+                            debug!("New request accepted.");
+
+                            let res = result_clone2.read().unwrap().to_string();
+                            let message = OwnedMessage::Text(res);
+                            client.send_message(&message).unwrap();
+
+                            let mut clients = clients_clone2.lock().unwrap();
+                            clients.push(client);
                         }
+                    }
+                });
 
-                        let mut client = request.use_protocol("tractus-websocket").accept().unwrap();
+                let (tx, rx) = mpsc::channel();
+                let mut watcher: RecommendedWatcher = Watcher::new(tx, Duration::from_millis(500))?;
+                watcher.watch(&input, RecursiveMode::NonRecursive)?;
 
-                        let ip = client.peer_addr().unwrap();
-
-                        debug!("Connection from: {}", ip);
-
-                        let message = OwnedMessage::Text("Hello".to_string());
-                        client.send_message(&message).unwrap();
-                    });
+                println!("Watching file {}.", &input.display());
+                for event in rx {
+                    trace!("Received new file event.");
+                    if let DebouncedEvent::Write(input) = event {
+                        debug!("File changed: {}", input.display());
+                        execute()?;
+                    }
                 }
             }
         }
@@ -209,8 +248,6 @@ fn run(opt: Opt) -> Res {
 }
 
 fn watch<F: FnMut() -> Res>(input_path: &PathBuf, mut execute: F) -> Res {
-    use notify::{DebouncedEvent, RecommendedWatcher, RecursiveMode, Watcher};
-    use std::time::Duration;
     let (tx, rx) = mpsc::channel();
     let mut watcher: RecommendedWatcher = Watcher::new(tx, Duration::from_millis(500))?;
     watcher.watch(&input_path, RecursiveMode::NonRecursive)?;

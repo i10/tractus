@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title></title>
+  <meta name="description" content="">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+
+<body>
+<script src="https://d3js.org/d3.v5.min.js"></script>
+<script>
+    let socket = new WebSocket("ws://127.0.0.1:2794", "tractus-websocket");
+    socket.onmessage = function (event) {
+        console.log("Received data.");
+        const parsed = JSON.parse(event.data);
+        console.log(parsed);
+        render(parsed);
+    }
+    socket.onerror = function (event) {
+        console.error(event);
+    }
+    socket.onclose = function (event) {
+        console.warn("Websocket closed.");
+    }
+
+    let width = 1000;
+
+    function make_tree(data) {
+        const root = d3.hierarchy(data.root, function (item) {
+            if (item.expressions) {
+                return item.expressions
+            } else {
+                const hyps = item.children || item;
+                const children = Object.keys(hyps).map(
+                    key => {
+                        return {
+                            hypothesis: data.hypotheses[key],
+                            expressions: hyps[key]
+                        };
+                    }
+                );
+                return children;
+            }
+        });
+        console.log(root)
+        root.dx = 10;
+        root.dy = width / (root.height + 1);
+        return d3.tree().nodeSize([root.dx, root.dy])(root);
+    }
+
+    function render(data) {
+        const root = make_tree(data);
+
+        let x0 = Infinity;
+        let x1 = -x0;
+        root.each(d => {
+            if (d.x > x1) x1 = d.x;
+            if (d.x < x0) x0 = d.x;
+        });
+
+        const svg = d3.select("body").append("svg")
+            .attr("viewBox", [0, 0, width, x1 - x0 + root.dx * 2]);
+
+        const g = svg.append("g")
+            .attr("font-family", "sans-serif")
+            .attr("font-size", 10)
+            .attr("transform", `translate(${root.dy / 3},${root.dx - x0})`);
+            
+        const link = g.append("g")
+            .attr("fill", "none")
+            .attr("stroke", "#555")
+            .attr("stroke-opacity", 0.4)
+            .attr("stroke-width", 1.5)
+        .selectAll("path")
+            .data(root.links())
+            .join("path")
+            .attr("d", d3.linkHorizontal()
+                .x(d => d.y)
+                .y(d => d.x));
+        
+        const node = g.append("g")
+            .attr("stroke-linejoin", "round")
+            .attr("stroke-width", 3)
+            .selectAll("g")
+            .data(root.descendants())
+            .join("g")
+            .attr("transform", d => `translate(${d.y},${d.x})`);
+
+        node.append("circle")
+            .attr("fill", d => d.children ? "#555" : "#999")
+            .attr("r", 2.5);
+
+        node.append("text")
+            .attr("dy", "0.31em")
+            .attr("x", d => d.children ? -6 : 6)
+            .attr("text-anchor", d => d.children ? "end" : "start")
+            .text(d => d.data.expression)
+            .clone(true).lower()
+            .attr("stroke", "white");
+    }
+</script>
+</body>
+
+</html>
