@@ -989,10 +989,8 @@ mod tests {
 
     fn assert_matches(code: &'static str, expected: Vec<Rc<RStatement<()>>>) {
         let parsed = Parsed::parse(code).unwrap_or_else(|e| panic!("{}", e));
-        let actual: Vec<Rc<RStatement<()>>> = parsed
-            .iter()
-            .map(|stmt| stmt.map(&mut |_| ()))
-            .collect();
+        let actual: Vec<Rc<RStatement<()>>> =
+            parsed.iter().map(|stmt| stmt.map(&mut |_| ())).collect();
         assert_eq!(expected, actual);
     }
 

@@ -1,10 +1,10 @@
 #[macro_use]
 extern crate pest_derive;
 
-mod dependency_graph;
-mod hypotheses;
-mod hypotheses_tree;
-mod parser;
+pub mod dependency_graph;
+pub mod hypotheses;
+pub mod hypotheses_tree;
+pub mod parser;
 
 pub use crate::dependency_graph::{DependencyGraph, GraphLineDisplay};
 pub use crate::hypotheses_tree::{parse_hypothesis_tree, HypothesisTree, LineTree};
