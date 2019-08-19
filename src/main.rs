@@ -19,6 +19,7 @@ use regex::Regex;
 use serde_json;
 use structopt::StructOpt;
 
+use tractus::parser;
 use tractus::Parsed;
 
 #[derive(StructOpt)]
@@ -66,7 +67,7 @@ struct RHistory {
 }
 
 struct WatchOptions {
-    offset: Option<io::SeekFrom>,
+    offset: Option<Offset>,
     clean: Option<Regex>,
 }
 
@@ -75,15 +76,11 @@ impl TryFrom<RHistory> for WatchOptions {
     fn try_from(other: RHistory) -> Result<Self, Self::Error> {
         Ok(if other.r_history {
             WatchOptions {
-                offset: Some(io::SeekFrom::Start(0)),
-                clean: Some(Regex::new(r#"(?m)\d+:"#)?),
+                offset: Some(0),
+                clean: Some(Regex::new(r#"(?m)^\d+:"#)?),
             }
         } else {
-            let seek = if other.append {
-                Some(io::SeekFrom::Start(0))
-            } else {
-                None
-            };
+            let seek = if other.append { Some(0) } else { None };
             WatchOptions {
                 offset: seek,
                 clean: other.clean,
@@ -126,8 +123,20 @@ fn run(opt: Opt) -> Res {
             r_history,
         } = subcmd;
         let options = WatchOptions::try_from(r_history)?;
-        if let Some(offset) = options.offset {
-            let execute = || Ok(()); // To be implemented.
+        if let Some(mut offset) = options.offset {
+            let mut parsed = Parsed::new();
+            let mut dependency_graph = tractus::DependencyGraph::new();
+            let execute = || {
+                offset = parse_from_offset(
+                    &input,
+                    &output,
+                    &options.clean,
+                    offset,
+                    &mut parsed,
+                    &mut dependency_graph,
+                )?;
+                Ok(())
+            };
             watch(&input, execute)?;
         } else {
             let execute = || parse_entirely(&input, &output, &options.clean);
@@ -175,12 +184,95 @@ fn parse_entirely(input_path: &PathBuf, output_path: &PathBuf, clean: &Option<Re
     Ok(())
 }
 
+type Offset = u64;
+
+fn parse_from_offset(
+    input_path: &PathBuf,
+    output_path: &PathBuf,
+    clean: &Option<Regex>,
+    offset: Offset,
+    parsed: &mut Parsed,
+    dependency_graph: &mut tractus::DependencyGraph<parser::Span>,
+) -> Result<Offset, Error> {
+    debug!(
+        "Reading from file {} with offset {}.",
+        input_path.display(),
+        offset
+    );
+    let file = std::fs::File::open(input_path)?;
+    let mut reader = io::BufReader::new(file);
+
+    use io::Seek;
+    reader.seek(io::SeekFrom::Start(offset))?;
+
+    let mut unparsed: Vec<String> = vec![];
+    let mut unparsed_offset = offset;
+    let mut total_offset = offset;
+
+    use io::BufRead;
+    info!("Parsing...");
+    for line in reader.lines() {
+        let line = line?;
+        total_offset += line.len() as u64;
+        trace!(
+            "Parsing from offset {}, current offset is {}.",
+            unparsed_offset,
+            total_offset
+        );
+
+        trace!("Parsing line: {}", line);
+        let cleaned = clean_input(line, clean);
+
+        unparsed.push(cleaned);
+
+        let to_parse = unparsed.join("\n");
+        let parsed_result = parsed.append(&to_parse);
+        if let Err(e) = parsed_result {
+            trace!("Parsing error in input: {}", e);
+
+            // If the parsing error occurred at the very last symbol,
+            // we assume that it is simply incomplete and will try again when we have more input.
+            if let pest::error::InputLocation::Pos(pos) = e.location {
+                trace!(
+                    "Error position is {}, last position is {}.",
+                    pos,
+                    to_parse.len()
+                );
+                if pos == to_parse.len() {
+                    debug!("Will retry with more input. Input was:\n{}", to_parse);
+                    continue; // Retry with more input by not updating the offset.
+                }
+            }
+            debug!("Skipping this input. Input was:\n{}", to_parse);
+        }
+        debug!("Parsed input successfully. Input was:\n{}", to_parse);
+        unparsed_offset = total_offset;
+        unparsed.clear();
+    }
+
+    debug!("Parsing dependency graph...");
+    dependency_graph.batch_insert(parsed.iter().cloned());
+    debug!("Parsing hypothesis tree...");
+    let hypotheses = tractus::parse_hypothesis_tree(parsed.iter().cloned(), &dependency_graph);
+
+    debug!("Serializing...");
+    let result = serde_json::to_string_pretty(&hypotheses)?;
+
+    println!("Outputting to file {}.", output_path.display());
+    let mut output_file = fs::File::create(output_path)?;
+    output_to(&mut output_file, result)?;
+
+    Ok(unparsed_offset)
+}
+
 fn clean_input(code: String, clean: &Option<Regex>) -> String {
     clean
         .as_ref()
         .map(|regex| {
-            debug!("Cleaning input's line with regex {}.", regex);
-            regex.replace(&code, "").into_owned()
+            trace!("Cleaning input's line with regex `{}`.", regex);
+            let cleaned = regex.replace_all(&code, "").into_owned();
+            trace!("Cleaned input:\n{}", cleaned);
+            cleaned
         })
         .unwrap_or(code)
 }
