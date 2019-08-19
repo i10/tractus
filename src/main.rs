@@ -11,7 +11,6 @@ use std::rc::Rc;
 use std::sync::mpsc;
 
 use clap_verbosity_flag;
-use ctrlc;
 use env_logger;
 use failure::Error;
 use log::{debug, info, trace, warn};
@@ -99,11 +98,6 @@ impl TryFrom<RHistory> for WatchOptions {
 }
 
 fn main() {
-    ctrlc::set_handler(move || {
-        println!("Stopping tractus.");
-    })
-    .unwrap_or_else(|e| panic!("Error when trying to register ctrl+c handler: {}", e));
-
     let opt = Opt::from_args();
     let verbosity = opt.verbose.log_level().to_level_filter();
     init_logger(verbosity);
