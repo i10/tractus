@@ -11,28 +11,34 @@ use crate::hypotheses::{detect_hypotheses, Hypothesis};
 use crate::parser::{LineDisplay, RExpression, Span};
 use dependency_graph::{DependencyGraph, NodeIndex};
 
-#[derive(Debug, Serialize)]
-pub struct HypothesisTree<T: Eq> {
+#[derive(Debug)]
+pub struct HypothesisTree<T> {
     root: Branches<Rc<RExpression<T>>>,
     hypotheses: BTreeMap<HypothesesId, Hypotheses>,
 }
 
 #[derive(Serialize)]
-pub struct LineTree<'a> {
-    root: Branches<String>,
+pub struct LineTree<'a, T: Serialize> {
+    root: Branches<T>,
     hypotheses: &'a BTreeMap<HypothesesId, Hypotheses>,
 }
 
-impl<'a> LineTree<'a> {
-    pub fn with<T: Eq>(other: &'a HypothesisTree<T>) -> Self {
-        LineTree {
-            root: map_branches(&other.root, &mut |e| format!("{}", e)),
-            hypotheses: &other.hypotheses,
-        }
-    }
+impl<'a> LineTree<'a, String> {
     pub fn with_span(other: &'a HypothesisTree<Span>) -> Self {
         LineTree {
             root: map_branches(&other.root, &mut |e| format!("{}", LineDisplay::from(e))),
+            hypotheses: &other.hypotheses,
+        }
+    }
+}
+
+impl<'a, T: Serialize> LineTree<'a, T> {
+    pub fn with<U, F>(other: &'a HypothesisTree<U>, mut mapping: &mut F) -> Self
+    where
+        F: FnMut(&Rc<RExpression<U>>) -> T,
+    {
+        LineTree {
+            root: map_branches(&other.root, &mut mapping),
             hypotheses: &other.hypotheses,
         }
     }

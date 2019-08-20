@@ -184,7 +184,7 @@ fn run(opt: Opt) -> Res {
                     let hypotheses = tractus::parse_hypothesis_tree(&dependency_graph);
 
                     debug!("Serializing...");
-                    let result = serde_json::to_string_pretty(&LineTree::with(&hypotheses))?;
+                    let result = serde_json::to_string_pretty(&LineTree::with(&hypotheses, &mut |e| format!("{}", e)))?;
                     Ok(result)
                 }
 
@@ -378,7 +378,7 @@ fn parse_from_offset(
     let hypotheses = tractus::parse_hypothesis_tree(&dependency_graph);
 
     debug!("Serializing...");
-    let result = serde_json::to_string_pretty(&LineTree::with(&hypotheses))?;
+    let result = serde_json::to_string_pretty(&LineTree::with(&hypotheses, &mut |e| format!("{}", e)))?;
 
     println!("Outputting to file {}.", output_path.display());
     let mut output_file = fs::File::create(output_path)?;
