@@ -127,6 +127,21 @@ impl<T> RStatement<T> {
         })
     }
 
+    pub fn get_meta(&self) -> &T {
+        use RStatement::*;
+        match self {
+            Empty(m) => m,
+            Comment(comment, m) => m,
+            TailComment(stmt, comment, m) => m,
+            Assignment(left, additional, right, m) => m,
+            If(exp, body, else_body, m) => m,
+            While(condition, body, m) => m,
+            For(variable, range, body, m) => m,
+            Library(id, m) => m,
+            Expression(exp, m) => m,
+        }
+    }
+
     pub fn expression(&self) -> Option<Rc<RExpression<T>>> {
         use RStatement::*;
         match self {
@@ -227,6 +242,7 @@ pub enum RExpression<Meta> {
     Prefix(String, Rc<RExpression<Meta>>, Meta),
     Infix(String, Rc<RExpression<Meta>>, Rc<RExpression<Meta>>, Meta),
 }
+
 /*
 impl<T> fmt::Debug for RExpression<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -360,6 +376,23 @@ impl<T> RExpression<T> {
                 mapping(m),
             ),
         })
+    }
+
+    pub fn get_meta(&self) -> &T {
+        use RExpression::*;
+        match self {
+            Constant(constant, m) => m,
+            Variable(id, m) => m,
+            Call(exp, args, m) => m,
+            Column(left, right, m) => m,
+            Index(left, right, m) => m,
+            ListIndex(left, right, m) => m,
+            OneSidedFormula(formula, m) => m,
+            TwoSidedFormula(left, right, m) => m,
+            Function(args, body, m) => m,
+            Prefix(operator, exp, m) => m,
+            Infix(operator, left, right, m) => m,
+        }
     }
 
     pub fn extract_variable_name(&self) -> Option<RIdentifier> {
