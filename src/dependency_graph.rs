@@ -53,23 +53,24 @@ impl<T: Eq> DependencyGraph<T> {
         graph
     }
 
-    pub fn batch_insert(&mut self, input: impl Iterator<Item = Rc<RStatement<T>>>) {
-        for statement in input {
-            self.insert(statement)
-        }
+    pub fn batch_insert(
+        &mut self,
+        input: impl Iterator<Item = Rc<RStatement<T>>>,
+    ) -> Vec<NodeIndex> {
+        input
+            .filter_map(|stmt| self.insert(stmt))
+            .collect::<Vec<NodeIndex>>()
     }
 
-    fn insert(&mut self, statement: Rc<RStatement<T>>) {
+    fn insert(&mut self, statement: Rc<RStatement<T>>) -> Option<NodeIndex> {
         use RStatement::*;
         match &*statement {
-            Expression(expression, _) => {
-                register_dependencies(expression, self);
-            }
+            Expression(expression, _) => Some(register_dependencies(expression, self)),
             Assignment(left, additional, right, _) => {
                 let mut assigned = vec![left];
                 assigned.append(&mut additional.iter().collect());
+                let node_id = register_dependencies(right, self);
                 for variable in assigned {
-                    let node_id = register_dependencies(right, self);
                     match variable.extract_variable_name() {
                         Some(name) => self.variables.push(name, node_id),
                         None => panic!(
@@ -78,10 +79,11 @@ impl<T: Eq> DependencyGraph<T> {
                     ),
                     };
                 }
+                Some(node_id)
             }
             TailComment(statement, _, _) => self.insert(statement.clone()),
-            _ => (),
-        };
+            _ => None,
+        }
     }
 
     pub fn graph(&self) -> &Graph<T> {
@@ -421,6 +423,31 @@ mod tests {
             let expression = index!(variable!("x"), vec![Some(constant!("1"))]);
             let result = extract_dependencies(&expression);
             assert_eq!(vec!["x".to_string()], result);
+        }
+    }
+
+    mod inlining {
+        use super::*;
+        use pretty_assertions::assert_eq;
+
+        #[test]
+        fn inlines_simple_shadowing() {
+            let input = vec![
+                assignment!(variable!("x"), vec![], constant!("old value")),
+                expression!(call!(variable!("print"), vec![(None, variable!("x"))])),
+                assignment!(variable!("x"), vec![], constant!("new value")),
+                expression!(call!(variable!("print"), vec![(None, variable!("x"))])),
+            ];
+            let mut graph = DependencyGraph::new();
+            let inserted = graph.batch_insert(input.into_iter());
+            let result = graph.inline_id(inserted[1]).unwrap();
+            let expected: Rc<RExpression<()>> =
+                call!(variable!("print"), vec![(None, constant!("old value"))]);
+            assert_eq!(*expected, result);
+            let result = graph.inline_id(inserted[3]).unwrap();
+            let expected: Rc<RExpression<()>> =
+                call!(variable!("print"), vec![(None, constant!("new value"))]);
+            assert_eq!(*expected, result);
         }
     }
 }
