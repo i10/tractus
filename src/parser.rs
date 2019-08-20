@@ -2,42 +2,51 @@ use std::borrow::Borrow;
 use std::fmt::{Display, Write};
 use std::hash::{Hash, Hasher};
 use std::iter::FromIterator;
+use std::rc::Rc;
 
 use itertools::Itertools;
 use log::debug;
 use pest::Parser;
+use serde::{Serialize, Serializer};
 
 #[derive(Parser)]
 #[grammar = "r.pest"]
 struct RParser;
 
-#[derive(PartialEq, Eq, Debug, Clone)]
+#[derive(PartialEq, Debug, Eq, Clone, Serialize)]
 pub enum RStatement<Meta> {
     Empty(Meta),
     Comment(String, Meta),
-    TailComment(Box<RStatement<Meta>>, String, Meta),
+    TailComment(Rc<RStatement<Meta>>, String, Meta),
     Assignment(
-        RExpression<Meta>,
-        Vec<RExpression<Meta>>,
-        RExpression<Meta>,
+        Rc<RExpression<Meta>>,
+        Vec<Rc<RExpression<Meta>>>,
+        Rc<RExpression<Meta>>,
         Meta,
     ),
     If(
-        RExpression<Meta>,
-        Vec<RStatement<Meta>>,
-        Option<Vec<RStatement<Meta>>>,
+        Rc<RExpression<Meta>>,
+        Vec<Rc<RStatement<Meta>>>,
+        Option<Vec<Rc<RStatement<Meta>>>>,
         Meta,
     ),
-    While(RExpression<Meta>, Vec<RStatement<Meta>>, Meta),
+    While(Rc<RExpression<Meta>>, Vec<Rc<RStatement<Meta>>>, Meta),
     For(
-        RExpression<Meta>,
-        RExpression<Meta>,
-        Vec<RStatement<Meta>>,
+        Rc<RExpression<Meta>>,
+        Rc<RExpression<Meta>>,
+        Vec<Rc<RStatement<Meta>>>,
         Meta,
     ),
     Library(RIdentifier, Meta),
-    Expression(RExpression<Meta>, Meta),
+    Expression(Rc<RExpression<Meta>>, Meta),
 }
+/*
+impl<T> fmt::Debug for RStatement<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "RStmt {{ {} }}", self)
+    }
+}
+*/
 
 impl<T> Hash for RStatement<T> {
     fn hash<H: Hasher>(&self, state: &mut H) {
@@ -77,50 +86,52 @@ impl<T> Hash for RStatement<T> {
 pub type Statement = RStatement<Span>;
 
 impl<T> RStatement<T> {
-    pub fn map<F, U>(self, mapping: &mut F) -> RStatement<U>
+    pub fn map<F, U>(&self, mapping: &mut F) -> Rc<RStatement<U>>
     where
-        F: FnMut(T) -> U,
+        F: FnMut(&T) -> U,
     {
         use RStatement::*;
-        match self {
+        Rc::new(match self {
             Empty(m) => Empty(mapping(m)),
-            Comment(comment, m) => Comment(comment, mapping(m)),
+            Comment(comment, m) => Comment(comment.clone(), mapping(m)),
             TailComment(stmt, comment, m) => {
-                TailComment(Box::new(stmt.map(mapping)), comment, mapping(m))
+                TailComment(stmt.map(mapping), comment.clone(), mapping(m))
             }
             Assignment(left, additional, right, m) => Assignment(
                 left.map(mapping),
-                additional.into_iter().map(|exp| exp.map(mapping)).collect(),
+                additional.iter().map(|exp| exp.map(mapping)).collect(),
                 right.map(mapping),
                 mapping(m),
             ),
             If(exp, body, else_body, m) => If(
                 exp.map(mapping),
-                body.into_iter().map(|stmt| stmt.map(mapping)).collect(),
-                else_body.map(|b| b.into_iter().map(|stmt| stmt.map(mapping)).collect()),
+                body.iter().map(|stmt| stmt.map(mapping)).collect(),
+                else_body
+                    .as_ref()
+                    .map(|b| b.iter().map(|stmt| stmt.map(mapping)).collect()),
                 mapping(m),
             ),
             While(condition, body, m) => While(
                 condition.map(mapping),
-                body.into_iter().map(|stmt| stmt.map(mapping)).collect(),
+                body.iter().map(|stmt| stmt.map(mapping)).collect(),
                 mapping(m),
             ),
             For(variable, range, body, m) => For(
                 variable.map(mapping),
                 range.map(mapping),
-                body.into_iter().map(|stmt| stmt.map(mapping)).collect(),
+                body.iter().map(|stmt| stmt.map(mapping)).collect(),
                 mapping(m),
             ),
-            Library(id, m) => Library(id, mapping(m)),
+            Library(id, m) => Library(id.clone(), mapping(m)),
             Expression(exp, m) => Expression(exp.map(mapping), mapping(m)),
-        }
+        })
     }
 
-    pub fn expression(&self) -> Option<&RExpression<T>> {
+    pub fn expression(&self) -> Option<Rc<RExpression<T>>> {
         use RStatement::*;
         match self {
-            Assignment(_, _, expression, _) => Some(&expression),
-            Expression(expression, _) => Some(&expression),
+            Assignment(_, _, expression, _) => Some(expression.clone()),
+            Expression(expression, _) => Some(expression.clone()),
             TailComment(statement, _, _) => statement.expression(),
             // TODO: Check how to handle if, while, and for.
             If(_, _, _, _) => None,
@@ -172,7 +183,7 @@ impl<T> Display for RStatement<T> {
 }
 
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub struct Lines<'a, T>(&'a Vec<RStatement<T>>);
+pub struct Lines<'a, T>(&'a Vec<Rc<RStatement<T>>>);
 
 impl<'a, T> Display for Lines<'a, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -180,35 +191,49 @@ impl<'a, T> Display for Lines<'a, T> {
     }
 }
 
-impl<'a, T> From<&'a Vec<RStatement<T>>> for Lines<'a, T> {
-    fn from(other: &'a Vec<RStatement<T>>) -> Lines<T> {
+impl<'a, T> From<&'a Vec<Rc<RStatement<T>>>> for Lines<'a, T> {
+    fn from(other: &'a Vec<Rc<RStatement<T>>>) -> Lines<T> {
         Lines(other)
     }
 }
 
-#[derive(PartialEq, Eq, Debug, Clone)]
+#[derive(PartialEq, Debug, Eq, Clone, Serialize)]
 pub enum RExpression<Meta> {
     Constant(String, Meta),
     Variable(RIdentifier, Meta),
     Call(
-        Box<RExpression<Meta>>,
-        Vec<(Option<RIdentifier>, RExpression<Meta>)>,
+        Rc<RExpression<Meta>>,
+        Vec<(Option<RIdentifier>, Rc<RExpression<Meta>>)>,
         Meta,
     ),
-    Column(Box<RExpression<Meta>>, Box<RExpression<Meta>>, Meta),
-    Index(Box<RExpression<Meta>>, Vec<Option<RExpression<Meta>>>, Meta),
-    ListIndex(Box<RExpression<Meta>>, Vec<Option<RExpression<Meta>>>, Meta),
-    OneSidedFormula(Box<RExpression<Meta>>, Meta),
-    TwoSidedFormula(Box<RExpression<Meta>>, Box<RExpression<Meta>>, Meta),
+    Column(Rc<RExpression<Meta>>, Rc<RExpression<Meta>>, Meta),
+    Index(
+        Rc<RExpression<Meta>>,
+        Vec<Option<Rc<RExpression<Meta>>>>,
+        Meta,
+    ),
+    ListIndex(
+        Rc<RExpression<Meta>>,
+        Vec<Option<Rc<RExpression<Meta>>>>,
+        Meta,
+    ),
+    OneSidedFormula(Rc<RExpression<Meta>>, Meta),
+    TwoSidedFormula(Rc<RExpression<Meta>>, Rc<RExpression<Meta>>, Meta),
     Function(
-        Vec<(RIdentifier, Option<RExpression<Meta>>)>,
-        Vec<RStatement<Meta>>,
+        Vec<(RIdentifier, Option<Rc<RExpression<Meta>>>)>,
+        Vec<Rc<RStatement<Meta>>>,
         Meta,
     ),
-    Prefix(String, Box<RExpression<Meta>>, Meta),
-    Infix(String, Box<RExpression<Meta>>, Box<RExpression<Meta>>, Meta),
+    Prefix(String, Rc<RExpression<Meta>>, Meta),
+    Infix(String, Rc<RExpression<Meta>>, Rc<RExpression<Meta>>, Meta),
 }
-
+/*
+impl<T> fmt::Debug for RExpression<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "RExp {{ {} }}", self)
+    }
+}
+*/
 impl<T> Hash for RExpression<T> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         use RExpression::*;
@@ -265,82 +290,76 @@ impl RExp {
         RExpression::Variable(content.to_string(), ())
     }
 
-    pub fn boxed_constant(content: impl Into<String>) -> Box<RExp> {
-        Box::new(RExpression::Constant(content.into(), ()))
+    pub fn boxed_constant(content: impl Into<String>) -> Rc<RExp> {
+        Rc::new(RExpression::Constant(content.into(), ()))
     }
 
-    pub fn boxed_variable(content: impl Into<String>) -> Box<RExp> {
-        Box::new(RExpression::Variable(content.into(), ()))
+    pub fn boxed_variable(content: impl Into<String>) -> Rc<RExp> {
+        Rc::new(RExpression::Variable(content.into(), ()))
     }
 }
 
 impl<T> RExpression<T> {
-    pub fn map<F, U>(self, mapping: &mut F) -> RExpression<U>
+    pub fn map<F, U>(&self, mapping: &mut F) -> Rc<RExpression<U>>
     where
-        F: FnMut(T) -> U,
+        F: FnMut(&T) -> U,
     {
         use RExpression::*;
-        match self {
-            Constant(constant, m) => Constant(constant, mapping(m)),
-            Variable(id, m) => Variable(id, mapping(m)),
+        Rc::new(match self {
+            Constant(constant, m) => Constant(constant.clone(), mapping(m)),
+            Variable(id, m) => Variable(id.clone(), mapping(m)),
             Call(exp, args, m) => Call(
-                Box::new(exp.map(mapping)),
-                args.into_iter()
-                    .map(|(name, exp)| (name, exp.map(mapping)))
+                exp.map(mapping),
+                args.iter()
+                    .map(|(name, exp)| (name.clone(), exp.map(mapping)))
                     .collect(),
                 mapping(m),
             ),
-            Column(left, right, m) => Column(
-                Box::new(left.map(mapping)),
-                Box::new(right.map(mapping)),
-                mapping(m),
-            ),
+            Column(left, right, m) => Column(left.map(mapping), right.map(mapping), mapping(m)),
             Index(left, right, m) => Index(
-                Box::new(left.map(mapping)),
+                left.map(mapping),
                 right
-                    .into_iter()
-                    .map(|maybe_exp| maybe_exp.map(|exp| exp.map(mapping)))
+                    .iter()
+                    .map(|maybe_exp| maybe_exp.as_ref().map(|exp| exp.map(mapping)))
                     .collect(),
                 mapping(m),
             ),
             ListIndex(left, right, m) => ListIndex(
-                Box::new(left.map(mapping)),
+                left.map(mapping),
                 right
-                    .into_iter()
-                    .map(|maybe_exp| maybe_exp.map(|exp| exp.map(mapping)))
+                    .iter()
+                    .map(|maybe_exp| maybe_exp.as_ref().map(|exp| exp.map(mapping)))
                     .collect(),
                 mapping(m),
             ),
-            OneSidedFormula(formula, m) => {
-                OneSidedFormula(Box::new(formula.map(mapping)), mapping(m))
+            OneSidedFormula(formula, m) => OneSidedFormula(formula.map(mapping), mapping(m)),
+            TwoSidedFormula(left, right, m) => {
+                TwoSidedFormula(left.map(mapping), right.map(mapping), mapping(m))
             }
-            TwoSidedFormula(left, right, m) => TwoSidedFormula(
-                Box::new(left.map(mapping)),
-                Box::new(right.map(mapping)),
-                mapping(m),
-            ),
             Function(args, body, m) => Function(
-                args.into_iter()
+                args.iter()
                     .map(|(name, maybe_statement)| {
                         (
-                            name,
-                            maybe_statement.map(|statement| statement.map(mapping)),
+                            name.clone(),
+                            maybe_statement
+                                .as_ref()
+                                .map(|statement| statement.map(mapping)),
                         )
                     })
                     .collect(),
-                body.into_iter()
+                body.iter()
                     .map(|statement| statement.map(mapping))
                     .collect(),
                 mapping(m),
             ),
-            Prefix(operator, exp, m) => Prefix(operator, Box::new(exp.map(mapping)), mapping(m)),
+            Prefix(operator, exp, m) => Prefix(operator.clone(), exp.map(mapping), mapping(m)),
             Infix(operator, left, right, m) => Infix(
-                operator,
-                Box::new(left.map(mapping)),
-                Box::new(right.map(mapping)),
+                operator.clone(),
+                left.map(mapping),
+                right.map(mapping),
                 mapping(m),
             ),
-        }
+        })
     }
 
     pub fn extract_variable_name(&self) -> Option<RIdentifier> {
@@ -433,18 +452,20 @@ impl<T> Display for RExpression<T> {
 
 pub struct LineDisplay<'a, P>(&'a P)
 where
-    P: Extract<Span> + Display;
+    &'a P: Extract<Span> + Display;
+
 impl<'a, P> From<&'a P> for LineDisplay<'a, P>
 where
-    P: Extract<Span> + Display,
+    &'a P: Extract<Span> + Display,
 {
     fn from(other: &'a P) -> Self {
         LineDisplay(other)
     }
 }
+
 impl<'a, P> Display for LineDisplay<'a, P>
 where
-    P: Extract<Span> + Display,
+    &'a P: Extract<Span> + Display,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let expression = self.0.borrow();
@@ -457,14 +478,26 @@ where
     }
 }
 
+impl<'a, P> Serialize for LineDisplay<'a, P>
+where
+    &'a P: Extract<Span> + Display,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
 pub trait Extract<T> {
     fn extract(&self) -> &T;
 }
 
-impl<T> Extract<T> for RStatement<T> {
+impl<T> Extract<T> for &Rc<RStatement<T>> {
     fn extract(&self) -> &T {
         use RStatement::*;
-        match self.borrow() {
+        match &***self {
             Empty(m) => m,
             Comment(_, m) => m,
             TailComment(_, _, m) => m,
@@ -478,10 +511,10 @@ impl<T> Extract<T> for RStatement<T> {
     }
 }
 
-impl<T> Extract<T> for RExpression<T> {
+impl<T> Extract<T> for &Rc<RExpression<T>> {
     fn extract(&self) -> &T {
         use RExpression::*;
-        match self.borrow() {
+        match &***self {
             Constant(_, m) => m,
             Variable(_, m) => m,
             Call(_, _, m) => m,
@@ -499,7 +532,7 @@ impl<T> Extract<T> for RExpression<T> {
 
 pub type RIdentifier = String;
 
-#[derive(PartialEq, Eq, Debug, Clone, Hash)]
+#[derive(PartialEq, Eq, Debug, Clone, Hash, Serialize)]
 pub struct Span {
     from: Position,
     to: Position,
@@ -515,7 +548,7 @@ impl<'i, P: Borrow<pest::iterators::Pair<'i, Rule>>> From<P> for Span {
     }
 }
 
-#[derive(PartialEq, Eq, Debug, Clone, Hash)]
+#[derive(PartialEq, Eq, Debug, Clone, Hash, Serialize)]
 pub struct Position {
     line: usize,
     column: usize,
@@ -541,36 +574,51 @@ macro_rules! unexpected_rule {
     };
 }
 
-#[derive(Debug)]
-pub struct Parsed(Vec<Statement>);
+#[derive(Debug, Default)]
+pub struct Parsed(Vec<Rc<Statement>>);
 
 impl Parsed {
-    pub fn from(code: &str) -> Result<Self, Error> {
+    pub fn new() -> Self {
+        Parsed(vec![])
+    }
+
+    pub fn parse(code: &str) -> Result<Self, Error> {
+        let mut parsed = Self::new();
+        parsed.append(code)?;
+        Ok(parsed)
+    }
+
+    pub fn append(&mut self, code: &str) -> Result<&[Rc<Statement>], Error> {
         debug!("Pest parsing...");
-        let parse_result = RParser::parse(Rule::file, code)?;
+        let parsed = RParser::parse(Rule::r_code, code)?;
 
         debug!("Assembling AST...");
-        Ok(parse_result
+        let mut new_statements: Vec<Rc<Statement>> = parsed
             .filter_map(|token| match token.as_rule() {
                 Rule::EOI => None,
                 _ => Some(parse_line(token)),
             })
-            .collect())
+            .collect();
+
+        let added = new_statements.len();
+        self.0.append(&mut new_statements);
+        let len = self.0.len();
+        Ok(&self.0[len - added..])
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = &Statement> {
+    pub fn iter(&self) -> impl Iterator<Item = &Rc<Statement>> {
         self.0.iter()
     }
 }
 
 impl FromIterator<Statement> for Parsed {
     fn from_iter<I: IntoIterator<Item = Statement>>(iter: I) -> Self {
-        Parsed(iter.into_iter().collect())
+        Parsed(iter.into_iter().map(Rc::new).collect())
     }
 }
 
 impl IntoIterator for Parsed {
-    type Item = Statement;
+    type Item = Rc<Statement>;
     type IntoIter = std::vec::IntoIter<Self::Item>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -578,8 +626,8 @@ impl IntoIterator for Parsed {
     }
 }
 
-fn parse_line(line_pair: pest::iterators::Pair<Rule>) -> Statement {
-    match line_pair.as_rule() {
+fn parse_line(line_pair: pest::iterators::Pair<Rule>) -> Rc<Statement> {
+    Rc::new(match line_pair.as_rule() {
         Rule::empty => RStatement::Empty(line_pair.into()),
         Rule::line => {
             let mut line = line_pair.into_inner();
@@ -596,7 +644,7 @@ fn parse_line(line_pair: pest::iterators::Pair<Rule>) -> Statement {
                         Rule::assignment => {
                             // Can be multiple assignment, e. g. a=b=c=1. We want to extract the right-most expression,
                             // wich is assigned to all others, and the left-most one, which prevents an empty left side.
-                            let mut elements: Vec<Expression> =
+                            let mut elements: Vec<Rc<Expression>> =
                                 statement.into_inner().map(parse_expression).collect();
                             let error = "Assignment did not have enough elements.";
                             let right = elements.pop().expect(error);
@@ -615,13 +663,13 @@ fn parse_line(line_pair: pest::iterators::Pair<Rule>) -> Statement {
                                 panic!("If statement did not have enough elements.");
                             };
                             let body = elements.next().unwrap().into_inner(); // If statement always has a body.
-                            let body: Vec<Statement> = body.map(parse_line).collect();
+                            let body: Vec<Rc<Statement>> = body.map(parse_line).collect();
 
                             let else_body = elements.next().map(|else_body| {
                                 else_body
                                     .into_inner()
                                     .map(parse_line)
-                                    .collect::<Vec<Statement>>()
+                                    .collect::<Vec<Rc<Statement>>>()
                             });
 
                             RStatement::If(condition, body, else_body, statement_span)
@@ -634,7 +682,7 @@ fn parse_line(line_pair: pest::iterators::Pair<Rule>) -> Statement {
                                 panic!("While statement did not have enough elements.");
                             };
                             let body = elements.next().unwrap().into_inner(); // For statement always has a body.
-                            let body: Vec<Statement> = body.map(parse_line).collect();
+                            let body: Vec<Rc<Statement>> = body.map(parse_line).collect();
                             RStatement::While(condition, body, statement_span)
                         }
                         Rule::for_statement => {
@@ -647,7 +695,7 @@ fn parse_line(line_pair: pest::iterators::Pair<Rule>) -> Statement {
                                 panic!("For statement did not have enough elements.");
                             };
                             let body = elements.next().unwrap().into_inner(); // For statement always has a body.
-                            let body: Vec<Statement> = body.map(parse_line).collect();
+                            let body: Vec<Rc<Statement>> = body.map(parse_line).collect();
                             RStatement::For(pattern, range, body, statement_span)
                         }
                         Rule::library => {
@@ -667,20 +715,20 @@ fn parse_line(line_pair: pest::iterators::Pair<Rule>) -> Statement {
             if let Some(comment) = maybe_comment {
                 // Second line component has to be a comment.
                 let comment_span = Span::from(&comment);
-                RStatement::TailComment(Box::new(first), comment.as_str().to_string(), comment_span)
+                RStatement::TailComment(Rc::new(first), comment.as_str().to_string(), comment_span)
             } else {
                 first
             }
         }
         r => unexpected_rule!(r, line_pair),
-    }
+    })
 }
 
-fn parse_expression(expression_pair: pest::iterators::Pair<Rule>) -> Expression {
+fn parse_expression(expression_pair: pest::iterators::Pair<Rule>) -> Rc<Expression> {
     let mut whole_expression = expression_pair.into_inner();
     let expression = whole_expression.next().unwrap(); // Expression is always non-empty.
     let expression_span = Span::from(&expression);
-    let mut rexp: Expression = match expression.as_rule() {
+    let mut rexp: Rc<Expression> = Rc::new(match expression.as_rule() {
         Rule::constant => {
             RExpression::Constant(expression.as_str().to_string(), (&expression).into())
         }
@@ -693,17 +741,17 @@ fn parse_expression(expression_pair: pest::iterators::Pair<Rule>) -> Expression 
             let exp = prefix_expression.next().unwrap(); // Prefix always has expression.
             RExpression::Prefix(
                 operator.as_str().to_string(),
-                Box::new(parse_expression(exp)),
+                parse_expression(exp),
                 expression_span,
             )
         }
         Rule::formula => {
-            RExpression::OneSidedFormula(Box::new(parse_expression(expression)), expression_span)
+            RExpression::OneSidedFormula(parse_expression(expression), expression_span)
         }
         Rule::function_definition => {
             let mut function = expression.into_inner();
             let args = function.next().unwrap(); // Function always has (possibly empty) arguments.
-            let args: Vec<(RIdentifier, Option<Expression>)> = args
+            let args: Vec<(RIdentifier, Option<Rc<Expression>>)> = args
                 .into_inner()
                 .map(|arg| {
                     match arg.as_rule() {
@@ -717,25 +765,19 @@ fn parse_expression(expression_pair: pest::iterators::Pair<Rule>) -> Expression 
                 })
                 .collect();
             let body = function.next().unwrap().into_inner(); // Function always has a body.
-            let body: Vec<Statement> = body.map(parse_line).collect();
+            let body: Vec<Rc<Statement>> = body.map(parse_line).collect();
             RExpression::Function(args, body, expression_span)
         }
-        Rule::expression => parse_expression(expression),
+        Rule::expression => Rc::try_unwrap(parse_expression(expression)).unwrap(), // We are the sole owners.
         r => unexpected_rule!(r, expression),
-    };
+    });
 
     // Process all indexing expressions that follow.
     for infix in whole_expression {
         let infix_span = Span::from(&infix);
-        match infix.as_rule() {
-            Rule::function_call => rexp = parse_function_expression(rexp, infix),
-            Rule::column => {
-                rexp = RExpression::Column(
-                    Box::new(rexp),
-                    Box::new(parse_expression(infix)),
-                    infix_span,
-                )
-            }
+        rexp = Rc::new(match infix.as_rule() {
+            Rule::function_call => parse_function_expression(rexp, infix),
+            Rule::column => RExpression::Column(rexp, parse_expression(infix), infix_span),
             Rule::index => {
                 let indices = infix
                     .into_inner()
@@ -745,7 +787,7 @@ fn parse_expression(expression_pair: pest::iterators::Pair<Rule>) -> Expression 
                         _ => unreachable!(),
                     })
                     .collect();
-                rexp = RExpression::Index(Box::new(rexp), indices, infix_span);
+                RExpression::Index(rexp, indices, infix_span)
             }
             Rule::list_index => {
                 let indices = infix
@@ -756,41 +798,37 @@ fn parse_expression(expression_pair: pest::iterators::Pair<Rule>) -> Expression 
                         _ => unreachable!(),
                     })
                     .collect();
-                rexp = RExpression::ListIndex(Box::new(rexp), indices, infix_span);
+                RExpression::ListIndex(rexp, indices, infix_span)
             }
             Rule::infix => {
                 let mut infix_operator = infix.into_inner();
                 let operator = infix_operator.next().unwrap(); // Operator is always present.
                 let right = infix_operator.next().unwrap(); // Infix operator always has right-hand side.
-                rexp = RExpression::Infix(
+                RExpression::Infix(
                     operator.as_str().into(),
-                    Box::new(rexp),
-                    Box::new(parse_expression(right)),
+                    rexp,
+                    parse_expression(right),
                     infix_span,
-                );
+                )
             }
             Rule::formula => {
-                rexp = RExpression::TwoSidedFormula(
-                    Box::new(rexp),
-                    Box::new(parse_expression(infix)),
-                    infix_span,
-                );
+                RExpression::TwoSidedFormula(rexp, parse_expression(infix), infix_span)
             }
             r => unexpected_rule!(r, infix),
-        }
+        });
     }
 
     rexp
 }
 
 fn parse_function_expression(
-    expression: Expression,
+    expression: Rc<Expression>,
     function_pair: pest::iterators::Pair<Rule>,
 ) -> Expression {
     let function_span = Span::from(&function_pair);
     let mut function = function_pair.into_inner();
     let maybe_arguments = function.next();
-    let args: Vec<(Option<RIdentifier>, Expression)> = match maybe_arguments {
+    let args: Vec<(Option<RIdentifier>, Rc<Expression>)> = match maybe_arguments {
         Some(args) => {
             args.into_inner()
                 .map(|arg| {
@@ -814,7 +852,7 @@ fn parse_function_expression(
         }
         None => vec![],
     };
-    RExpression::Call(Box::new(expression), args, function_span)
+    RExpression::Call(expression, args, function_span)
 }
 
 #[cfg(test)]
@@ -822,12 +860,151 @@ mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
 
-    fn test_parse(code: &'static str) -> Vec<RStatement<()>> {
-        Parsed::from(code)
-            .unwrap_or_else(|e| panic!("{}", e))
-            .into_iter()
-            .map(|stmt| stmt.map(&mut |_| ()))
-            .collect()
+    #[macro_export]
+    macro_rules! empty {
+        () => {
+            Rc::new(RStatement::Empty(()).into())
+        };
+    }
+
+    #[macro_export]
+    macro_rules! comment {
+        ($text: literal) => {
+            Rc::new(RStatement::Comment($text.to_string(), ()).into())
+        };
+    }
+
+    #[macro_export]
+    macro_rules! tail_comment {
+        ($exp: expr, $text: literal) => {
+            Rc::new(RStatement::TailComment($exp, $text.to_string(), ()).into())
+        };
+    }
+
+    #[macro_export]
+    macro_rules! assignment {
+        ($left: expr, $additional: expr, $right: expr) => {
+            Rc::new(RStatement::Assignment($left, $additional, $right, ()).into())
+        };
+    }
+
+    #[macro_export]
+    macro_rules! if_stmt {
+        ($cond: expr, $body: expr, $else_body: expr) => {
+            Rc::new(RStatement::If($cond, $body, $else_body, ()).into())
+        };
+    }
+
+    #[macro_export]
+    macro_rules! while_stmt {
+        ($cond:expr, $body: expr) => {
+            Rc::new(RStatement::While($cond, $body, ()).into())
+        };
+    }
+
+    #[macro_export]
+    macro_rules! for_stmt {
+        ($pattern:expr, $range:expr, $body:expr) => {
+            Rc::new(RStatement::For($pattern, $range, $body, ()).into())
+        };
+    }
+
+    #[macro_export]
+    macro_rules! library {
+        ($name:literal) => {
+            Rc::new(RStatement::Library($name.to_string(), ()).into())
+        };
+    }
+
+    #[macro_export]
+    macro_rules! expression {
+        ($exp: expr) => {
+            Rc::new(RStatement::Expression($exp, ()).into())
+        };
+    }
+
+    #[macro_export]
+    macro_rules! constant {
+        ($value: literal) => {
+            Rc::new(RExpression::Constant($value.to_string(), ()).into())
+        };
+    }
+
+    #[macro_export]
+    macro_rules! variable {
+        ($name: literal) => {
+            Rc::new(RExpression::Variable($name.to_string(), ()).into())
+        };
+    }
+
+    #[macro_export]
+    macro_rules! call {
+        ($exp: expr, $args: expr) => {
+            Rc::new(RExpression::Call($exp, $args, ()).into())
+        };
+    }
+
+    #[macro_export]
+    macro_rules! column {
+        ($left:expr, $right:expr) => {
+            Rc::new(RExpression::Column($left, $right, ()).into())
+        };
+    }
+
+    #[macro_export]
+    macro_rules! index {
+        ($left:expr,$right:expr) => {
+            Rc::new(RExpression::Index($left, $right, ()).into())
+        };
+    }
+
+    #[macro_export]
+    macro_rules! list_index {
+        ($left:expr, $right:expr) => {
+            Rc::new(RExpression::ListIndex($left, $right, ()).into())
+        };
+    }
+
+    #[macro_export]
+    macro_rules! one_sided_formula {
+        ($exp:expr) => {
+            Rc::new(RExpression::OneSidedFormula($exp, ()).into())
+        };
+    }
+
+    #[macro_export]
+    macro_rules! two_sided_formula {
+        ($left:expr,$right:expr) => {
+            Rc::new(RExpression::TwoSidedFormula($left, $right, ()).into())
+        };
+    }
+
+    #[macro_export]
+    macro_rules! function {
+        ($params:expr, $body:expr) => {
+            Rc::new(RExpression::Function($params, $body, ()).into())
+        };
+    }
+
+    #[macro_export]
+    macro_rules! prefix {
+        ($op:literal,$exp:expr) => {
+            Rc::new(RExpression::Prefix($op.to_string(), $exp, ()).into())
+        };
+    }
+
+    #[macro_export]
+    macro_rules! infix {
+        ($op:literal, $left:expr,$right:expr) => {
+            Rc::new(RExpression::Infix($op.to_string(), $left, $right, ()).into())
+        };
+    }
+
+    fn assert_matches(code: &'static str, expected: Vec<Rc<RStatement<()>>>) {
+        let parsed = Parsed::parse(code).unwrap_or_else(|e| panic!("{}", e));
+        let actual: Vec<Rc<RStatement<()>>> =
+            parsed.iter().map(|stmt| stmt.map(&mut |_| ())).collect();
+        assert_eq!(expected, actual);
     }
 
     #[test]
@@ -836,20 +1013,12 @@ mod tests {
 #123
 hello() # world
 # another thing   ";
-        let result = test_parse(code);
         let expected = vec![
-            RStatement::Comment("#123".into(), ()),
-            RStatement::TailComment(
-                Box::new(RStatement::Expression(
-                    RExpression::Call(RExpression::boxed_variable("hello"), vec![], ()),
-                    (),
-                )),
-                "# world".into(),
-                (),
-            ),
-            RStatement::Comment("# another thing   ".into(), ()),
+            comment!("#123"),
+            tail_comment!(expression!(call!(variable!("hello"), vec![])), "# world"),
+            comment!("# another thing   "),
         ];
-        assert_eq!(expected, result);
+        assert_matches(code, expected)
     }
 
     #[test]
@@ -868,43 +1037,22 @@ d <- 1
 
 
 ";
-        let result = test_parse(code);
         let expected = vec![
-            RStatement::Empty(()),
-            RStatement::Comment("# First block".into(), ()),
-            RStatement::Assignment(
-                RExpression::variable("a"),
-                vec![],
-                RExpression::constant("1"),
-                (),
-            ),
-            RStatement::Empty(()),
-            RStatement::Comment("# Second block".into(), ()),
-            RStatement::Assignment(
-                RExpression::variable("b"),
-                vec![],
-                RExpression::constant("1"),
-                (),
-            ),
-            RStatement::Assignment(
-                RExpression::variable("c"),
-                vec![],
-                RExpression::constant("2"),
-                (),
-            ),
-            RStatement::Empty(()),
-            RStatement::Empty(()),
-            RStatement::Comment("# Third block".into(), ()),
-            RStatement::Assignment(
-                RExpression::variable("d"),
-                vec![],
-                RExpression::constant("1"),
-                (),
-            ),
-            RStatement::Empty(()),
-            RStatement::Empty(()),
+            empty!(),
+            comment!("# First block"),
+            assignment!(variable!("a"), vec![], constant!("1")),
+            empty!(),
+            comment!("# Second block"),
+            assignment!(variable!("b"), vec![], constant!("1")),
+            assignment!(variable!("c"), vec![], constant!("2")),
+            empty!(),
+            empty!(),
+            comment!("# Third block"),
+            assignment!(variable!("d"), vec![], constant!("1")),
+            empty!(),
+            empty!(),
         ];
-        assert_eq!(expected, result);
+        assert_matches(code, expected);
     }
 
     #[test]
@@ -916,52 +1064,29 @@ line <-
 b = 2
 a=b=c=1
 colnames(something) <- c(\"R\", \"is\", \"crazy\")";
-        let result = test_parse(code);
         let expected = vec![
-            RStatement::Assignment(
-                RExpression::variable("a"),
-                vec![],
-                RExpression::constant("1"),
-                (),
+            assignment!(variable!("a"), vec![], constant!("1")),
+            assignment!(variable!("line"), vec![], constant!("\"break\"")),
+            assignment!(variable!("b"), vec![], constant!("2")),
+            assignment!(
+                variable!("a"),
+                vec![variable!("b"), variable!("c")],
+                constant!("1")
             ),
-            RStatement::Assignment(
-                RExpression::variable("line"),
+            assignment!(
+                call!(variable!("colnames"), vec![(None, variable!("something"))]),
                 vec![],
-                RExpression::constant("\"break\""),
-                (),
-            ),
-            RStatement::Assignment(
-                RExpression::variable("b"),
-                vec![],
-                RExpression::constant("2"),
-                (),
-            ),
-            RStatement::Assignment(
-                RExpression::variable("a"),
-                vec![RExpression::variable("b"), RExpression::variable("c")],
-                RExpression::constant("1"),
-                (),
-            ),
-            RStatement::Assignment(
-                RExpression::Call(
-                    RExpression::boxed_variable("colnames"),
-                    vec![(None, RExpression::variable("something"))],
-                    (),
-                ),
-                vec![],
-                RExpression::Call(
-                    RExpression::boxed_variable("c"),
+                call!(
+                    variable!("c"),
                     vec![
-                        (None, RExpression::constant("\"R\"")),
-                        (None, RExpression::constant("\"is\"")),
-                        (None, RExpression::constant("\"crazy\"")),
-                    ],
-                    (),
-                ),
-                (),
+                        (None, constant!("\"R\"")),
+                        (None, constant!("\"is\"")),
+                        (None, constant!("\"crazy\"")),
+                    ]
+                )
             ),
         ];
-        assert_eq!(expected, result);
+        assert_matches(code, expected);
     }
 
     #[test]
@@ -978,70 +1103,36 @@ break_down(
 weird(\"name\" = 1)
 name:::space()
 higher_order()(10)";
-        let result = test_parse(code);
         let expected = vec![
-            RStatement::Expression(
-                RExpression::Call(RExpression::boxed_variable("empty"), vec![], ()),
-                (),
-            ),
-            RStatement::Expression(
-                RExpression::Call(
-                    RExpression::boxed_variable("single"),
-                    vec![(None, RExpression::constant("1"))],
-                    (),
-                ),
-                (),
-            ),
-            RStatement::Expression(
-                RExpression::Call(
-                    RExpression::boxed_variable("with_args"),
-                    vec![
-                        (None, RExpression::constant("1")),
-                        (None, RExpression::variable("x")),
-                        (Some("name".to_string()), RExpression::variable("value")),
-                    ],
-                    (),
-                ),
-                (),
-            ),
-            RStatement::Expression(
-                RExpression::Call(
-                    RExpression::boxed_variable("break_down"),
-                    vec![
-                        (None, RExpression::constant("\"long\"")),
-                        (None, RExpression::constant("\"argument\"")),
-                        (None, RExpression::constant("\"chains\"")),
-                    ],
-                    (),
-                ),
-                (),
-            ),
-            RStatement::Expression(
-                RExpression::Call(
-                    RExpression::boxed_variable("weird"),
-                    vec![(Some("\"name\"".into()), RExpression::constant("1"))],
-                    (),
-                ),
-                (),
-            ),
-            RStatement::Expression(
-                RExpression::Call(RExpression::boxed_variable("name:::space"), vec![], ()),
-                (),
-            ),
-            RStatement::Expression(
-                RExpression::Call(
-                    Box::new(RExpression::Call(
-                        RExpression::boxed_variable("higher_order"),
-                        vec![],
-                        (),
-                    )),
-                    vec![(None, RExpression::constant("10"))],
-                    (),
-                ),
-                (),
-            ),
+            expression!(call!(variable!("empty"), vec![])),
+            expression!(call!(variable!("single"), vec![(None, constant!("1"))])),
+            expression!(call!(
+                variable!("with_args"),
+                vec![
+                    (None, constant!("1")),
+                    (None, variable!("x")),
+                    (Some("name".to_string()), variable!("value")),
+                ]
+            )),
+            expression!(call!(
+                variable!("break_down"),
+                vec![
+                    (None, constant!("\"long\"")),
+                    (None, constant!("\"argument\"")),
+                    (None, constant!("\"chains\"")),
+                ]
+            )),
+            expression!(call!(
+                variable!("weird"),
+                vec![(Some("\"name\"".to_string()), constant!("1"))]
+            )),
+            expression!(call!(variable!("name:::space"), vec![])),
+            expression!(call!(
+                call!(variable!("higher_order"), vec![]),
+                vec![(None, constant!("10"))]
+            )),
         ];
-        assert_eq!(expected, result);
+        assert_matches(code, expected);
     }
 
     #[test]
@@ -1050,13 +1141,12 @@ higher_order()(10)";
 'first'
 \"second\"
 `third`";
-        let result = test_parse(code);
         let expected = vec![
-            RStatement::Expression(RExpression::constant("'first'"), ()),
-            RStatement::Expression(RExpression::constant("\"second\""), ()),
-            RStatement::Expression(RExpression::constant("`third`"), ()),
+            expression!(constant!("'first'")),
+            expression!(constant!("\"second\"")),
+            expression!(constant!("`third`")),
         ];
-        assert_eq!(expected, result);
+        assert_matches(code, expected);
     }
 
     #[test]
@@ -1068,22 +1158,15 @@ higher_order()(10)";
 -2
 2e-30
 +3.4e+1";
-        let result = test_parse(code);
         let expected = vec![
-            RStatement::Expression(RExpression::constant("1"), ()),
-            RStatement::Expression(RExpression::constant(".20"), ()),
-            RStatement::Expression(RExpression::constant("0.10"), ()),
-            RStatement::Expression(
-                RExpression::Prefix("-".into(), Box::new(RExpression::constant("2")), ()),
-                (),
-            ),
-            RStatement::Expression(RExpression::constant("2e-30"), ()),
-            RStatement::Expression(
-                RExpression::Prefix("+".into(), Box::new(RExpression::constant("3.4e+1")), ()),
-                (),
-            ),
+            expression!(constant!("1")),
+            expression!(constant!(".20")),
+            expression!(constant!("0.10")),
+            expression!(prefix!("-", constant!("2"))),
+            expression!(constant!("2e-30")),
+            expression!(prefix!("+", constant!("3.4e+1"))),
         ];
-        assert_eq!(expected, result);
+        assert_matches(code, expected);
     }
 
     #[test]
@@ -1091,12 +1174,8 @@ higher_order()(10)";
         let code = "\
 library(plyr)
 library(MASS)";
-        let result = test_parse(code);
-        let expected = vec![
-            RStatement::Library("plyr".into(), ()),
-            RStatement::Library("MASS".into(), ()),
-        ];
-        assert_eq!(expected, result);
+        let expected = vec![library!("plyr"), library!("MASS")];
+        assert_matches(code, expected);
     }
 
     #[test]
@@ -1109,85 +1188,35 @@ other[multiple, index, arguments]
 list[[1,2]]
 get_matrix()$column [ 1 ]
 item[empty,]";
-        let result = test_parse(code);
         let expected = vec![
-            RStatement::Expression(
-                RExpression::Column(
-                    Box::new(RExpression::variable("item")),
-                    Box::new(RExpression::variable("column")),
-                    (),
-                ),
-                (),
-            ),
-            RStatement::Expression(
-                RExpression::Index(
-                    Box::new(RExpression::variable("item")),
-                    vec![Some(RExpression::Column(
-                        Box::new(RExpression::variable("other")),
-                        Box::new(RExpression::variable("thing")),
-                        (),
-                    ))],
-                    (),
-                ),
-                (),
-            ),
-            RStatement::Expression(
-                RExpression::ListIndex(
-                    Box::new(RExpression::variable("item")),
-                    vec![Some(RExpression::constant("1"))],
-                    (),
-                ),
-                (),
-            ),
-            RStatement::Expression(
-                RExpression::Index(
-                    Box::new(RExpression::variable("other")),
-                    vec![
-                        Some(RExpression::variable("multiple")),
-                        Some(RExpression::variable("index")),
-                        Some(RExpression::variable("arguments")),
-                    ],
-                    (),
-                ),
-                (),
-            ),
-            RStatement::Expression(
-                RExpression::ListIndex(
-                    Box::new(RExpression::variable("list")),
-                    vec![
-                        Some(RExpression::constant("1")),
-                        Some(RExpression::constant("2")),
-                    ],
-                    (),
-                ),
-                (),
-            ),
-            RStatement::Expression(
-                RExpression::Index(
-                    Box::new(RExpression::Column(
-                        Box::new(RExpression::Call(
-                            RExpression::boxed_variable("get_matrix"),
-                            vec![],
-                            (),
-                        )),
-                        Box::new(RExpression::variable("column")),
-                        (),
-                    )),
-                    vec![Some(RExpression::constant("1"))],
-                    (),
-                ),
-                (),
-            ),
-            RStatement::Expression(
-                RExpression::Index(
-                    Box::new(RExpression::variable("item")),
-                    vec![Some(RExpression::variable("empty")), None],
-                    (),
-                ),
-                (),
-            ),
+            expression!(column!(variable!("item"), variable!("column"))),
+            expression!(index!(
+                variable!("item"),
+                vec![Some(column!(variable!("other"), variable!("thing")))]
+            )),
+            expression!(list_index!(variable!("item"), vec![Some(constant!("1"))])),
+            expression!(index!(
+                variable!("other"),
+                vec![
+                    Some(variable!("multiple")),
+                    Some(variable!("index")),
+                    Some(variable!("arguments")),
+                ]
+            )),
+            expression!(list_index!(
+                variable!("list"),
+                vec![Some(constant!("1")), Some(constant!("2")),]
+            )),
+            expression!(index!(
+                column!(call!(variable!("get_matrix"), vec![]), variable!("column")),
+                vec![Some(constant!("1"))]
+            )),
+            expression!(index!(
+                variable!("item"),
+                vec![Some(variable!("empty")), None]
+            )),
         ];
-        assert_eq!(expected, result);
+        assert_matches(code, expected);
     }
 
     #[test]
@@ -1200,105 +1229,41 @@ two ~ sided + 1
 ~ transform(x)
 other ~ transform(x)
 lm(y[subk]~factor(x[subk]))";
-        let result = test_parse(code);
         let expected = vec![
-            RStatement::Expression(
-                RExpression::OneSidedFormula(Box::new(RExpression::variable("one_sided")), ()),
-                (),
-            ),
-            RStatement::Expression(
-                RExpression::TwoSidedFormula(
-                    Box::new(RExpression::variable("two")),
-                    Box::new(RExpression::variable("sided")),
-                    (),
-                ),
-                (),
-            ),
-            RStatement::Expression(
-                RExpression::OneSidedFormula(
-                    Box::new(RExpression::Infix(
-                        "+".into(),
-                        Box::new(RExpression::variable("one")),
-                        Box::new(RExpression::Infix(
-                            "+".into(),
-                            Box::new(RExpression::variable("sided")),
-                            Box::new(RExpression::variable("multiple")),
-                            (),
-                        )),
-                        (),
-                    )),
-                    (),
-                ),
-                (),
-            ),
-            RStatement::Expression(
-                RExpression::TwoSidedFormula(
-                    Box::new(RExpression::variable("two")),
-                    Box::new(RExpression::Infix(
-                        "+".into(),
-                        Box::new(RExpression::variable("sided")),
-                        Box::new(RExpression::constant("1")),
-                        (),
-                    )),
-                    (),
-                ),
-                (),
-            ),
-            RStatement::Expression(
-                RExpression::OneSidedFormula(
-                    Box::new(RExpression::Call(
-                        RExpression::boxed_variable("transform"),
-                        vec![(None, RExpression::variable("x"))],
-                        (),
-                    )),
-                    (),
-                ),
-                (),
-            ),
-            RStatement::Expression(
-                RExpression::TwoSidedFormula(
-                    Box::new(RExpression::variable("other")),
-                    Box::new(RExpression::Call(
-                        RExpression::boxed_variable("transform"),
-                        vec![(None, RExpression::variable("x"))],
-                        (),
-                    )),
-                    (),
-                ),
-                (),
-            ),
-            RStatement::Expression(
-                RExpression::Call(
-                    RExpression::boxed_variable("lm"),
-                    vec![(
-                        None,
-                        RExpression::TwoSidedFormula(
-                            Box::new(RExpression::Index(
-                                Box::new(RExpression::variable("y")),
-                                vec![Some(RExpression::variable("subk"))],
-                                (),
-                            )),
-                            Box::new(RExpression::Call(
-                                RExpression::boxed_variable("factor"),
-                                vec![(
-                                    None,
-                                    RExpression::Index(
-                                        Box::new(RExpression::variable("x")),
-                                        vec![Some(RExpression::variable("subk"))],
-                                        (),
-                                    ),
-                                )],
-                                (),
-                            )),
-                            (),
-                        ),
-                    )],
-                    (),
-                ),
-                (),
-            ),
+            expression!(one_sided_formula!(variable!("one_sided"))),
+            expression!(two_sided_formula!(variable!("two"), variable!("sided"))),
+            expression!(one_sided_formula!(infix!(
+                "+",
+                variable!("one"),
+                infix!("+", variable!("sided"), variable!("multiple"))
+            ))),
+            expression!(two_sided_formula!(
+                variable!("two"),
+                infix!("+", variable!("sided"), constant!("1"))
+            )),
+            expression!(one_sided_formula!(call!(
+                variable!("transform"),
+                vec![(None, variable!("x"))]
+            ))),
+            expression!(two_sided_formula!(
+                variable!("other"),
+                call!(variable!("transform"), vec![(None, variable!("x"))])
+            )),
+            expression!(call!(
+                variable!("lm"),
+                vec![(
+                    None,
+                    two_sided_formula!(
+                        index!(variable!("y"), vec![Some(variable!("subk"))]),
+                        call!(
+                            variable!("factor"),
+                            vec![(None, index!(variable!("x"), vec![Some(variable!("subk"))]),)]
+                        )
+                    ),
+                )]
+            )),
         ];
-        assert_eq!(expected, result);
+        assert_matches(code, expected);
     }
 
     #[test]
@@ -1314,51 +1279,36 @@ func3 <- function (with,
     a <- other()
     a
 } ";
-        let result = test_parse(code);
         let expected = vec![
-            RStatement::Assignment(
-                RExpression::variable("func1"),
+            assignment!(
+                variable!("func1"),
                 vec![],
-                RExpression::Function(
-                    vec![],
-                    vec![RStatement::Expression(RExpression::constant("1"), ())],
-                    (),
-                ),
-                (),
+                function!(vec![], vec![expression!(constant!("1"))])
             ),
-            RStatement::Assignment(
-                RExpression::variable("func2"),
+            assignment!(
+                variable!("func2"),
                 vec![],
-                RExpression::Function(
-                    vec![("with".into(), None), ("arguments".into(), None)],
-                    vec![RStatement::Expression(RExpression::constant("2"), ())],
-                    (),
-                ),
-                (),
+                function!(
+                    vec![("with".to_string(), None), ("arguments".to_string(), None)],
+                    vec![expression!(constant!("2"))]
+                )
             ),
-            RStatement::Assignment(
-                RExpression::variable("func3"),
+            assignment!(
+                variable!("func3"),
                 vec![],
-                RExpression::Function(
+                function!(
                     vec![
-                        ("with".into(), None),
-                        ("default".into(), Some(RExpression::constant("'arguments'"))),
+                        ("with".to_string(), None),
+                        ("default".to_string(), Some(constant!("'arguments'"))),
                     ],
                     vec![
-                        RStatement::Assignment(
-                            RExpression::variable("a"),
-                            vec![],
-                            RExpression::Call(RExpression::boxed_variable("other"), vec![], ()),
-                            (),
-                        ),
-                        RStatement::Expression(RExpression::variable("a"), ()),
-                    ],
-                    (),
-                ),
-                (),
+                        assignment!(variable!("a"), vec![], call!(variable!("other"), vec![])),
+                        expression!(variable!("a")),
+                    ]
+                )
             ),
         ];
-        assert_eq!(expected, result);
+        assert_matches(code, expected);
     }
 
     #[test]
@@ -1367,42 +1317,19 @@ func3 <- function (with,
 x <- !TRUE
 y <- negate(!x)
 -(1 + 2)";
-        let result = test_parse(code);
         let expected = vec![
-            RStatement::Assignment(
-                RExpression::variable("x"),
+            assignment!(variable!("x"), vec![], prefix!("!", constant!("TRUE"))),
+            assignment!(
+                variable!("y"),
                 vec![],
-                RExpression::Prefix("!".into(), Box::new(RExpression::constant("TRUE")), ()),
-                (),
+                call!(
+                    variable!("negate"),
+                    vec![(None, prefix!("!", variable!("x")),)]
+                )
             ),
-            RStatement::Assignment(
-                RExpression::variable("y"),
-                vec![],
-                RExpression::Call(
-                    RExpression::boxed_variable("negate"),
-                    vec![(
-                        None,
-                        RExpression::Prefix("!".into(), Box::new(RExpression::variable("x")), ()),
-                    )],
-                    (),
-                ),
-                (),
-            ),
-            RStatement::Expression(
-                RExpression::Prefix(
-                    "-".into(),
-                    Box::new(RExpression::Infix(
-                        "+".into(),
-                        Box::new(RExpression::constant("1")),
-                        Box::new(RExpression::constant("2")),
-                        (),
-                    )),
-                    (),
-                ),
-                (),
-            ),
+            expression!(prefix!("-", infix!("+", constant!("1"), constant!("2")))),
         ];
-        assert_eq!(expected, result);
+        assert_matches(code, expected);
     }
 
     #[test]
@@ -1413,46 +1340,13 @@ TRUE && FALSE
 'a' %custom% 'infix'
 1 +
     3";
-        let result = test_parse(code);
         let expected = vec![
-            RStatement::Expression(
-                RExpression::Infix(
-                    "<=".into(),
-                    Box::new(RExpression::constant("1")),
-                    Box::new(RExpression::constant("3")),
-                    (),
-                ),
-                (),
-            ),
-            RStatement::Expression(
-                RExpression::Infix(
-                    "&&".into(),
-                    Box::new(RExpression::constant("TRUE")),
-                    Box::new(RExpression::constant("FALSE")),
-                    (),
-                ),
-                (),
-            ),
-            RStatement::Expression(
-                RExpression::Infix(
-                    "%custom%".into(),
-                    Box::new(RExpression::constant("'a'")),
-                    Box::new(RExpression::constant("'infix'")),
-                    (),
-                ),
-                (),
-            ),
-            RStatement::Expression(
-                RExpression::Infix(
-                    "+".into(),
-                    Box::new(RExpression::constant("1")),
-                    Box::new(RExpression::constant("3")),
-                    (),
-                ),
-                (),
-            ),
+            expression!(infix!("<=", constant!("1"), constant!("3"))),
+            expression!(infix!("&&", constant!("TRUE"), constant!("FALSE"))),
+            expression!(infix!("%custom%", constant!("'a'"), constant!("'infix'"))),
+            expression!(infix!("+", constant!("1"), constant!("3"))),
         ];
-        assert_eq!(expected, result);
+        assert_matches(code, expected);
     }
 
     #[test]
@@ -1462,40 +1356,21 @@ TRUE && FALSE
 (2)
 ( 1 + (2 + 3))
 ((1 + 2) + 3)";
-        let result = test_parse(code);
         let expected = vec![
-            RStatement::Expression(RExpression::constant("1"), ()),
-            RStatement::Expression(RExpression::constant("2"), ()),
-            RStatement::Expression(
-                RExpression::Infix(
-                    "+".into(),
-                    Box::new(RExpression::constant("1")),
-                    Box::new(RExpression::Infix(
-                        "+".into(),
-                        Box::new(RExpression::constant("2")),
-                        Box::new(RExpression::constant("3")),
-                        (),
-                    )),
-                    (),
-                ),
-                (),
-            ),
-            RStatement::Expression(
-                RExpression::Infix(
-                    "+".into(),
-                    Box::new(RExpression::Infix(
-                        "+".into(),
-                        Box::new(RExpression::constant("1")),
-                        Box::new(RExpression::constant("2")),
-                        (),
-                    )),
-                    Box::new(RExpression::constant("3")),
-                    (),
-                ),
-                (),
-            ),
+            expression!(constant!("1")),
+            expression!(constant!("2")),
+            expression!(infix!(
+                "+",
+                constant!("1"),
+                infix!("+", constant!("2"), constant!("3"))
+            )),
+            expression!(infix!(
+                "+",
+                infix!("+", constant!("1"), constant!("2")),
+                constant!("3")
+            )),
         ];
-        assert_eq!(expected, result);
+        assert_matches(code, expected);
     }
 
     #[test]
@@ -1524,92 +1399,43 @@ else if(TRUE){
 if (TRUE)
     cry()
 else (why <- 1)";
-        let result = test_parse(code);
         let expected = vec![
-            RStatement::If(
-                RExpression::Infix(
-                    "==".into(),
-                    Box::new(RExpression::constant("0")),
-                    Box::new(RExpression::constant("1")),
-                    (),
-                ),
+            if_stmt!(
+                infix!("==", constant!("0"), constant!("1")),
                 vec![
-                    RStatement::Expression(
-                        RExpression::Call(RExpression::boxed_variable("do_something"), vec![], ()),
-                        (),
-                    ),
-                    RStatement::Empty(()),
-                    RStatement::Expression(
-                        RExpression::Call(
-                            RExpression::boxed_variable("do_something_else"),
-                            vec![],
-                            (),
-                        ),
-                        (),
-                    ),
+                    expression!(call!(variable!("do_something"), vec![])),
+                    empty!(),
+                    expression!(call!(variable!("do_something_else"), vec![])),
                 ],
-                None,
-                (),
+                None
             ),
-            RStatement::If(
-                RExpression::Call(RExpression::boxed_variable("is_ok"), vec![], ()),
-                vec![RStatement::Expression(
-                    RExpression::Call(
-                        RExpression::boxed_variable("do_something_again"),
-                        vec![],
-                        (),
-                    ),
-                    (),
-                )],
-                None,
-                (),
+            if_stmt!(
+                call!(variable!("is_ok"), vec![]),
+                vec![expression!(call!(variable!("do_something_again"), vec![]))],
+                None
             ),
-            RStatement::Empty(()),
-            RStatement::If(
-                RExpression::constant("TRUE"),
-                vec![RStatement::Expression(
-                    RExpression::Call(RExpression::boxed_variable("is_true"), vec![], ()),
-                    (),
-                )],
-                Some(vec![RStatement::Expression(
-                    RExpression::Call(RExpression::boxed_variable("is_false"), vec![], ()),
-                    (),
-                )]),
-                (),
+            empty!(),
+            if_stmt!(
+                constant!("TRUE"),
+                vec![expression!(call!(variable!("is_true"), vec![]))],
+                Some(vec![expression!(call!(variable!("is_false"), vec![]))])
             ),
-            RStatement::If(
-                RExpression::constant("FALSE"),
-                vec![RStatement::Expression(
-                    RExpression::Call(RExpression::boxed_variable("is_false"), vec![], ()),
-                    (),
-                )],
-                Some(vec![RStatement::If(
-                    RExpression::constant("TRUE"),
-                    vec![RStatement::Expression(
-                        RExpression::Call(RExpression::boxed_variable("is_true"), vec![], ()),
-                        (),
-                    )],
-                    None,
-                    (),
-                )]),
-                (),
+            if_stmt!(
+                constant!("FALSE"),
+                vec![expression!(call!(variable!("is_false"), vec![]))],
+                Some(vec![if_stmt!(
+                    constant!("TRUE"),
+                    vec![expression!(call!(variable!("is_true"), vec![]))],
+                    None
+                )])
             ),
-            RStatement::If(
-                RExpression::constant("TRUE"),
-                vec![RStatement::Expression(
-                    RExpression::Call(RExpression::boxed_variable("cry"), vec![], ()),
-                    (),
-                )],
-                Some(vec![RStatement::Assignment(
-                    RExpression::variable("why"),
-                    vec![],
-                    RExpression::constant("1"),
-                    (),
-                )]),
-                (),
+            if_stmt!(
+                constant!("TRUE"),
+                vec![expression!(call!(variable!("cry"), vec![]))],
+                Some(vec![assignment!(variable!("why"), vec![], constant!("1"))])
             ),
         ];
-        assert_eq!(expected, result);
+        assert_matches(code, expected);
     }
 
     #[test]
@@ -1624,67 +1450,38 @@ for (i in get())
     do_something_again(i)
 for(row in 1:15) l[[row]] = row
 ";
-        let result = test_parse(code);
         let expected = vec![
-            RStatement::For(
-                RExpression::variable("i"),
-                RExpression::variable("something"),
+            for_stmt!(
+                variable!("i"),
+                variable!("something"),
                 vec![
-                    RStatement::Expression(
-                        RExpression::Call(
-                            RExpression::boxed_variable("do_something_with"),
-                            vec![(None, RExpression::variable("i"))],
-                            (),
-                        ),
-                        (),
-                    ),
-                    RStatement::Empty(()),
-                    RStatement::Expression(
-                        RExpression::Call(
-                            RExpression::boxed_variable("do_something_else"),
-                            vec![],
-                            (),
-                        ),
-                        (),
-                    ),
-                ],
-                (),
+                    expression!(call!(
+                        variable!("do_something_with"),
+                        vec![(None, variable!("i"))]
+                    )),
+                    empty!(),
+                    expression!(call!(variable!("do_something_else"), vec![])),
+                ]
             ),
-            RStatement::For(
-                RExpression::variable("i"),
-                RExpression::Call(RExpression::boxed_variable("get"), vec![], ()),
-                vec![RStatement::Expression(
-                    RExpression::Call(
-                        RExpression::boxed_variable("do_something_again"),
-                        vec![(None, RExpression::variable("i"))],
-                        (),
-                    ),
-                    (),
-                )],
-                (),
+            for_stmt!(
+                variable!("i"),
+                call!(variable!("get"), vec![]),
+                vec![expression!(call!(
+                    variable!("do_something_again"),
+                    vec![(None, variable!("i"))]
+                ))]
             ),
-            RStatement::For(
-                RExpression::variable("row"),
-                RExpression::Infix(
-                    ":".into(),
-                    Box::new(RExpression::constant("1")),
-                    Box::new(RExpression::constant("15")),
-                    (),
-                ),
-                vec![RStatement::Assignment(
-                    RExpression::ListIndex(
-                        Box::new(RExpression::variable("l")),
-                        vec![Some(RExpression::variable("row"))],
-                        (),
-                    ),
+            for_stmt!(
+                variable!("row"),
+                infix!(":", constant!("1"), constant!("15")),
+                vec![assignment!(
+                    list_index!(variable!("l"), vec![Some(variable!("row"))]),
                     vec![],
-                    RExpression::variable("row"),
-                    (),
-                )],
-                (),
+                    variable!("row")
+                )]
             ),
         ];
-        assert_eq!(expected, result);
+        assert_matches(code, expected);
     }
 
     #[test]
@@ -1697,116 +1494,75 @@ while (i < 10) {
 while (TRUE)
     annoy()
 ";
-        let result = test_parse(code);
         let expected = vec![
-            RStatement::While(
-                RExpression::Infix(
-                    "<".into(),
-                    Box::new(RExpression::variable("i")),
-                    Box::new(RExpression::constant("10")),
-                    (),
-                ),
+            while_stmt!(
+                infix!("<", variable!("i"), constant!("10")),
                 vec![
-                    RStatement::Expression(
-                        RExpression::Call(RExpression::boxed_variable("do_stuff"), vec![], ()),
-                        (),
-                    ),
-                    RStatement::Assignment(
-                        RExpression::variable("i"),
+                    expression!(call!(variable!("do_stuff"), vec![])),
+                    assignment!(
+                        variable!("i"),
                         vec![],
-                        RExpression::Infix(
-                            "+".into(),
-                            Box::new(RExpression::variable("i")),
-                            Box::new(RExpression::constant("1")),
-                            (),
-                        ),
-                        (),
+                        infix!("+", variable!("i"), constant!("1"))
                     ),
-                ],
-                (),
+                ]
             ),
-            RStatement::While(
-                RExpression::constant("TRUE"),
-                vec![RStatement::Expression(
-                    RExpression::Call(RExpression::boxed_variable("annoy"), vec![], ()),
-                    (),
-                )],
-                (),
+            while_stmt!(
+                constant!("TRUE"),
+                vec![expression!(call!(variable!("annoy"), vec![]))]
             ),
         ];
-        assert_eq!(expected, result);
+        assert_matches(code, expected);
     }
 
     mod extracts_variable_name {
         use super::*;
         use pretty_assertions::assert_eq;
 
+        fn assert_matches(expected: Option<RIdentifier>, actual: Rc<RExpression<()>>) {
+            let actual_name = actual.extract_variable_name();
+            assert_eq!(expected, actual_name);
+        }
+
         #[test]
         fn from_variable() {
-            let name = RExpression::variable("x").extract_variable_name();
-            assert_eq!(Some("x".to_string()), name);
+            let name = variable!("x");
+            assert_matches(Some("x".to_string()), name);
         }
 
         #[test]
         fn from_column() {
-            let name = RExpression::Column(
-                Box::new(RExpression::variable("x")),
-                Box::new(RExpression::variable("a")),
-                (),
-            )
-            .extract_variable_name();
-            assert_eq!(Some("x".to_string()), name);
+            let name = column!(variable!("x"), variable!("a"));
+            assert_matches(Some("x".to_string()), name);
         }
 
         #[test]
         fn from_index() {
-            let name = RExpression::Index(
-                Box::new(RExpression::variable("x")),
-                vec![Some(RExpression::variable("a"))],
-                (),
-            )
-            .extract_variable_name();
-            assert_eq!(Some("x".to_string()), name);
+            let name = index!(variable!("x"), vec![Some(variable!("a"))]);
+            assert_matches(Some("x".to_string()), name);
         }
 
         #[test]
         fn from_list_index() {
-            let name = RExpression::ListIndex(
-                Box::new(RExpression::variable("x")),
-                vec![Some(RExpression::variable("a"))],
-                (),
-            )
-            .extract_variable_name();
-            assert_eq!(Some("x".to_string()), name);
+            let name = list_index!(variable!("x"), vec![Some(variable!("a"))]);
+            assert_matches(Some("x".to_string()), name);
         }
 
         #[test]
         fn from_colnames() {
-            let name = RExpression::Call(
-                RExpression::boxed_variable("colnames"),
-                vec![(None, RExpression::variable("x"))],
-                (),
-            )
-            .extract_variable_name();
-            assert_eq!(Some("x".to_string()), name);
+            let name = call!(variable!("colnames"), vec![(None, variable!("x"))]);
+            assert_matches(Some("x".to_string()), name);
         }
 
         #[test]
         fn rejects_constants() {
-            let name = RExpression::constant("x").extract_variable_name();
-            assert_eq!(None, name);
+            let name = constant!("x");
+            assert_matches(None, name);
         }
 
         #[test]
         fn rejects_constant_in_column() {
-            let name = RExpression::Column(
-                Box::new(RExpression::constant("x")),
-                Box::new(RExpression::variable("a")),
-                (),
-            )
-            .extract_variable_name();
-            assert_eq!(None, name);
+            let name = column!(constant!("x"), variable!("a"));
+            assert_matches(None, name);
         }
     }
-
 }
