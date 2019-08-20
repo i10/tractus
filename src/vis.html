@@ -139,7 +139,7 @@
             console.log("Received data.");
             let parsed = JSON.parse(event.data);
             parsed.root = parsed.root = {
-                children: parsed.root,
+                hypotheses: parsed.root,
             };
             data = parsed;
             console.log(parsed);
