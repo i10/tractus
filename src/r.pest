@@ -1,11 +1,13 @@
 WHITESPACE = _{ " " | "\t" }
-file = _{ SOI ~ lines ~ EOI }
+
+r_code = _{ SOI ~ lines ~ EOI }
+
 lines = _{ (line ~ line_separator | empty ~ NEWLINE )* ~ (line ~ ";"?)? }
 line_separator = _{ ";" ~ NEWLINE | ";" | NEWLINE }
 line = { statement ~ comment | statement | comment }
 statement = { assignment | if_statement | while_statement | for_statement | library | expression }
 
-assignment = { (expression ~ ("<-" | "=") ~ NEWLINE*)+ ~ expression}
+assignment = { (expression ~ ("<-" | "<<-" | "=") ~ NEWLINE*)+ ~ expression}
 if_statement = { "if" ~ "(" ~ expression ~ ")" ~ block ~ (NEWLINE* ~ "else" ~ block)? }
 while_statement = { "while" ~ "(" ~ expression ~ ")" ~ block }
 for_statement = { "for" ~ "(" ~ expression ~ "in" ~ expression ~ ")" ~ block }
