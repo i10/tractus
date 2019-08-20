@@ -8,16 +8,21 @@ use std::io::{Read, Write};
 use std::path;
 use std::path::PathBuf;
 use std::rc::Rc;
-use std::sync::mpsc;
+use std::sync::{mpsc, Arc, Mutex, RwLock};
+use std::thread;
+use std::time::Duration;
 
 use clap_verbosity_flag;
 use env_logger;
 use failure::Error;
 use log::{debug, info, trace, warn};
 use notify;
+use notify::{DebouncedEvent, RecommendedWatcher, RecursiveMode, Watcher};
 use regex::Regex;
 use serde_json;
 use structopt::StructOpt;
+use websocket::sync::{Client, Server};
+use websocket::OwnedMessage;
 
 use tractus::parser;
 use tractus::{LineTree, Parsed};
@@ -51,6 +56,15 @@ enum Subcommand {
         #[structopt(short, long, parse(from_os_str))]
         /// Output file that will be overwritten whenever the input changes
         output: PathBuf,
+        #[structopt(flatten)]
+        r_history: RHistory,
+    },
+    #[structopt(name = "serve")]
+    /// Output updates on a websocket.
+    Serve {
+        #[structopt(short, long, parse(from_os_str))]
+        /// Input file, stdin if not present
+        input: PathBuf,
         #[structopt(flatten)]
         r_history: RHistory,
     },
@@ -114,36 +128,135 @@ fn main() {
 }
 
 fn init_logger(level: log::LevelFilter) {
-    env_logger::Builder::new().filter_level(level).init();
+    env_logger::Builder::from_default_env().init(); //filter_level(level).init();
 }
 
 fn run(opt: Opt) -> Res {
     if let Some(subcmd) = opt.subcmd {
-        debug!("Watch is enabled.");
-        let Subcommand::Watch {
-            input,
-            output,
-            r_history,
-        } = subcmd;
-        let options = WatchOptions::try_from(r_history)?;
-        if let Some(mut offset) = options.offset {
-            let mut parsed = Parsed::new();
-            let mut dependency_graph = tractus::DependencyGraph::new();
-            let execute = || {
-                offset = parse_from_offset(
-                    &input,
-                    &output,
-                    &options.clean,
-                    offset,
-                    &mut parsed,
-                    &mut dependency_graph,
-                )?;
-                Ok(())
-            };
-            watch(&input, execute)?;
-        } else {
-            let execute = || parse_entirely(&input, &output, &options.clean);
-            watch(&input, execute)?;
+        match subcmd {
+            Subcommand::Watch {
+                input,
+                output,
+                r_history,
+            } => {
+                debug!("Watch is enabled.");
+                let options = WatchOptions::try_from(r_history)?;
+                if let Some(mut offset) = options.offset {
+                    let mut parsed = Parsed::new();
+                    let mut dependency_graph = tractus::DependencyGraph::new();
+                    let execute = || {
+                        offset = parse_from_offset(
+                            &input,
+                            &output,
+                            &options.clean,
+                            offset,
+                            &mut parsed,
+                            &mut dependency_graph,
+                        )?;
+                        Ok(())
+                    };
+                    watch(&input, execute)?;
+                } else {
+                    let execute = || {
+                        let result = parse_entirely(&input, &options.clean)?;
+
+                        println!("Outputting to file {}.", &output.display());
+                        let mut output_file = fs::File::create(&output)?;
+                        output_to(&mut output_file, result)?;
+
+                        Ok(())
+                    };
+                    watch(&input, execute)?;
+                }
+            }
+            Subcommand::Serve { input, r_history } => {
+                let options = WatchOptions::try_from(r_history)?;
+
+                fn serve_parse(input_path: &PathBuf, clean: &Option<Regex>) -> Result<String, Error> {
+                    let code = read_from(&Some(input_path))?;
+                    let code = clean_input(code, clean);
+
+                    info!("Parsing...");
+                    let parsed = Parsed::parse(&code)?;
+                    debug!("Parsing dependency graph...");
+                    let dependency_graph = tractus::DependencyGraph::from_input(parsed.iter().cloned());
+                    debug!("Parsing hypothesis tree...");
+                    let hypotheses = tractus::parse_hypothesis_tree(&dependency_graph);
+
+                    debug!("Serializing...");
+                    let result = serde_json::to_string_pretty(&LineTree::with(&hypotheses))?;
+                    Ok(result)
+                }
+
+                let res = serve_parse(&input, &options.clean)?;
+                let result: Arc<RwLock<String>> = Arc::new(RwLock::new(res));
+
+                let clients: Arc<Mutex<Vec<Client<std::net::TcpStream>>>> =
+                    Arc::new(Mutex::new(vec![]));
+
+                let result_clone = result.clone();
+                let clients_clone = clients.clone();
+                let input_clone = input.clone();
+                let execute = move || -> Res {
+                    let res = serve_parse(&input_clone, &options.clean)?;
+
+                    let mut clients = clients_clone.lock().unwrap();
+                    for client in clients.iter_mut() {
+                        let ip = client.peer_addr().unwrap();
+                        trace!("Sending to IP: {}", ip);
+                        let message = OwnedMessage::Text(res.clone());
+                        if let Err(e) = client.send_message(&message) {
+                            debug!("Client {} responded with error after sending message: {}", ip, e);
+                        };
+                    }
+
+                    let mut result_store = result_clone.write().unwrap();
+                    *result_store = res;
+
+                    Ok(())
+                };
+
+                let clients_clone2 = clients.clone();
+                let result_clone2 = result.clone();
+                thread::spawn(move || {
+                    debug!("Listening for requests.");
+                    let server = Server::bind("127.0.0.1:2794").unwrap();
+                    for request in server.filter_map(Result::ok) {
+                        trace!("New request.");
+                        if !request
+                            .protocols()
+                            .contains(&"tractus-websocket".to_string())
+                        {
+                            debug!("New request rejected.");
+                            request.reject().unwrap();
+                        } else {
+                            let mut client =
+                                request.use_protocol("tractus-websocket").accept().unwrap();
+                            debug!("New request accepted.");
+
+                            let res = result_clone2.read().unwrap().to_string();
+                            let message = OwnedMessage::Text(res);
+                            client.send_message(&message).unwrap();
+
+                            let mut clients = clients_clone2.lock().unwrap();
+                            clients.push(client);
+                        }
+                    }
+                });
+
+                let (tx, rx) = mpsc::channel();
+                let mut watcher: RecommendedWatcher = Watcher::new(tx, Duration::from_millis(500))?;
+                watcher.watch(&input, RecursiveMode::NonRecursive)?;
+
+                println!("Watching file {}.", &input.display());
+                for event in rx {
+                    trace!("Received new file event.");
+                    if let DebouncedEvent::Write(input) = event {
+                        debug!("File changed: {}", input.display());
+                        execute()?;
+                    }
+                }
+            }
         }
     } else {
         debug!("Watch is disabled.");
@@ -154,8 +267,6 @@ fn run(opt: Opt) -> Res {
 }
 
 fn watch<F: FnMut() -> Res>(input_path: &PathBuf, mut execute: F) -> Res {
-    use notify::{DebouncedEvent, RecommendedWatcher, RecursiveMode, Watcher};
-    use std::time::Duration;
     let (tx, rx) = mpsc::channel();
     let mut watcher: RecommendedWatcher = Watcher::new(tx, Duration::from_millis(500))?;
     watcher.watch(&input_path, RecursiveMode::NonRecursive)?;
@@ -175,16 +286,11 @@ fn watch<F: FnMut() -> Res>(input_path: &PathBuf, mut execute: F) -> Res {
     Ok(())
 }
 
-fn parse_entirely(input_path: &PathBuf, output_path: &PathBuf, clean: &Option<Regex>) -> Res {
+fn parse_entirely(input_path: &PathBuf, clean: &Option<Regex>) -> Result<String, Error> {
     let code = read_from(&Some(input_path))?;
     let code = clean_input(code, clean);
 
-    let result = process(&code)?;
-    println!("Outputting to file {}.", output_path.display());
-    let mut output_file = fs::File::create(output_path)?;
-    output_to(&mut output_file, result)?;
-
-    Ok(())
+    process(&code)
 }
 
 type Offset = u64;
