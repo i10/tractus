@@ -13,7 +13,7 @@ use serde::{Serialize, Serializer};
 #[grammar = "r.pest"]
 struct RParser;
 
-#[derive(PartialEq, Debug, Eq, Clone, Serialize)]
+#[derive(PartialEq, Eq, Debug, Clone, Serialize)]
 pub enum RStatement<Meta> {
     Empty(Meta),
     Comment(String, Meta),
@@ -40,9 +40,10 @@ pub enum RStatement<Meta> {
     Library(RIdentifier, Meta),
     Expression(Rc<RExpression<Meta>>, Meta),
 }
+
 /*
-impl<T> fmt::Debug for RStatement<T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl<T> std::fmt::Debug for RStatement<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "RStmt {{ {} }}", self)
     }
 }

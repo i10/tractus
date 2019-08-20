@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt::Debug;
 use std::ops::Deref;
 use std::rc::Rc;
 
@@ -114,7 +115,7 @@ impl<T: Eq + Clone> DependencyGraph<T> {
             Constant(constant, m) => Constant(constant.clone(), m.clone()),
             Variable(name, m) => {
                 if let Some(exps) = self.variables.get_all(name) {
-                    if let Some(replacement) = exps.iter().filter(|other| **other <= id).last() {
+                    if let Some(replacement) = exps.iter().filter(|other| **other < id).last() {
                         return self.inline_id(*replacement).unwrap();
                     }
                 }

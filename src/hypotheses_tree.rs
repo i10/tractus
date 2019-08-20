@@ -152,7 +152,9 @@ impl PartialOrd for Hypotheses {
     }
 }
 
-pub fn parse_hypothesis_tree<T: Eq>(dependency_graph: &DependencyGraph<T>) -> HypothesisTree<T> {
+pub fn parse_hypothesis_tree<T: Eq + Clone>(
+    dependency_graph: &DependencyGraph<T>,
+) -> HypothesisTree<T> {
     let mut root: BTreeMap<HypothesesId, Vec<Rc<RefCell<RefNode>>>> = BTreeMap::new();
     let mut expression_map: HashMap<NodeIndex, HypothesesId> = HashMap::new();
     let mut hypotheses_map: HypothesesMap = HypothesesMap::new();
@@ -163,7 +165,6 @@ pub fn parse_hypothesis_tree<T: Eq>(dependency_graph: &DependencyGraph<T>) -> Hy
         let expression = dependency_graph.id(id).unwrap();
         collect_hypotheses(
             id,
-            &expression,
             &mut hypotheses_map,
             &mut expression_map,
             &dependency_graph,
@@ -217,9 +218,8 @@ pub fn parse_hypothesis_tree<T: Eq>(dependency_graph: &DependencyGraph<T>) -> Hy
     }
 }
 
-fn collect_hypotheses<T: Eq>(
+fn collect_hypotheses<T: Eq + Clone>(
     id: NodeIndex,
-    expression: &Rc<RExpression<T>>,
     hypotheses_map: &mut HypothesesMap,
     expression_map: &mut HashMap<NodeIndex, HypothesesId>,
     dependency_graph: &DependencyGraph<T>,
@@ -228,7 +228,6 @@ fn collect_hypotheses<T: Eq>(
         .graph()
         .neighbors_directed(id, Direction::Incoming)
         .map(|id| {
-            let exp = &dependency_graph.graph()[id];
             expression_map
                 .get(&id)
                 .map(|id| {
@@ -240,7 +239,13 @@ fn collect_hypotheses<T: Eq>(
                         .cloned()
                         .collect::<Vec<Hypothesis>>()
                 })
-                .unwrap_or_else(|| Hypotheses(detect_hypotheses(&exp)).0.into_iter().collect())
+                .unwrap_or_else(|| {
+                    let inlined_exp = dependency_graph.inline_id(id).unwrap();
+                    Hypotheses(detect_hypotheses(&inlined_exp))
+                        .0
+                        .into_iter()
+                        .collect()
+                })
         })
         .flatten()
         .collect();
@@ -254,7 +259,8 @@ fn collect_hypotheses<T: Eq>(
             id
         }
         None => {
-            let mut hypotheses = Hypotheses(detect_hypotheses(&expression));
+            let inlined_exp = dependency_graph.inline_id(id).unwrap();
+            let mut hypotheses = Hypotheses(detect_hypotheses(&inlined_exp));
             for hyp in inherited_hypotheses {
                 hypotheses.0.insert(hyp);
             }
@@ -271,7 +277,9 @@ mod tests {
 
     use super::*;
     use crate::parser::{RExpression, RStatement};
-    use crate::{assignment, call, column, constant, expression, two_sided_formula, variable};
+    use crate::{
+        assignment, call, column, constant, expression, index, infix, two_sided_formula, variable,
+    };
 
     #[test]
     fn simple_hypothesis_tree() {
@@ -327,6 +335,50 @@ mod tests {
         assert_eq!(expected, tree.root);
     }
 
+    #[test]
+    fn referred_hypothesis() {
+        let input: Vec<Rc<RStatement<()>>> = vec![
+            //kbd = var[var$independent == "level",]
+            assignment!(
+                variable!("kbd"),
+                vec![],
+                index!(
+                    variable!("var"),
+                    vec![
+                        Some(infix!(
+                            "==",
+                            column!(variable!("var"), variable!("independent")),
+                            constant!("\"level\"")
+                        )),
+                        None
+                    ]
+                )
+            ),
+            // kbd$dependent
+            expression!(column!(variable!("kbd"), variable!("dependent"))),
+        ];
+
+        let dependency_graph = DependencyGraph::from_input(input.iter().cloned());
+        let tree = parse_hypothesis_tree(&dependency_graph);
+
+        // Need to build from the inside out.
+        let n2 = Node {
+            content: input[1].expression().unwrap().clone(),
+            children: BTreeMap::from_iter(vec![]),
+        };
+        let n1 = Node {
+            content: input[0].expression().unwrap().clone(),
+            children: BTreeMap::from_iter(vec![(
+                find_hyp(&["dependent ~ independent"], &tree),
+                vec![n2],
+            )]),
+        };
+        let mut expected = BTreeMap::new();
+        expected.insert(find_hyp(&[], &tree), vec![n1]);
+
+        assert_eq!(expected, tree.root);
+    }
+
     fn find_hyp<E: Eq>(hyp: &[&'static str], tree: &HypothesisTree<E>) -> HypothesesId {
         let hypotheses = hyp
             .iter()
@@ -336,7 +388,7 @@ mod tests {
             .hypotheses
             .iter()
             .find(|(_, other)| other.0 == hypotheses)
-            .expect("Could not find hypotheses.")
+            .unwrap_or_else(|| panic!("Could not find hypotheses {:?} in actual tree.", hyp))
             .0
     }
 }
