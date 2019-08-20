@@ -202,9 +202,12 @@ fn run(opt: Opt) -> Res {
 
                     let mut clients = clients_clone.lock().unwrap();
                     for client in clients.iter_mut() {
-                        trace!("Sending to IP: {}", client.peer_addr().unwrap());
+                        let ip = client.peer_addr().unwrap();
+                        trace!("Sending to IP: {}", ip);
                         let message = OwnedMessage::Text(res.clone());
-                        client.send_message(&message).unwrap();
+                        if let Err(e) = client.send_message(&message) {
+                            debug!("Client {} responded with error after sending message: {}", ip, e);
+                        };
                     }
 
                     let mut result_store = result_clone.write().unwrap();
