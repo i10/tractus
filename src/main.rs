@@ -172,7 +172,23 @@ fn run(opt: Opt) -> Res {
             Subcommand::Serve { input, r_history } => {
                 let options = WatchOptions::try_from(r_history)?;
 
-                let res = parse_entirely(&input, &options.clean)?;
+                fn serve_parse(input_path: &PathBuf, clean: &Option<Regex>) -> Result<String, Error> {
+                    let code = read_from(&Some(input_path))?;
+                    let code = clean_input(code, clean);
+
+                    info!("Parsing...");
+                    let parsed = Parsed::parse(&code)?;
+                    debug!("Parsing dependency graph...");
+                    let dependency_graph = tractus::DependencyGraph::from_input(parsed.iter().cloned());
+                    debug!("Parsing hypothesis tree...");
+                    let hypotheses = tractus::parse_hypothesis_tree(&dependency_graph);
+
+                    debug!("Serializing...");
+                    let result = serde_json::to_string_pretty(&LineTree::with(&hypotheses))?;
+                    Ok(result)
+                }
+
+                let res = serve_parse(&input, &options.clean)?;
                 let result: Arc<RwLock<String>> = Arc::new(RwLock::new(res));
 
                 let clients: Arc<Mutex<Vec<Client<std::net::TcpStream>>>> =
@@ -182,7 +198,7 @@ fn run(opt: Opt) -> Res {
                 let clients_clone = clients.clone();
                 let input_clone = input.clone();
                 let execute = move || -> Res {
-                    let res = parse_entirely(&input_clone, &options.clean)?;
+                    let res = serve_parse(&input_clone, &options.clean)?;
 
                     let mut clients = clients_clone.lock().unwrap();
                     for client in clients.iter_mut() {

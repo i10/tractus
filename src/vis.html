@@ -5,15 +5,98 @@
   <title></title>
   <meta name="description" content="">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <style>
+    .hypotheses {
+        display: flex;
+        align-items: flex-start;
+    }
+    ol {
+        padding: 0;
+        list-style: none;
+    }
+    ol.nodes {
+        padding-left: 12px;
+    }
+    .hypotheses > li {
+        margin-top: 0.5em;
+        padding-right: 12px;
+    }
+    .hypothesis {
+        margin-left: 0.5em;
+        font-style: italic;
+    }
+    .expression {
+        font-family: monospace;
+        font-weight: bold;
+    }
+    /*
+        * Directory lines inspired by https://two-wrongs.com/draw-a-tree-structure-with-only-css.
+        */
+    ol.nodes > li {
+        position: relative;
+    }
+    ol.nodes > li::before, ol.nodes > li::after {
+        content: "";
+        position: absolute;
+        left: -12px;
+    }
+    ol.nodes > li::before {
+        border-top: 1px solid #000;
+        width: 8px;
+        height: 0;
+        transform: translateY(10px);
+    }
+    ol.nodes > li::after {
+        border-left: 1px solid #000;
+        height: 100%;
+        width: 0;
+        top: 2px;
+    }
+    ol.nodes > li:last-child::after {
+        height: 8px;
+    }
+    .hypotheses > li {
+        position: relative;
+    }
+    ol.hypotheses > li::before, ol.hypotheses > li::after {
+        content: "";
+        position: absolute;
+        top: 0;
+    }
+    ol.hypotheses > li::before {
+        border-left: 1px solid #000;
+        width: 0;
+        height: 100%;
+    }
+    ol.hypotheses > li::after {
+        border-top: 1px solid #000;
+        width: 100%;
+        height: 0;
+        left: 0;
+    }
+    ol.hypotheses > li:first-child::before {
+        transform: translateY(-8px);
+    }
+    ol.hypotheses > li:last-child::after {
+        width: 0;
+    }   
+  </style>
 </head>
 
 <body>
 <script src="https://d3js.org/d3.v5.min.js"></script>
 <script>
+    var data;
+
     let socket = new WebSocket("ws://127.0.0.1:2794", "tractus-websocket");
     socket.onmessage = function (event) {
         console.log("Received data.");
-        const parsed = JSON.parse(event.data);
+        let parsed = JSON.parse(event.data);
+        parsed.root = parsed.root = {
+            children: parsed.root,
+        };
+        data = parsed;
         console.log(parsed);
         render(parsed);
     }
@@ -27,25 +110,9 @@
     let width = 1000;
 
     function make_tree(data) {
-        const root = d3.hierarchy(data.root, function (item) {
-            if (item.expressions) {
-                return item.expressions
-            } else {
-                const hyps = item.children || item;
-                const children = Object.keys(hyps).map(
-                    key => {
-                        return {
-                            hypothesis: data.hypotheses[key],
-                            expressions: hyps[key]
-                        };
-                    }
-                );
-                return children;
-            }
-        });
-        console.log(root)
-        root.dx = 10;
-        root.dy = width / (root.height + 1);
+        const root = d3.hierarchy(data.root, item => get_children(item, data.hypotheses));
+        root.dx = 100;
+        root.dy = 25;
         return d3.tree().nodeSize([root.dx, root.dy])(root);
     }
 
@@ -59,45 +126,56 @@
             if (d.x < x0) x0 = d.x;
         });
 
-        const svg = d3.select("body").append("svg")
-            .attr("viewBox", [0, 0, width, x1 - x0 + root.dx * 2]);
+        var rootNode = d3.select('body').selectAll("ol").data([root]).join("ol");
+        makeNestedListItems(rootNode);
+    }
 
-        const g = svg.append("g")
-            .attr("font-family", "sans-serif")
-            .attr("font-size", 10)
-            .attr("transform", `translate(${root.dy / 3},${root.dx - x0})`);
-            
-        const link = g.append("g")
-            .attr("fill", "none")
-            .attr("stroke", "#555")
-            .attr("stroke-opacity", 0.4)
-            .attr("stroke-width", 1.5)
-        .selectAll("path")
-            .data(root.links())
-            .join("path")
-            .attr("d", d3.linkHorizontal()
-                .x(d => d.y)
-                .y(d => d.x));
-        
-        const node = g.append("g")
-            .attr("stroke-linejoin", "round")
-            .attr("stroke-width", 3)
-            .selectAll("g")
-            .data(root.descendants())
-            .join("g")
-            .attr("transform", d => `translate(${d.y},${d.x})`);
+    function makeNestedListItems (rootNode) {
+        let hyps = rootNode.append('ol').classed("hypotheses", true)
+            .selectAll('li').data(d => {
+                return d.children || []
+            })
+            .join("li");
+        hyps.append("span").text(d => display(d.data)).classed("hypothesis", true);
+        let nodes = hyps.append("ol").classed("nodes", true)
+            .selectAll("li").data(d => {
+                return (d.children)
+            }).join("li")
+        nodes.append('span').text(d => display(d.data)).classed("expression", true);
+        if (!nodes.empty()) {
+            makeNestedListItems(nodes)
+        }
+    }
 
-        node.append("circle")
-            .attr("fill", d => d.children ? "#555" : "#999")
-            .attr("r", 2.5);
+    function get_children (item, hypotheses_map) {
+        if (item.expressions) {
+            return item.expressions
+        } else if (item.children) {
+            const hyps = item.children;
+            const children = Object.keys(hyps).map(
+                key => {
+                    return {
+                        hypothesis: hypotheses_map[key].join(", ") || "None",
+                        expressions: hyps[key]
+                    };
+                }
+            );
+            return children;
+        }
+    }
 
-        node.append("text")
-            .attr("dy", "0.31em")
-            .attr("x", d => d.children ? -6 : 6)
-            .attr("text-anchor", d => d.children ? "end" : "start")
-            .text(d => d.data.expression)
-            .clone(true).lower()
-            .attr("stroke", "white");
+    function display (d) {
+        if (d.expression) {
+            return truncate(d.expression, 15);
+        } else if (d.hypothesis) {
+            return d.hypothesis;
+        } else {
+            d.data
+        }
+    }
+
+    function truncate(str, n) {
+        return str.substr(0,n-1)+(str.length>n?'…':'');
     }
 </script>
 </body>
