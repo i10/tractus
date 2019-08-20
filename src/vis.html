@@ -16,7 +16,7 @@
         list-style: none;
     }
     ol.nodes {
-        padding-left: 12px;
+        padding-left: 24px;
     }
     .hypotheses > li {
         margin-top: 0.5em;
@@ -24,32 +24,42 @@
     }
     .hypothesis {
         margin-left: 0.5em;
-        font-style: italic;
+        font-family: sans-serif;
+        color: #2E8F2A;
     }
     .expression {
         font-family: monospace;
-        font-weight: bold;
+        font-weight: lighter;
     }
     .hypothesis, .expression {
         display: inline-block;
-        max-width: 12em;
+        max-width: 20em;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
     }
-    .hypothesis:hover, .expression:hover {
+    .hypothesis:hover {
         max-width: 30em;
         white-space: normal;
-        border: 1px solid black;
+        border: 1px solid grey;
+        cursor: pointer;
     }
+
+    .expression:hover {
+      max-width: 30em;
+      white-space: normal;
+      border: 1px solid grey;
+      background-color: lightgrey;
+      cursor: pointer;
+    }
+
     .hypothesis {
         position: sticky;
-        background-color: white;
+        background-color: none;
         top: 0;
         z-index: 1;
         padding: 0.3em;
         margin-top: 2px;
-        border: 1px solid rgba(0, 0, 0, 0.1);
     }
     /*
         * Directory lines inspired by https://two-wrongs.com/draw-a-tree-structure-with-only-css.
@@ -101,7 +111,7 @@
     }
     ol.hypotheses > li:last-child::after {
         width: 0;
-    }   
+    }
   </style>
 </head>
 
@@ -157,7 +167,7 @@
                 return d.children || []
             })
             .join("li");
-        hyps.append("span").text(d => d.data.hypothesis).classed("hypothesis", true);
+        hyps.append("span").text(d => d.data.hypothesis != "None" ? d.data.hypothesis : "").classed("hypothesis", true);
         let nodes = hyps.append("ol").classed("nodes", true)
             .selectAll("li").data(d => {
                 return (d.children)
