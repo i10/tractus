@@ -264,18 +264,18 @@ fn collect_hypotheses<T: Eq>(
     expression_map.insert(id, hypotheses_id);
 }
 
-/*
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
     use std::iter::FromIterator;
 
     use super::*;
+    use crate::parser::{RExpression, RStatement};
     use crate::{assignment, call, column, constant, expression, two_sided_formula, variable};
 
     #[test]
     fn simple_hypothesis_tree() {
-        let input = vec![
+        let input: Vec<Rc<RStatement<()>>> = vec![
             assignment!(variable!("kbd"), vec![], constant!("data frame")),
             assignment!(
                 column!(variable!("kbd"), constant!("ParticipantID")),
@@ -340,4 +340,3 @@ mod tests {
             .0
     }
 }
-*/
