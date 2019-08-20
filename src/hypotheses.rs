@@ -27,19 +27,17 @@ pub fn detect_hypotheses<T>(expression: &RExpression<T>) -> BTreeSet<Hypothesis>
                 //if let [Some(Infix(operator, inner_left, _, _)), None] = inner.as_slice() {
                 if inner.len() == 2 && inner[1].is_none() {
                     if let Some(infix) = &inner[0] {
-                        if let Infix(operator, inner_left, _, _) = infix.deref() {
-                            if operator == "==" {
-                                if let Column(inner_variable, independent, _) = inner_left.deref() {
-                                    if let Variable(_, _) = independent.deref() {
-                                        if let (Variable(first, _), Variable(second, _)) =
-                                            (variable.deref(), inner_variable.deref())
-                                        {
-                                            if first == second {
-                                                return BTreeSet::from_iter(vec![format!(
-                                                    "{} ~ {}",
-                                                    dependent, independent
-                                                )]);
-                                            }
+                        if let Infix(_, inner_left, _, _) = infix.deref() {
+                            if let Column(inner_variable, independent, _) = inner_left.deref() {
+                                if let Variable(_, _) = independent.deref() {
+                                    if let (Variable(first, _), Variable(second, _)) =
+                                        (variable.deref(), inner_variable.deref())
+                                    {
+                                        if first == second {
+                                            return BTreeSet::from_iter(vec![format!(
+                                                "{} ~ {}",
+                                                dependent, independent
+                                            )]);
                                         }
                                     }
                                 }
@@ -54,14 +52,12 @@ pub fn detect_hypotheses<T>(expression: &RExpression<T>) -> BTreeSet<Hypothesis>
                 if let Variable(fun_name, _) = fun.deref() {
                     if fun_name == "subset" {
                         if let Some(right) = args.get(1) {
-                            if let Infix(op, independent, _, _) = right.1.deref() {
-                                if op == "==" {
-                                    if let Variable(_, _) = independent.deref() {
-                                        return BTreeSet::from_iter(vec![format!(
-                                            "{} ~ {}",
-                                            dependent, independent
-                                        )]);
-                                    }
+                            if let Infix(_, independent, _, _) = right.1.deref() {
+                                if let Variable(_, _) = independent.deref() {
+                                    return BTreeSet::from_iter(vec![format!(
+                                        "{} ~ {}",
+                                        dependent, independent
+                                    )]);
                                 }
                             }
                         }
@@ -125,7 +121,7 @@ mod tests {
 
     #[test]
     fn parses_subset_hypothesis() {
-        let code = r#"subset(data, independent == "level")$dependent"#;
+        let code = r#"subset(data, independent < 3)$dependent"#;
         let expected = BTreeSet::from_iter(vec!["dependent ~ independent".to_string()]);
         test_hypothesis(expected, code);
     }
