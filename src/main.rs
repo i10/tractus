@@ -142,17 +142,21 @@ fn run(opt: Opt) -> Res {
                 debug!("Watch is enabled.");
                 let options = WatchOptions::try_from(r_history)?;
                 if let Some(mut offset) = options.offset {
-                    let mut parsed = Parsed::new();
                     let mut dependency_graph = tractus::DependencyGraph::new();
                     let execute = || {
-                        offset = parse_from_offset(
+                        let result = parse_from_offset(
                             &input,
-                            &output,
                             &options.clean,
                             offset,
-                            &mut parsed,
                             &mut dependency_graph,
                         )?;
+                        offset = result.0;
+                        let output_result = result.1;
+
+                        println!("Outputting to file {}.", output.display());
+                        let mut output_file = fs::File::create(&output)?;
+                        output_to(&mut output_file, output_result)?;
+
                         Ok(())
                     };
                     watch(&input, execute)?;
@@ -171,24 +175,10 @@ fn run(opt: Opt) -> Res {
             }
             Subcommand::Serve { input, r_history } => {
                 let options = WatchOptions::try_from(r_history)?;
+                let offset = 0;
 
-                fn serve_parse(input_path: &PathBuf, clean: &Option<Regex>) -> Result<String, Error> {
-                    let code = read_from(&Some(input_path))?;
-                    let code = clean_input(code, clean);
-
-                    info!("Parsing...");
-                    let parsed = Parsed::parse(&code)?;
-                    debug!("Parsing dependency graph...");
-                    let dependency_graph = tractus::DependencyGraph::from_input(parsed.iter().cloned());
-                    debug!("Parsing hypothesis tree...");
-                    let hypotheses = tractus::parse_hypothesis_tree(&dependency_graph);
-
-                    debug!("Serializing...");
-                    let result = serde_json::to_string_pretty(&LineTree::with(&hypotheses, &mut |e| format!("{}", e)))?;
-                    Ok(result)
-                }
-
-                let res = serve_parse(&input, &options.clean)?;
+                let mut dependency_graph = tractus::DependencyGraph::new();
+                let res = parse_from_offset(&input, &options.clean, offset, &mut dependency_graph)?.1;
                 let result: Arc<RwLock<String>> = Arc::new(RwLock::new(res));
 
                 let clients: Arc<Mutex<Vec<Client<std::net::TcpStream>>>> =
@@ -197,8 +187,9 @@ fn run(opt: Opt) -> Res {
                 let result_clone = result.clone();
                 let clients_clone = clients.clone();
                 let input_clone = input.clone();
-                let execute = move || -> Res {
-                    let res = serve_parse(&input_clone, &options.clean)?;
+                let execute = || -> Res {
+                    let mut dependency_graph = tractus::DependencyGraph::new();
+                    let res = parse_from_offset(&input_clone, &options.clean, offset, &mut dependency_graph)?.1;
 
                     let mut clients = clients_clone.lock().unwrap();
                     for client in clients.iter_mut() {
@@ -297,12 +288,10 @@ type Offset = u64;
 
 fn parse_from_offset(
     input_path: &PathBuf,
-    output_path: &PathBuf,
     clean: &Option<Regex>,
     offset: Offset,
-    parsed: &mut Parsed,
     dependency_graph: &mut tractus::DependencyGraph<parser::Span>,
-) -> Result<Offset, Error> {
+) -> Result<(Offset, String), Error> {
     debug!(
         "Reading from file {} with offset {}.",
         input_path.display(),
@@ -337,6 +326,7 @@ fn parse_from_offset(
             unparsed.push(cleaned);
 
             let to_parse = unparsed.join("\n");
+            let mut parsed = Parsed::new();
             let parsed_result = parsed.append(&to_parse);
             match parsed_result {
                 Err(e) => {
@@ -380,11 +370,7 @@ fn parse_from_offset(
     debug!("Serializing...");
     let result = serde_json::to_string_pretty(&LineTree::with(&hypotheses, &mut |e| format!("{}", e)))?;
 
-    println!("Outputting to file {}.", output_path.display());
-    let mut output_file = fs::File::create(output_path)?;
-    output_to(&mut output_file, result)?;
-
-    Ok(unparsed_offset)
+    Ok((unparsed_offset, result))
 }
 
 fn clean_input(code: String, clean: &Option<Regex>) -> String {
