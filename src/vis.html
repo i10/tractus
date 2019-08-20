@@ -30,6 +30,18 @@
         font-family: monospace;
         font-weight: bold;
     }
+    .hypothesis, .expression {
+        display: inline-block;
+        max-width: 12em;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .hypothesis:hover, .expression:hover {
+        max-width: 30em;
+        white-space: normal;
+        border: 1px solid black;
+    }
     /*
         * Directory lines inspired by https://two-wrongs.com/draw-a-tree-structure-with-only-css.
         */
@@ -136,12 +148,12 @@
                 return d.children || []
             })
             .join("li");
-        hyps.append("span").text(d => display(d.data)).classed("hypothesis", true);
+        hyps.append("span").text(d => d.data.hypothesis).classed("hypothesis", true);
         let nodes = hyps.append("ol").classed("nodes", true)
             .selectAll("li").data(d => {
                 return (d.children)
             }).join("li")
-        nodes.append('span').text(d => display(d.data)).classed("expression", true);
+        nodes.append('span').text(d => d.data.expression).classed("expression", true);
         if (!nodes.empty()) {
             makeNestedListItems(nodes)
         }
@@ -168,7 +180,7 @@
         if (d.expression) {
             return truncate(d.expression, 15);
         } else if (d.hypothesis) {
-            return d.hypothesis;
+            return truncate(d.hypothesis, 15);
         } else {
             d.data
         }
