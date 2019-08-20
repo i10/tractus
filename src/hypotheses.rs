@@ -6,6 +6,7 @@ use crate::parser::RExpression;
 
 pub type Hypothesis = String;
 
+/// Requires the expression to have all dependencies inlined!
 pub fn detect_hypotheses<T>(expression: &RExpression<T>) -> BTreeSet<Hypothesis> {
     use RExpression::*;
     match expression {

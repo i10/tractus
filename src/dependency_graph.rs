@@ -29,11 +29,11 @@ impl VariableMap {
         self.0.entry(variable).or_insert_with(|| vec![]).push(index);
     }
 
-    fn get(&mut self, index: &str) -> Option<&NodeIndex> {
+    fn get(&self, index: &str) -> Option<&NodeIndex> {
         self.get_all(index).and_then(|v| v.last())
     }
 
-    fn get_all(&mut self, index: &str) -> Option<&Vec<NodeIndex>> {
+    fn get_all(&self, index: &str) -> Option<&Vec<NodeIndex>> {
         self.0.get(index)
     }
 }
@@ -98,6 +98,98 @@ impl<T: Eq> DependencyGraph<T> {
 
     pub fn lines(&self) -> impl Iterator<Item = NodeIndex> {
         self.lines.clone().into_iter()
+    }
+}
+
+impl<T: Eq + Clone> DependencyGraph<T> {
+    pub fn inline_id(&self, id: NodeIndex) -> Option<RExpression<T>> {
+        self.id(id).map(|exp| self.inline_exp(exp, id))
+    }
+
+    fn inline_exp(&self, exp: &Rc<RExpression<T>>, id: NodeIndex) -> RExpression<T> {
+        use RExpression::*;
+        match exp.deref() {
+            Constant(constant, m) => Constant(constant.clone(), m.clone()),
+            Variable(name, m) => {
+                if let Some(exps) = self.variables.get_all(name) {
+                    if let Some(replacement) = exps.iter().filter(|other| **other <= id).last() {
+                        return self.inline_id(*replacement).unwrap();
+                    }
+                }
+                Variable(name.clone(), m.clone())
+            }
+            Call(exp, args, m) => Call(
+                Rc::new(self.inline_exp(exp, id)),
+                args.iter()
+                    .map(|(name, exp)| (name.clone(), Rc::new(self.inline_exp(exp, id))))
+                    .collect(),
+                m.clone(),
+            ),
+            Column(left, right, m) => Column(
+                Rc::new(self.inline_exp(left, id)),
+                Rc::new(self.inline_exp(right, id)),
+                m.clone(),
+            ),
+            Index(left, right, m) => Index(
+                Rc::new(self.inline_exp(left, id)),
+                right
+                    .iter()
+                    .map(|maybe_exp| {
+                        maybe_exp
+                            .as_ref()
+                            .map(|exp| Rc::new(self.inline_exp(exp, id)))
+                    })
+                    .collect(),
+                m.clone(),
+            ),
+            ListIndex(left, right, m) => ListIndex(
+                Rc::new(self.inline_exp(left, id)),
+                right
+                    .iter()
+                    .map(|maybe_exp| {
+                        maybe_exp
+                            .as_ref()
+                            .map(|exp| Rc::new(self.inline_exp(exp, id)))
+                    })
+                    .collect(),
+                m.clone(),
+            ),
+            OneSidedFormula(formula, m) => {
+                OneSidedFormula(Rc::new(self.inline_exp(formula, id)), m.clone())
+            }
+            TwoSidedFormula(left, right, m) => TwoSidedFormula(
+                Rc::new(self.inline_exp(left, id)),
+                Rc::new(self.inline_exp(right, id)),
+                m.clone(),
+            ),
+            Function(args, body, m) => Function(
+                args.iter()
+                    .map(|(name, maybe_statement)| {
+                        (
+                            name.clone(),
+                            maybe_statement
+                                .as_ref()
+                                .map(|statement| Rc::new(self.inline_exp(statement, id))),
+                        )
+                    })
+                    .collect(),
+                body.iter()
+                    .map(|statement| Rc::new(RStatement::clone(statement))) // Ignore stuff in statements
+                    .collect(),
+                m.clone(),
+            ),
+            Prefix(operator, exp, m) => Prefix(
+                operator.clone(),
+                Rc::new(self.inline_exp(exp, id)),
+                m.clone(),
+            ),
+            Infix(operator, left, right, m) => Infix(
+                operator.clone(),
+                Rc::new(self.inline_exp(left, id)),
+                Rc::new(self.inline_exp(right, id)),
+                m.clone(),
+            ),
+        }
     }
 }
 

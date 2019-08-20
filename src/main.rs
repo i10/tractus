@@ -178,7 +178,8 @@ fn run(opt: Opt) -> Res {
                 let offset = 0;
 
                 let mut dependency_graph = tractus::DependencyGraph::new();
-                let res = parse_from_offset(&input, &options.clean, offset, &mut dependency_graph)?.1;
+                let res =
+                    parse_from_offset(&input, &options.clean, offset, &mut dependency_graph)?.1;
                 let result: Arc<RwLock<String>> = Arc::new(RwLock::new(res));
 
                 let clients: Arc<Mutex<Vec<Client<std::net::TcpStream>>>> =
@@ -189,7 +190,13 @@ fn run(opt: Opt) -> Res {
                 let input_clone = input.clone();
                 let execute = || -> Res {
                     let mut dependency_graph = tractus::DependencyGraph::new();
-                    let res = parse_from_offset(&input_clone, &options.clean, offset, &mut dependency_graph)?.1;
+                    let res = parse_from_offset(
+                        &input_clone,
+                        &options.clean,
+                        offset,
+                        &mut dependency_graph,
+                    )?
+                    .1;
 
                     let mut clients = clients_clone.lock().unwrap();
                     for client in clients.iter_mut() {
@@ -197,7 +204,10 @@ fn run(opt: Opt) -> Res {
                         trace!("Sending to IP: {}", ip);
                         let message = OwnedMessage::Text(res.clone());
                         if let Err(e) = client.send_message(&message) {
-                            debug!("Client {} responded with error after sending message: {}", ip, e);
+                            debug!(
+                                "Client {} responded with error after sending message: {}",
+                                ip, e
+                            );
                         };
                     }
 
@@ -368,7 +378,8 @@ fn parse_from_offset(
     let hypotheses = tractus::parse_hypothesis_tree(&dependency_graph);
 
     debug!("Serializing...");
-    let result = serde_json::to_string_pretty(&LineTree::with(&hypotheses, &mut |e| format!("{}", e)))?;
+    let result =
+        serde_json::to_string_pretty(&LineTree::with(&hypotheses, &mut |e| format!("{}", e)))?;
 
     Ok((unparsed_offset, result))
 }
