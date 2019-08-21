@@ -290,12 +290,16 @@ fn run(opt: Opt) -> Res {
                         None => tractus::DependencyGraph::new(),
                     };
 
-                    let dependency_graph: Arc<
-                        RwLock<tractus::DependencyGraph<(parser::Span, serde_json::Value)>>,
-                    > = Arc::new(RwLock::new(init_deps));
+                    let dependency_graph: Arc<RwLock<tractus::DependencyGraph<_>>> =
+                        Arc::new(RwLock::new(init_deps));
 
                     fn ser(
-                        dep: &tractus::DependencyGraph<(parser::Span, serde_json::Value)>,
+                        dep: &tractus::DependencyGraph<(
+                            parser::Span,
+                            serde_json::Value,
+                            String,
+                            Vec<String>,
+                        )>,
                         out_path: &Option<PathBuf>,
                     ) -> Result<String, Error> {
                         trace!("Hypothesis tree.");
@@ -304,10 +308,13 @@ fn run(opt: Opt) -> Res {
                         debug!("Serializing...");
                         let res =
                             serde_json::to_string_pretty(&LineTree::with(&hypotheses, &mut |e| {
+                                let meta = e.get_meta();
                                 json!({
                                     "expression": format!("{}", e),
-                                    "span": e.get_meta().0,
-                                    "meta": e.get_meta().1,
+                                    "span": meta.0,
+                                    "meta": meta.1,
+                                    "statement": meta.2,
+                                    "assigned_variables": meta.3
                                 })
                             }))?;
                         if let Some(p) = out_path {
@@ -398,9 +405,29 @@ fn run(opt: Opt) -> Res {
                             let mut parser = Parsed::new();
                             let stmts_result = parser.append(&meta.statement);
                             if let Ok(stmts) = stmts_result {
-                                let stmts_meta = stmts
-                                    .iter()
-                                    .map(|stmt| stmt.map(&mut |s| (s.clone(), meta.meta.clone())));
+                                let stmts_meta = stmts.iter().map(|stmt| {
+                                    use std::ops::Deref;
+                                    let vars =
+                                        if let parser::RStatement::Assignment(left, add, _, _) =
+                                            stmt.deref()
+                                        {
+                                            let mut vs = vec![format!("{}", left)];
+                                            let mut addition: Vec<String> =
+                                                add.iter().map(|v| format!("{}", v)).collect();
+                                            vs.append(&mut addition);
+                                            vs
+                                        } else {
+                                            vec![]
+                                        };
+                                    stmt.map(&mut |s| {
+                                        (
+                                            s.clone(),
+                                            meta.meta.clone(),
+                                            format!("{}", stmt),
+                                            vars.clone(),
+                                        )
+                                    })
+                                });
                                 let mut dep = dependency_graph.write().unwrap();
                                 if !dep.batch_insert(stmts_meta).is_empty() {
                                     trace!("Publishing new graph.");

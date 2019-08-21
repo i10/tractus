@@ -186,7 +186,7 @@
                 .selectAll("li").data(d => {
                     return (d.children)
                 }).join("li")
-            nodes.append('span').text(d => d.data.expression.expression).classed("expression", true);
+            nodes.append('span').text(d => d.data.expression.assigned_variables.join(",") + " - " + d.data.expression.statement).classed("expression", true);
             if (!nodes.empty()) {
                 makeNestedListItems(nodes)
             }
