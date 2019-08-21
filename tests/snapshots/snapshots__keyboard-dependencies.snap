@@ -1,8 +1,8 @@
 ---
-created: "2019-08-16T14:38:45.331188600Z"
+created: "2019-08-21T11:01:07.955359700Z"
 creator: insta@0.8.2
 source: tests/snapshots.rs
-expression: "tractus::parse_hypothesis_tree(parsed.iter(), &dependency_graph)"
+expression: "tractus::parse_hypothesis_tree(&dependency_graph)"
 ---
 HypothesisTree {
     root: {

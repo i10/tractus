@@ -1,10 +1,12 @@
 extern crate structopt;
 
 use std::borrow::Borrow;
+use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fs;
 use std::io;
 use std::io::{Read, Write};
+use std::ops::Deref;
 use std::path;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -19,7 +21,9 @@ use log::{debug, info, trace, warn};
 use notify;
 use notify::{DebouncedEvent, RecommendedWatcher, RecursiveMode, Watcher};
 use regex::Regex;
+use serde::Deserialize;
 use serde_json;
+use serde_json::json;
 use structopt::StructOpt;
 use websocket::sync::{Client, Server};
 use websocket::OwnedMessage;
@@ -63,8 +67,10 @@ enum Subcommand {
     /// Output updates on a websocket.
     Serve {
         #[structopt(short, long, parse(from_os_str))]
-        /// Input file, stdin if not present
-        input: PathBuf,
+        /// Input file, listens to websockets if not present
+        input: Option<PathBuf>,
+        #[structopt(short, long, parse(from_os_str))]
+        output: Option<PathBuf>,
         #[structopt(flatten)]
         r_history: RHistory,
     },
@@ -142,17 +148,23 @@ fn run(opt: Opt) -> Res {
                 debug!("Watch is enabled.");
                 let options = WatchOptions::try_from(r_history)?;
                 if let Some(mut offset) = options.offset {
-                    let mut parsed = Parsed::new();
                     let mut dependency_graph = tractus::DependencyGraph::new();
+                    let mut index = 1;
                     let execute = || {
-                        offset = parse_from_offset(
+                        let result = parse_from_offset(
                             &input,
-                            &output,
                             &options.clean,
                             offset,
-                            &mut parsed,
                             &mut dependency_graph,
+                            &mut index,
                         )?;
+                        offset = result.0;
+                        let output_result = result.1;
+
+                        println!("Outputting to file {}.", output.display());
+                        let mut output_file = fs::File::create(&output)?;
+                        output_to(&mut output_file, output_result)?;
+
                         Ok(())
                     };
                     watch(&input, execute)?;
@@ -169,94 +181,284 @@ fn run(opt: Opt) -> Res {
                     watch(&input, execute)?;
                 }
             }
-            Subcommand::Serve { input, r_history } => {
-                let options = WatchOptions::try_from(r_history)?;
+            Subcommand::Serve {
+                input,
+                output,
+                r_history,
+            } => match input {
+                Some(input_path) => {
+                    debug!("Serving from file.");
+                    let options = WatchOptions::try_from(r_history)?;
+                    let offset = 0;
+                    let mut index = 1;
 
-                fn serve_parse(input_path: &PathBuf, clean: &Option<Regex>) -> Result<String, Error> {
-                    let code = read_from(&Some(input_path))?;
-                    let code = clean_input(code, clean);
+                    let mut dependency_graph = tractus::DependencyGraph::new();
+                    let res = parse_from_offset(
+                        &input_path,
+                        &options.clean,
+                        offset,
+                        &mut dependency_graph,
+                        &mut index,
+                    )?
+                    .1;
+                    let result: Arc<RwLock<String>> = Arc::new(RwLock::new(res));
 
-                    info!("Parsing...");
-                    let parsed = Parsed::parse(&code)?;
-                    debug!("Parsing dependency graph...");
-                    let dependency_graph = tractus::DependencyGraph::from_input(parsed.iter().cloned());
-                    debug!("Parsing hypothesis tree...");
-                    let hypotheses = tractus::parse_hypothesis_tree(&dependency_graph);
+                    let clients: Arc<Mutex<Vec<Client<std::net::TcpStream>>>> =
+                        Arc::new(Mutex::new(vec![]));
 
-                    debug!("Serializing...");
-                    let result = serde_json::to_string_pretty(&LineTree::with(&hypotheses))?;
-                    Ok(result)
-                }
+                    let result_clone = result.clone();
+                    let clients_clone = clients.clone();
+                    let input_clone = input_path.clone();
+                    let mut execute = || -> Res {
+                        let mut dependency_graph = tractus::DependencyGraph::new();
+                        let res = parse_from_offset(
+                            &input_clone,
+                            &options.clean,
+                            offset,
+                            &mut dependency_graph,
+                            &mut index,
+                        )?
+                        .1;
 
-                let res = serve_parse(&input, &options.clean)?;
-                let result: Arc<RwLock<String>> = Arc::new(RwLock::new(res));
+                        let mut clients = clients_clone.lock().unwrap();
+                        for client in clients.iter_mut() {
+                            let ip = client.peer_addr().unwrap();
+                            trace!("Sending to IP: {}", ip);
+                            let message = OwnedMessage::Text(res.clone());
+                            if let Err(e) = client.send_message(&message) {
+                                debug!(
+                                    "Client {} responded with error after sending message: {}",
+                                    ip, e
+                                );
+                            };
+                        }
 
-                let clients: Arc<Mutex<Vec<Client<std::net::TcpStream>>>> =
-                    Arc::new(Mutex::new(vec![]));
+                        let mut result_store = result_clone.write().unwrap();
+                        *result_store = res;
 
-                let result_clone = result.clone();
-                let clients_clone = clients.clone();
-                let input_clone = input.clone();
-                let execute = move || -> Res {
-                    let res = serve_parse(&input_clone, &options.clean)?;
+                        Ok(())
+                    };
 
-                    let mut clients = clients_clone.lock().unwrap();
-                    for client in clients.iter_mut() {
-                        let ip = client.peer_addr().unwrap();
-                        trace!("Sending to IP: {}", ip);
-                        let message = OwnedMessage::Text(res.clone());
-                        if let Err(e) = client.send_message(&message) {
-                            debug!("Client {} responded with error after sending message: {}", ip, e);
-                        };
-                    }
+                    let clients_clone2 = clients.clone();
+                    let result_clone2 = result.clone();
+                    thread::spawn(move || {
+                        debug!("Listening for requests.");
+                        let server = Server::bind("127.0.0.1:2794").unwrap();
+                        for request in server.filter_map(Result::ok) {
+                            trace!("New request.");
+                            if !request
+                                .protocols()
+                                .contains(&"tractus-websocket".to_string())
+                            {
+                                debug!("New request rejected.");
+                                request.reject().unwrap();
+                            } else {
+                                let mut client =
+                                    request.use_protocol("tractus-websocket").accept().unwrap();
+                                debug!("New request accepted.");
 
-                    let mut result_store = result_clone.write().unwrap();
-                    *result_store = res;
+                                let res = result_clone2.read().unwrap().to_string();
+                                let message = OwnedMessage::Text(res);
+                                client.send_message(&message).unwrap();
 
-                    Ok(())
-                };
+                                let mut clients = clients_clone2.lock().unwrap();
+                                clients.push(client);
+                            }
+                        }
+                    });
 
-                let clients_clone2 = clients.clone();
-                let result_clone2 = result.clone();
-                thread::spawn(move || {
-                    debug!("Listening for requests.");
-                    let server = Server::bind("127.0.0.1:2794").unwrap();
-                    for request in server.filter_map(Result::ok) {
-                        trace!("New request.");
-                        if !request
-                            .protocols()
-                            .contains(&"tractus-websocket".to_string())
-                        {
-                            debug!("New request rejected.");
-                            request.reject().unwrap();
-                        } else {
-                            let mut client =
-                                request.use_protocol("tractus-websocket").accept().unwrap();
-                            debug!("New request accepted.");
+                    let (tx, rx) = mpsc::channel();
+                    let mut watcher: RecommendedWatcher =
+                        Watcher::new(tx, Duration::from_millis(500))?;
+                    watcher.watch(&input_path, RecursiveMode::NonRecursive)?;
 
-                            let res = result_clone2.read().unwrap().to_string();
-                            let message = OwnedMessage::Text(res);
-                            client.send_message(&message).unwrap();
-
-                            let mut clients = clients_clone2.lock().unwrap();
-                            clients.push(client);
+                    println!("Watching file {}.", &input_path.display());
+                    for event in rx {
+                        trace!("Received new file event.");
+                        if let DebouncedEvent::Write(input) = event {
+                            debug!("File changed: {}", input_path.display());
+                            execute()?;
                         }
                     }
-                });
+                }
+                None => {
+                    debug!("Listening to websocket for input.");
+                    let options = WatchOptions::try_from(r_history)?;
+                    let init_deps = match &output {
+                        Some(out_path) => {
+                            let mut file_res = std::fs::File::open(out_path);
+                            if let Ok(mut file) = file_res {
+                                serde_json::from_str(&read(&mut file)?)?
+                            } else {
+                                tractus::DependencyGraph::new()
+                            }
+                        }
+                        None => tractus::DependencyGraph::new(),
+                    };
 
-                let (tx, rx) = mpsc::channel();
-                let mut watcher: RecommendedWatcher = Watcher::new(tx, Duration::from_millis(500))?;
-                watcher.watch(&input, RecursiveMode::NonRecursive)?;
+                    let dependency_graph: Arc<RwLock<tractus::DependencyGraph<_>>> =
+                        Arc::new(RwLock::new(init_deps));
 
-                println!("Watching file {}.", &input.display());
-                for event in rx {
-                    trace!("Received new file event.");
-                    if let DebouncedEvent::Write(input) = event {
-                        debug!("File changed: {}", input.display());
-                        execute()?;
+                    fn ser(
+                        dep: &tractus::DependencyGraph<(
+                            parser::Span,
+                            serde_json::Value,
+                            String,
+                            Vec<String>,
+                            Option<String>,
+                            usize,
+                        )>,
+                        out_path: &Option<PathBuf>,
+                    ) -> Result<String, Error> {
+                        trace!("Hypothesis tree.");
+                        let hypotheses = tractus::parse_hypothesis_tree(&dep);
+
+                        debug!("Serializing...");
+                        let res =
+                            serde_json::to_string_pretty(&LineTree::with(&hypotheses, &mut |e| {
+                                let meta = e.get_meta();
+                                json!({
+                                    "expression": format!("{}", e),
+                                    "span": meta.0,
+                                    "meta": meta.1,
+                                    "statement": meta.2,
+                                    "assigned_variables": meta.3,
+                                    "function_name": meta.4,
+                                    "index": meta.5
+                                })
+                            }))?;
+                        if let Some(p) = out_path {
+                            write_output(&Some(p), true, serde_json::to_string(dep)?)?;
+                        }
+                        Ok(res)
+                    }
+                    let res = ser(&dependency_graph.read().unwrap(), &output)?;
+                    let result: Arc<RwLock<String>> = Arc::new(RwLock::new(res));
+
+                    let (msg_sender, msg_receiver) = mpsc::channel::<OwnedMessage>();
+                    let (stmt_sender, stmt_receiver) =
+                        mpsc::channel::<(std::net::SocketAddr, String)>();
+                    let mut clients: Arc<
+                        Mutex<HashMap<std::net::SocketAddr, websocket::sender::Writer<_>>>,
+                    > = Arc::new(Mutex::new(HashMap::new()));
+
+                    debug!("Listening for requests.");
+                    let server = Server::bind("127.0.0.1:2794").unwrap();
+                    let clients_clone = clients.clone();
+                    let result_clone = result.clone();
+                    thread::spawn(move || {
+                        for request in server.filter_map(Result::ok) {
+                            trace!("New request.");
+                            if !request
+                                .protocols()
+                                .contains(&"tractus-websocket".to_string())
+                            {
+                                debug!("New request rejected.");
+                                request.reject().unwrap();
+                            } else {
+                                let mut client =
+                                    request.use_protocol("tractus-websocket").accept().unwrap();
+                                debug!("New request accepted.");
+
+                                let res = result_clone.read().unwrap().to_string();
+                                let message = OwnedMessage::Text(res);
+                                client.send_message(&message).unwrap();
+                                let ip = client.peer_addr().unwrap();
+
+                                let (mut client_receiver, client_sender) = client.split().unwrap();
+                                let mut clients = clients_clone.lock().unwrap();
+                                clients.insert(ip, client_sender);
+
+                                let stmt_sender_clone = stmt_sender.clone();
+                                thread::spawn(move || {
+                                    for msg in client_receiver.incoming_messages() {
+                                        info!("Received new statement.");
+                                        match msg {
+                                            Ok(message) => {
+                                                use websocket::OwnedMessage::*;
+                                                match message {
+                                                    OwnedMessage::Text(stmt) => {
+                                                        stmt_sender_clone.send((ip, stmt));
+                                                    }
+                                                    _ => (),
+                                                }
+                                            }
+                                            Err(e) => {
+                                                debug!("Message contained error: {}", e);
+                                            }
+                                        }
+                                    }
+                                });
+                            }
+                        }
+                    });
+
+                    thread::spawn(move || {
+                        for msg in msg_receiver {
+                            trace!("Received message to send: {:?}", msg);
+                            let mut clients = clients.lock().unwrap();
+                            for (ip, client_sender) in clients.iter_mut() {
+                                trace!("Sending to IP: {}", ip);
+                                if let Err(e) = client_sender.send_message(&msg) {
+                                    debug!(
+                                        "Client {} responded with error after sending message: {}",
+                                        ip, e
+                                    );
+                                };
+                            }
+                        }
+                    });
+
+                    let mut index = 0;
+                    for (ip, stmt) in stmt_receiver {
+                        trace!("Parsing new statement.");
+                        if let Ok(meta) = serde_json::from_str::<MetaStmt>(&stmt) {
+                            let mut parser = Parsed::new();
+                            let stmts_result = parser.append(&meta.statement);
+                            if let Ok(stmts) = stmts_result {
+                                let stmts_meta = stmts.iter().map(|stmt| {
+                                    let vars =
+                                        if let parser::RStatement::Assignment(left, add, _, _) =
+                                            stmt.deref()
+                                        {
+                                            let mut vs = vec![format!("{}", left)];
+                                            let mut addition: Vec<String> =
+                                                add.iter().map(|v| format!("{}", v)).collect();
+                                            vs.append(&mut addition);
+                                            vs
+                                        } else {
+                                            vec![]
+                                        };
+                                    let fun_name =
+                                        stmt.expression().and_then(|e| extract_function_name(&e));
+                                    index += 1;
+                                    stmt.map(&mut |s| {
+                                        (
+                                            s.clone(),
+                                            meta.meta.clone(),
+                                            format!("{}", stmt),
+                                            vars.clone(),
+                                            fun_name.clone(),
+                                            index,
+                                        )
+                                    })
+                                });
+                                let mut dep = dependency_graph.write().unwrap();
+                                if !dep.batch_insert(stmts_meta).is_empty() {
+                                    trace!("Publishing new graph.");
+                                    let res = ser(&dep, &output)?;
+                                    let message = OwnedMessage::Text(res.clone());
+                                    trace!("Sending message.");
+                                    msg_sender.send(message)?;
+
+                                    let mut result_store = result.write().unwrap();
+                                    *result_store = res;
+                                }
+                            }
+                        }
                     }
                 }
-            }
+            },
         }
     } else {
         debug!("Watch is disabled.");
@@ -264,6 +466,21 @@ fn run(opt: Opt) -> Res {
     }
 
     Ok(())
+}
+
+fn extract_function_name<T>(expression: &Rc<parser::RExpression<T>>) -> Option<String> {
+    use parser::RExpression::*;
+    match expression.deref() {
+        Call(name, _, _) => name.extract_variable_name(),
+        Column(left, _, _) => extract_function_name(&left),
+        _ => None,
+    }
+}
+
+#[derive(Deserialize)]
+struct MetaStmt {
+    statement: String,
+    meta: serde_json::Value,
 }
 
 fn watch<F: FnMut() -> Res>(input_path: &PathBuf, mut execute: F) -> Res {
@@ -297,12 +514,18 @@ type Offset = u64;
 
 fn parse_from_offset(
     input_path: &PathBuf,
-    output_path: &PathBuf,
     clean: &Option<Regex>,
     offset: Offset,
-    parsed: &mut Parsed,
-    dependency_graph: &mut tractus::DependencyGraph<parser::Span>,
-) -> Result<Offset, Error> {
+    dependency_graph: &mut tractus::DependencyGraph<(
+        parser::Span,
+        (),
+        String,
+        Vec<String>,
+        Option<String>,
+        usize,
+    )>,
+    index: &mut usize,
+) -> Result<(Offset, String), Error> {
     debug!(
         "Reading from file {} with offset {}.",
         input_path.display(),
@@ -317,14 +540,16 @@ fn parse_from_offset(
     let mut unparsed: Vec<String> = vec![];
     let mut unparsed_offset = offset;
     let mut total_offset = offset;
+    let mut unparsed_index = *index;
 
     use io::BufRead;
     info!("Parsing...");
-    let new_parsed_statements: Vec<Rc<parser::Statement>> = reader
+    let new_parsed_statements: Vec<Rc<_>> = reader
         .lines()
         .map(|line| {
             let line = line?;
             total_offset += line.len() as u64;
+            *index += 1;
             trace!(
                 "Parsing from offset {}, current offset is {}.",
                 unparsed_offset,
@@ -337,10 +562,13 @@ fn parse_from_offset(
             unparsed.push(cleaned);
 
             let to_parse = unparsed.join("\n");
+            let mut parsed = Parsed::new();
             let parsed_result = parsed.append(&to_parse);
+            trace!("Input was: {}", to_parse);
+            let current_line = unparsed_index;
             match parsed_result {
                 Err(e) => {
-                    trace!("Parsing error in input: {}", e);
+                    debug!("Parsing error in input: {}", e);
 
                     // If the parsing error occurred at the very last symbol,
                     // we assume that it is simply incomplete and will try again when we have more input.
@@ -351,23 +579,47 @@ fn parse_from_offset(
                             to_parse.len()
                         );
                         if pos == to_parse.len() {
-                            debug!("Will retry with more input. Input was:\n{}", to_parse);
+                            debug!("Will retry with more input.");
                             return Ok(vec![]); // Retry with more input by not updating the offset.
                         }
                     }
-                    debug!("Skipping this input. Input was:\n{}", to_parse);
+                    debug!("Skipping this input.");
                     unparsed_offset = total_offset;
                     Ok(vec![])
                 }
                 Ok(parsed) => {
-                    debug!("Parsed input successfully. Input was:\n{}", to_parse);
+                    debug!("Parsed input successfully.");
                     unparsed_offset = total_offset;
                     unparsed.clear();
-                    Ok(parsed.to_vec())
+                    let parsed_meta = parsed.iter().map(|stmt| {
+                        let vars =
+                            if let parser::RStatement::Assignment(left, add, _, _) = stmt.deref() {
+                                let mut vs = vec![format!("{}", left)];
+                                let mut addition: Vec<String> =
+                                    add.iter().map(|v| format!("{}", v)).collect();
+                                vs.append(&mut addition);
+                                vs
+                            } else {
+                                vec![]
+                            };
+                        let fun_name = stmt.expression().and_then(|e| extract_function_name(&e));
+                        stmt.map(&mut |s| {
+                            (
+                                s.clone(),
+                                (),
+                                format!("{}", stmt),
+                                vars.clone(),
+                                fun_name.clone(),
+                                current_line,
+                            )
+                        })
+                    });
+                    unparsed_index = *index;
+                    Ok(parsed_meta.collect())
                 }
             }
         })
-        .collect::<Result<Vec<Vec<Rc<parser::Statement>>>, Error>>()?
+        .collect::<Result<Vec<Vec<Rc<_>>>, Error>>()?
         .into_iter()
         .flatten()
         .collect();
@@ -378,13 +630,20 @@ fn parse_from_offset(
     let hypotheses = tractus::parse_hypothesis_tree(&dependency_graph);
 
     debug!("Serializing...");
-    let result = serde_json::to_string_pretty(&LineTree::with(&hypotheses))?;
+    let result = serde_json::to_string_pretty(&LineTree::with(&hypotheses, &mut |e| {
+        let meta = e.get_meta();
+        json!({
+            "expression": format!("{}", e),
+            "span": meta.0,
+            "meta": meta.1,
+            "statement": meta.2,
+            "assigned_variables": meta.3,
+            "function_name": meta.4,
+            "index": meta.5
+        })
+    }))?;
 
-    println!("Outputting to file {}.", output_path.display());
-    let mut output_file = fs::File::create(output_path)?;
-    output_to(&mut output_file, result)?;
-
-    Ok(unparsed_offset)
+    Ok((unparsed_offset, result))
 }
 
 fn clean_input(code: String, clean: &Option<Regex>) -> String {

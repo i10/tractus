@@ -2,27 +2,20 @@
 Dependency analyzer for R code that visualizes the decisions taken during exploratory programming.
 
 # Usage
-Tractus reads R source files and outputs a hypotheses tree as a JSON file.
-```bash
-tractus --input <path_to_r_source> --output <path_to_store_json_at>
-```
+`tractus serve` will listen to `ws://127.0.0.1:2794` under the protocol `tractus-websocket`. Whenever the hypotheses tree is updated, it will push a message on all connected websockets in JSON form.
 
-You can also watch the input file for changes and automatically output an updated tree.
-```bash
-tractus watch --input <path_to_r_source> --output <path_to_store_json_at>
-```
+If you run `tractus serve --input <path>`, it will watch the file at that path. Whenever that file is saved to, all connected websockets will receive the updated hypotheses tree.
 
-We also have special support for RStudio's `history_desktop` file. You can find information on how to locate it in [RStudio Support](https://support.rstudio.com/hc/en-us/articles/200534577-Resetting-RStudio-Desktop-s-State). With this you can automatically analyze what you type into RStudio's console with tractus.
-```bash
-tractus watch --input <path_to_r_source> --output <path_to_store_json_at> --history
+If you do not specify an `--input`, i. e. `tractus serve`, then you can also push messages to the websocket at `ws://127.0.0.1:2794` of the form:
 ```
-
-Actually, the `--history` flag just tells Tractus that the file will only be appended to and to filter out the timestamp in front. You can customize this behavior even without the `--history` flag, by using the `--append` and `--clean` flags yourself.
-
-For more information, you can always open the help.
-```bash
-tractus help
+{
+    "statement": "<some R statement>",
+    "meta": <whatever you want>
+}
 ```
+The `meta` information will be available in the output hypotheses tree for all statements in `statement` exactly as it was given to tractus. This way you can push line by line with additional information that you can have access to in the output.
+
+In the `tractus serve` mode without `--input`, when stopping tractus all information is lost. To save tractus's state, you can specify an output file with `tractus serve --output <path>`. All changes will be written to that file. If there is already something written in that file, when you start tractus with `tractus serve --output <path>` it will load the state that was saved at path. (Note that if that file is not written by tractus, it might abort.)
 
 # Development
 ## Testing

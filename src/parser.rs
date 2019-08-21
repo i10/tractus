@@ -7,13 +7,13 @@ use std::rc::Rc;
 use itertools::Itertools;
 use log::debug;
 use pest::Parser;
-use serde::{Serialize, Serializer};
+use serde::{Deserialize, Serialize, Serializer};
 
 #[derive(Parser)]
 #[grammar = "r.pest"]
 struct RParser;
 
-#[derive(PartialEq, Debug, Eq, Clone, Serialize)]
+#[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize)]
 pub enum RStatement<Meta> {
     Empty(Meta),
     Comment(String, Meta),
@@ -40,9 +40,10 @@ pub enum RStatement<Meta> {
     Library(RIdentifier, Meta),
     Expression(Rc<RExpression<Meta>>, Meta),
 }
+
 /*
-impl<T> fmt::Debug for RStatement<T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl<T> std::fmt::Debug for RStatement<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "RStmt {{ {} }}", self)
     }
 }
@@ -127,6 +128,21 @@ impl<T> RStatement<T> {
         })
     }
 
+    pub fn get_meta(&self) -> &T {
+        use RStatement::*;
+        match self {
+            Empty(m) => m,
+            Comment(comment, m) => m,
+            TailComment(stmt, comment, m) => m,
+            Assignment(left, additional, right, m) => m,
+            If(exp, body, else_body, m) => m,
+            While(condition, body, m) => m,
+            For(variable, range, body, m) => m,
+            Library(id, m) => m,
+            Expression(exp, m) => m,
+        }
+    }
+
     pub fn expression(&self) -> Option<Rc<RExpression<T>>> {
         use RStatement::*;
         match self {
@@ -197,7 +213,7 @@ impl<'a, T> From<&'a Vec<Rc<RStatement<T>>>> for Lines<'a, T> {
     }
 }
 
-#[derive(PartialEq, Debug, Eq, Clone, Serialize)]
+#[derive(PartialEq, Debug, Eq, Clone, Serialize, Deserialize)]
 pub enum RExpression<Meta> {
     Constant(String, Meta),
     Variable(RIdentifier, Meta),
@@ -227,6 +243,7 @@ pub enum RExpression<Meta> {
     Prefix(String, Rc<RExpression<Meta>>, Meta),
     Infix(String, Rc<RExpression<Meta>>, Rc<RExpression<Meta>>, Meta),
 }
+
 /*
 impl<T> fmt::Debug for RExpression<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -360,6 +377,23 @@ impl<T> RExpression<T> {
                 mapping(m),
             ),
         })
+    }
+
+    pub fn get_meta(&self) -> &T {
+        use RExpression::*;
+        match self {
+            Constant(constant, m) => m,
+            Variable(id, m) => m,
+            Call(exp, args, m) => m,
+            Column(left, right, m) => m,
+            Index(left, right, m) => m,
+            ListIndex(left, right, m) => m,
+            OneSidedFormula(formula, m) => m,
+            TwoSidedFormula(left, right, m) => m,
+            Function(args, body, m) => m,
+            Prefix(operator, exp, m) => m,
+            Infix(operator, left, right, m) => m,
+        }
     }
 
     pub fn extract_variable_name(&self) -> Option<RIdentifier> {
@@ -532,7 +566,7 @@ impl<T> Extract<T> for &Rc<RExpression<T>> {
 
 pub type RIdentifier = String;
 
-#[derive(PartialEq, Eq, Debug, Clone, Hash, Serialize)]
+#[derive(PartialEq, Eq, Debug, Clone, Deserialize, Hash, Serialize)]
 pub struct Span {
     from: Position,
     to: Position,
@@ -548,7 +582,7 @@ impl<'i, P: Borrow<pest::iterators::Pair<'i, Rule>>> From<P> for Span {
     }
 }
 
-#[derive(PartialEq, Eq, Debug, Clone, Hash, Serialize)]
+#[derive(PartialEq, Eq, Deserialize, Debug, Clone, Hash, Serialize)]
 pub struct Position {
     line: usize,
     column: usize,
