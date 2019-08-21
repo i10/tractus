@@ -211,14 +211,17 @@
 
             nodes.each(function (d) {
                 let data = d.data.expression;
-                console.log(data)
                 let div = d3.select(this).append("div");
                 div.classed("expression", true);
                 div.append("span").text(d => {
-                    return data.function_name + "(…)" || truncate(data.statement, 25);
+                    if (data.function_name) {
+                        return data.function_name + "(…)"
+                    } else {
+                        return truncate(data.statement, 25);
+                    }
                 }).classed("short-info", true);
                 div.append("div").classed("long-info", true).text(
-                    `${data.span.from.line}: ${data.statement}`
+                    `${data.index}: ${data.statement}`
                 );
             });
             if (!nodes.empty()) {

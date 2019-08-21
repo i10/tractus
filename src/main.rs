@@ -149,12 +149,14 @@ fn run(opt: Opt) -> Res {
                 let options = WatchOptions::try_from(r_history)?;
                 if let Some(mut offset) = options.offset {
                     let mut dependency_graph = tractus::DependencyGraph::new();
+                    let mut index = 1;
                     let execute = || {
                         let result = parse_from_offset(
                             &input,
                             &options.clean,
                             offset,
                             &mut dependency_graph,
+                            &mut index,
                         )?;
                         offset = result.0;
                         let output_result = result.1;
@@ -188,6 +190,7 @@ fn run(opt: Opt) -> Res {
                     debug!("Serving from file.");
                     let options = WatchOptions::try_from(r_history)?;
                     let offset = 0;
+                    let mut index = 1;
 
                     let mut dependency_graph = tractus::DependencyGraph::new();
                     let res = parse_from_offset(
@@ -195,6 +198,7 @@ fn run(opt: Opt) -> Res {
                         &options.clean,
                         offset,
                         &mut dependency_graph,
+                        &mut index,
                     )?
                     .1;
                     let result: Arc<RwLock<String>> = Arc::new(RwLock::new(res));
@@ -205,13 +209,14 @@ fn run(opt: Opt) -> Res {
                     let result_clone = result.clone();
                     let clients_clone = clients.clone();
                     let input_clone = input_path.clone();
-                    let execute = || -> Res {
+                    let mut execute = || -> Res {
                         let mut dependency_graph = tractus::DependencyGraph::new();
                         let res = parse_from_offset(
                             &input_clone,
                             &options.clean,
                             offset,
                             &mut dependency_graph,
+                            &mut index,
                         )?
                         .1;
 
@@ -301,6 +306,7 @@ fn run(opt: Opt) -> Res {
                             String,
                             Vec<String>,
                             Option<String>,
+                            usize,
                         )>,
                         out_path: &Option<PathBuf>,
                     ) -> Result<String, Error> {
@@ -317,7 +323,8 @@ fn run(opt: Opt) -> Res {
                                     "meta": meta.1,
                                     "statement": meta.2,
                                     "assigned_variables": meta.3,
-                                    "function_name": meta.4
+                                    "function_name": meta.4,
+                                    "index": meta.5
                                 })
                             }))?;
                         if let Some(p) = out_path {
@@ -402,6 +409,7 @@ fn run(opt: Opt) -> Res {
                         }
                     });
 
+                    let mut index = 0;
                     for (ip, stmt) in stmt_receiver {
                         trace!("Parsing new statement.");
                         if let Ok(meta) = serde_json::from_str::<MetaStmt>(&stmt) {
@@ -423,6 +431,7 @@ fn run(opt: Opt) -> Res {
                                         };
                                     let fun_name =
                                         stmt.expression().and_then(|e| extract_function_name(&e));
+                                    index += 1;
                                     stmt.map(&mut |s| {
                                         (
                                             s.clone(),
@@ -430,6 +439,7 @@ fn run(opt: Opt) -> Res {
                                             format!("{}", stmt),
                                             vars.clone(),
                                             fun_name.clone(),
+                                            index,
                                         )
                                     })
                                 });
@@ -512,7 +522,9 @@ fn parse_from_offset(
         String,
         Vec<String>,
         Option<String>,
+        usize,
     )>,
+    index: &mut usize,
 ) -> Result<(Offset, String), Error> {
     debug!(
         "Reading from file {} with offset {}.",
@@ -528,14 +540,16 @@ fn parse_from_offset(
     let mut unparsed: Vec<String> = vec![];
     let mut unparsed_offset = offset;
     let mut total_offset = offset;
+    let mut unparsed_index = *index;
 
     use io::BufRead;
     info!("Parsing...");
-    let new_parsed_statements: Vec<Rc<parser::Statement>> = reader
+    let new_parsed_statements: Vec<Rc<_>> = reader
         .lines()
         .map(|line| {
             let line = line?;
             total_offset += line.len() as u64;
+            *index += 1;
             trace!(
                 "Parsing from offset {}, current offset is {}.",
                 unparsed_offset,
@@ -551,6 +565,7 @@ fn parse_from_offset(
             let mut parsed = Parsed::new();
             let parsed_result = parsed.append(&to_parse);
             trace!("Input was: {}", to_parse);
+            let current_line = unparsed_index;
             match parsed_result {
                 Err(e) => {
                     debug!("Parsing error in input: {}", e);
@@ -595,40 +610,22 @@ fn parse_from_offset(
                                 format!("{}", stmt),
                                 vars.clone(),
                                 fun_name.clone(),
+                                current_line,
                             )
                         })
                     });
-                    Ok(parsed.to_vec())
+                    unparsed_index = *index;
+                    Ok(parsed_meta.collect())
                 }
             }
         })
-        .collect::<Result<Vec<Vec<Rc<parser::Statement>>>, Error>>()?
+        .collect::<Result<Vec<Vec<Rc<_>>>, Error>>()?
         .into_iter()
         .flatten()
         .collect();
 
     debug!("Parsing dependency graph...");
-    let stmts_meta = new_parsed_statements.iter().map(|stmt| {
-        let vars = if let parser::RStatement::Assignment(left, add, _, _) = stmt.deref() {
-            let mut vs = vec![format!("{}", left)];
-            let mut addition: Vec<String> = add.iter().map(|v| format!("{}", v)).collect();
-            vs.append(&mut addition);
-            vs
-        } else {
-            vec![]
-        };
-        let fun_name = stmt.expression().and_then(|e| extract_function_name(&e));
-        stmt.map(&mut |s| {
-            (
-                s.clone(),
-                (),
-                format!("{}", stmt),
-                vars.clone(),
-                fun_name.clone(),
-            )
-        })
-    });
-    dependency_graph.batch_insert(stmts_meta);
+    dependency_graph.batch_insert(new_parsed_statements.into_iter());
     debug!("Parsing hypothesis tree...");
     let hypotheses = tractus::parse_hypothesis_tree(&dependency_graph);
 
@@ -641,7 +638,8 @@ fn parse_from_offset(
             "meta": meta.1,
             "statement": meta.2,
             "assigned_variables": meta.3,
-            "function_name": meta.4
+            "function_name": meta.4,
+            "index": meta.5
         })
     }))?;
 
