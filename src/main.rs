@@ -68,6 +68,8 @@ enum Subcommand {
         #[structopt(short, long, parse(from_os_str))]
         /// Input file, listens to websockets if not present
         input: Option<PathBuf>,
+        #[structopt(short, long, parse(from_os_str))]
+        output: Option<PathBuf>,
         #[structopt(flatten)]
         r_history: RHistory,
     },
@@ -176,7 +178,7 @@ fn run(opt: Opt) -> Res {
                     watch(&input, execute)?;
                 }
             }
-            Subcommand::Serve { input, r_history } => match input {
+            Subcommand::Serve { input, output, r_history } => match input {
                 Some(input_path) => {
                     let options = WatchOptions::try_from(r_history)?;
                     let offset = 0;
@@ -270,14 +272,26 @@ fn run(opt: Opt) -> Res {
                 }
                 None => {
                     let options = WatchOptions::try_from(r_history)?;
+                    let init_deps = match &output {
+                        Some(out_path) => {
+                            let mut file_res = std::fs::File::open(out_path);
+                            if let Ok(mut file) = file_res  {
+                            serde_json::from_str(&read(&mut file)?)?
+                            } else {
+                                tractus::DependencyGraph::new()
+                            }
+                        }
+                        None => tractus::DependencyGraph::new()
+                    };
 
                     let dependency_graph: Arc<
                         RwLock<tractus::DependencyGraph<(parser::Span, serde_json::Value)>>,
-                    > = Arc::new(RwLock::new(tractus::DependencyGraph::new()));
+                    > = Arc::new(RwLock::new(init_deps));
 
                     fn ser(
-                        dep: &tractus::DependencyGraph<(parser::Span, serde_json::Value),
+                        dep: &tractus::DependencyGraph<(parser::Span, serde_json::Value)
                         >,
+                        out_path: &Option<PathBuf>
                     ) -> Result<String, Error> {
                         trace!("Hypothesis tree.");
                         let hypotheses = tractus::parse_hypothesis_tree(&dep);
@@ -291,9 +305,12 @@ fn run(opt: Opt) -> Res {
                                     "meta": e.get_meta().1,
                                 })
                             }))?;
+                        if let Some(p) = out_path {
+                            write_output(&Some(p), true, serde_json::to_string(dep)?)?;
+                        }
                         Ok(res)
                     }
-                    let res = ser(&dependency_graph.read().unwrap())?;
+                    let res = ser(&dependency_graph.read().unwrap(), &output)?;
                     let result: Arc<RwLock<String>> = Arc::new(RwLock::new(res));
 
                     let (msg_sender, msg_receiver) = mpsc::channel::<OwnedMessage>();
@@ -379,7 +396,7 @@ fn run(opt: Opt) -> Res {
                         let mut dep = dependency_graph.write().unwrap();
                         if dep.insert(meta_stmt).is_some() {
                             trace!("Publishing new graph.");
-                            let res = ser(&dep)?;
+                            let res = ser(&dep, &output)?;
                             let message = OwnedMessage::Text(res.clone());
                             trace!("Sending message.");
                             msg_sender.send(message)?;

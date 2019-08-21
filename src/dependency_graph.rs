@@ -3,6 +3,7 @@ use std::fmt::Debug;
 use std::ops::Deref;
 use std::rc::Rc;
 
+use serde::{Serialize, Deserialize};
 use petgraph;
 
 use crate::parser::{LineDisplay, RExpression, RIdentifier, RStatement, Span};
@@ -11,14 +12,14 @@ type NodeIndexType = petgraph::graph::DefaultIx;
 pub type NodeIndex = petgraph::graph::NodeIndex<NodeIndexType>;
 type Graph<T> = petgraph::Graph<Rc<RExpression<T>>, String, petgraph::Directed, NodeIndexType>;
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Serialize, Deserialize)]
 pub struct DependencyGraph<T> {
     graph: Graph<T>,
     lines: Vec<NodeIndex>,
     variables: VariableMap,
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Deserialize, Serialize)]
 struct VariableMap(HashMap<String, Vec<NodeIndex>>);
 
 impl VariableMap {
