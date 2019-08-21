@@ -178,8 +178,13 @@ fn run(opt: Opt) -> Res {
                     watch(&input, execute)?;
                 }
             }
-            Subcommand::Serve { input, output, r_history } => match input {
+            Subcommand::Serve {
+                input,
+                output,
+                r_history,
+            } => match input {
                 Some(input_path) => {
+                    debug!("Serving from file.");
                     let options = WatchOptions::try_from(r_history)?;
                     let offset = 0;
 
@@ -271,17 +276,18 @@ fn run(opt: Opt) -> Res {
                     }
                 }
                 None => {
+                    debug!("Listening to websocket for input.");
                     let options = WatchOptions::try_from(r_history)?;
                     let init_deps = match &output {
                         Some(out_path) => {
                             let mut file_res = std::fs::File::open(out_path);
-                            if let Ok(mut file) = file_res  {
-                            serde_json::from_str(&read(&mut file)?)?
+                            if let Ok(mut file) = file_res {
+                                serde_json::from_str(&read(&mut file)?)?
                             } else {
                                 tractus::DependencyGraph::new()
                             }
                         }
-                        None => tractus::DependencyGraph::new()
+                        None => tractus::DependencyGraph::new(),
                     };
 
                     let dependency_graph: Arc<
@@ -289,9 +295,8 @@ fn run(opt: Opt) -> Res {
                     > = Arc::new(RwLock::new(init_deps));
 
                     fn ser(
-                        dep: &tractus::DependencyGraph<(parser::Span, serde_json::Value)
-                        >,
-                        out_path: &Option<PathBuf>
+                        dep: &tractus::DependencyGraph<(parser::Span, serde_json::Value)>,
+                        out_path: &Option<PathBuf>,
                     ) -> Result<String, Error> {
                         trace!("Hypothesis tree.");
                         let hypotheses = tractus::parse_hypothesis_tree(&dep);
@@ -319,7 +324,6 @@ fn run(opt: Opt) -> Res {
                     let mut clients: Arc<
                         Mutex<HashMap<std::net::SocketAddr, websocket::sender::Writer<_>>>,
                     > = Arc::new(Mutex::new(HashMap::new()));
-
 
                     debug!("Listening for requests.");
                     let server = Server::bind("127.0.0.1:2794").unwrap();
@@ -493,9 +497,10 @@ fn parse_from_offset(
             let to_parse = unparsed.join("\n");
             let mut parsed = Parsed::new();
             let parsed_result = parsed.append(&to_parse);
+            trace!("Input was: {}", to_parse);
             match parsed_result {
                 Err(e) => {
-                    trace!("Parsing error in input: {}", e);
+                    debug!("Parsing error in input: {}", e);
 
                     // If the parsing error occurred at the very last symbol,
                     // we assume that it is simply incomplete and will try again when we have more input.
@@ -506,16 +511,16 @@ fn parse_from_offset(
                             to_parse.len()
                         );
                         if pos == to_parse.len() {
-                            debug!("Will retry with more input. Input was:\n{}", to_parse);
+                            debug!("Will retry with more input.");
                             return Ok(vec![]); // Retry with more input by not updating the offset.
                         }
                     }
-                    debug!("Skipping this input. Input was:\n{}", to_parse);
+                    debug!("Skipping this input.");
                     unparsed_offset = total_offset;
                     Ok(vec![])
                 }
                 Ok(parsed) => {
-                    debug!("Parsed input successfully. Input was:\n{}", to_parse);
+                    debug!("Parsed input successfully.");
                     unparsed_offset = total_offset;
                     unparsed.clear();
                     Ok(parsed.to_vec())
@@ -533,8 +538,12 @@ fn parse_from_offset(
     let hypotheses = tractus::parse_hypothesis_tree(&dependency_graph);
 
     debug!("Serializing...");
-    let result =
-        serde_json::to_string_pretty(&LineTree::with(&hypotheses, &mut |e| format!("{}", e)))?;
+    let result = serde_json::to_string_pretty(&LineTree::with(&hypotheses, &mut |e| {
+        json!({
+            "expression": format!("{}", e),
+            "span": e.get_meta(),
+        })
+    }))?;
 
     Ok((unparsed_offset, result))
 }
