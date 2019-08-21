@@ -107,7 +107,7 @@ struct RefNode {
     children: BTreeMap<HypothesesId, Vec<Rc<RefCell<RefNode>>>>,
 }
 
-fn convert<T: Eq>(
+fn convert<T>(
     ref_node: RefNode,
     dependency_graph: &DependencyGraph<T>,
 ) -> Node<Rc<RExpression<T>>> {
@@ -152,9 +152,7 @@ impl PartialOrd for Hypotheses {
     }
 }
 
-pub fn parse_hypothesis_tree<T: Eq + Clone>(
-    dependency_graph: &DependencyGraph<T>,
-) -> HypothesisTree<T> {
+pub fn parse_hypothesis_tree<T: Clone>(dependency_graph: &DependencyGraph<T>) -> HypothesisTree<T> {
     let mut root: BTreeMap<HypothesesId, Vec<Rc<RefCell<RefNode>>>> = BTreeMap::new();
     let mut expression_map: HashMap<NodeIndex, HypothesesId> = HashMap::new();
     let mut hypotheses_map: HypothesesMap = HypothesesMap::new();
@@ -218,7 +216,7 @@ pub fn parse_hypothesis_tree<T: Eq + Clone>(
     }
 }
 
-fn collect_hypotheses<T: Eq + Clone>(
+fn collect_hypotheses<T: Clone>(
     id: NodeIndex,
     hypotheses_map: &mut HypothesesMap,
     expression_map: &mut HashMap<NodeIndex, HypothesesId>,

@@ -186,7 +186,7 @@
                 .selectAll("li").data(d => {
                     return (d.children)
                 }).join("li")
-            nodes.append('span').text(d => d.data.expression).classed("expression", true);
+            nodes.append('span').text(d => d.data.expression.expression).classed("expression", true);
             if (!nodes.empty()) {
                 makeNestedListItems(nodes)
             }
@@ -206,16 +206,6 @@
                     }
                 );
                 return children;
-            }
-        }
-
-        function display(d) {
-            if (d.expression) {
-                return truncate(d.expression, 15);
-            } else if (d.hypothesis) {
-                return truncate(d.hypothesis, 15);
-            } else {
-                d.data
             }
         }
 

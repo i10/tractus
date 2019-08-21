@@ -640,6 +640,11 @@ impl Parsed {
         Ok(&self.0[len - added..])
     }
 
+    pub fn parse_stmt(code: &str) -> Result<Rc<Statement>, Error> {
+        let mut parsed = RParser::parse(Rule::line, code)?;
+        Ok(parse_line(parsed.next().unwrap()))
+    }
+
     pub fn iter(&self) -> impl Iterator<Item = &Rc<Statement>> {
         self.0.iter()
     }

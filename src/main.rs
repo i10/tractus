@@ -1,6 +1,7 @@
 extern crate structopt;
 
 use std::borrow::Borrow;
+use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fs;
 use std::io;
@@ -19,7 +20,9 @@ use log::{debug, info, trace, warn};
 use notify;
 use notify::{DebouncedEvent, RecommendedWatcher, RecursiveMode, Watcher};
 use regex::Regex;
+use serde::Deserialize;
 use serde_json;
+use serde_json::json;
 use structopt::StructOpt;
 use websocket::sync::{Client, Server};
 use websocket::OwnedMessage;
@@ -63,8 +66,8 @@ enum Subcommand {
     /// Output updates on a websocket.
     Serve {
         #[structopt(short, long, parse(from_os_str))]
-        /// Input file, stdin if not present
-        input: PathBuf,
+        /// Input file, listens to websockets if not present
+        input: Option<PathBuf>,
         #[structopt(flatten)]
         r_history: RHistory,
     },
@@ -173,91 +176,220 @@ fn run(opt: Opt) -> Res {
                     watch(&input, execute)?;
                 }
             }
-            Subcommand::Serve { input, r_history } => {
-                let options = WatchOptions::try_from(r_history)?;
-                let offset = 0;
+            Subcommand::Serve { input, r_history } => match input {
+                Some(input_path) => {
+                    let options = WatchOptions::try_from(r_history)?;
+                    let offset = 0;
 
-                let mut dependency_graph = tractus::DependencyGraph::new();
-                let res =
-                    parse_from_offset(&input, &options.clean, offset, &mut dependency_graph)?.1;
-                let result: Arc<RwLock<String>> = Arc::new(RwLock::new(res));
-
-                let clients: Arc<Mutex<Vec<Client<std::net::TcpStream>>>> =
-                    Arc::new(Mutex::new(vec![]));
-
-                let result_clone = result.clone();
-                let clients_clone = clients.clone();
-                let input_clone = input.clone();
-                let execute = || -> Res {
                     let mut dependency_graph = tractus::DependencyGraph::new();
                     let res = parse_from_offset(
-                        &input_clone,
+                        &input_path,
                         &options.clean,
                         offset,
                         &mut dependency_graph,
                     )?
                     .1;
+                    let result: Arc<RwLock<String>> = Arc::new(RwLock::new(res));
 
-                    let mut clients = clients_clone.lock().unwrap();
-                    for client in clients.iter_mut() {
-                        let ip = client.peer_addr().unwrap();
-                        trace!("Sending to IP: {}", ip);
-                        let message = OwnedMessage::Text(res.clone());
-                        if let Err(e) = client.send_message(&message) {
-                            debug!(
-                                "Client {} responded with error after sending message: {}",
-                                ip, e
-                            );
-                        };
-                    }
+                    let clients: Arc<Mutex<Vec<Client<std::net::TcpStream>>>> =
+                        Arc::new(Mutex::new(vec![]));
 
-                    let mut result_store = result_clone.write().unwrap();
-                    *result_store = res;
+                    let result_clone = result.clone();
+                    let clients_clone = clients.clone();
+                    let input_clone = input_path.clone();
+                    let execute = || -> Res {
+                        let mut dependency_graph = tractus::DependencyGraph::new();
+                        let res = parse_from_offset(
+                            &input_clone,
+                            &options.clean,
+                            offset,
+                            &mut dependency_graph,
+                        )?
+                        .1;
 
-                    Ok(())
-                };
+                        let mut clients = clients_clone.lock().unwrap();
+                        for client in clients.iter_mut() {
+                            let ip = client.peer_addr().unwrap();
+                            trace!("Sending to IP: {}", ip);
+                            let message = OwnedMessage::Text(res.clone());
+                            if let Err(e) = client.send_message(&message) {
+                                debug!(
+                                    "Client {} responded with error after sending message: {}",
+                                    ip, e
+                                );
+                            };
+                        }
 
-                let clients_clone2 = clients.clone();
-                let result_clone2 = result.clone();
-                thread::spawn(move || {
-                    debug!("Listening for requests.");
-                    let server = Server::bind("127.0.0.1:2794").unwrap();
-                    for request in server.filter_map(Result::ok) {
-                        trace!("New request.");
-                        if !request
-                            .protocols()
-                            .contains(&"tractus-websocket".to_string())
-                        {
-                            debug!("New request rejected.");
-                            request.reject().unwrap();
-                        } else {
-                            let mut client =
-                                request.use_protocol("tractus-websocket").accept().unwrap();
-                            debug!("New request accepted.");
+                        let mut result_store = result_clone.write().unwrap();
+                        *result_store = res;
 
-                            let res = result_clone2.read().unwrap().to_string();
-                            let message = OwnedMessage::Text(res);
-                            client.send_message(&message).unwrap();
+                        Ok(())
+                    };
 
-                            let mut clients = clients_clone2.lock().unwrap();
-                            clients.push(client);
+                    let clients_clone2 = clients.clone();
+                    let result_clone2 = result.clone();
+                    thread::spawn(move || {
+                        debug!("Listening for requests.");
+                        let server = Server::bind("127.0.0.1:2794").unwrap();
+                        for request in server.filter_map(Result::ok) {
+                            trace!("New request.");
+                            if !request
+                                .protocols()
+                                .contains(&"tractus-websocket".to_string())
+                            {
+                                debug!("New request rejected.");
+                                request.reject().unwrap();
+                            } else {
+                                let mut client =
+                                    request.use_protocol("tractus-websocket").accept().unwrap();
+                                debug!("New request accepted.");
+
+                                let res = result_clone2.read().unwrap().to_string();
+                                let message = OwnedMessage::Text(res);
+                                client.send_message(&message).unwrap();
+
+                                let mut clients = clients_clone2.lock().unwrap();
+                                clients.push(client);
+                            }
+                        }
+                    });
+
+                    let (tx, rx) = mpsc::channel();
+                    let mut watcher: RecommendedWatcher =
+                        Watcher::new(tx, Duration::from_millis(500))?;
+                    watcher.watch(&input_path, RecursiveMode::NonRecursive)?;
+
+                    println!("Watching file {}.", &input_path.display());
+                    for event in rx {
+                        trace!("Received new file event.");
+                        if let DebouncedEvent::Write(input) = event {
+                            debug!("File changed: {}", input_path.display());
+                            execute()?;
                         }
                     }
-                });
+                }
+                None => {
+                    let options = WatchOptions::try_from(r_history)?;
 
-                let (tx, rx) = mpsc::channel();
-                let mut watcher: RecommendedWatcher = Watcher::new(tx, Duration::from_millis(500))?;
-                watcher.watch(&input, RecursiveMode::NonRecursive)?;
+                    let dependency_graph: Arc<
+                        RwLock<tractus::DependencyGraph<(parser::Span, serde_json::Value)>>,
+                    > = Arc::new(RwLock::new(tractus::DependencyGraph::new()));
 
-                println!("Watching file {}.", &input.display());
-                for event in rx {
-                    trace!("Received new file event.");
-                    if let DebouncedEvent::Write(input) = event {
-                        debug!("File changed: {}", input.display());
-                        execute()?;
+                    fn ser(
+                        dep: &tractus::DependencyGraph<(parser::Span, serde_json::Value),
+                        >,
+                    ) -> Result<String, Error> {
+                        trace!("Hypothesis tree.");
+                        let hypotheses = tractus::parse_hypothesis_tree(&dep);
+
+                        debug!("Serializing...");
+                        let res =
+                            serde_json::to_string_pretty(&LineTree::with(&hypotheses, &mut |e| {
+                                json!({
+                                    "expression": format!("{}", e),
+                                    "span": e.get_meta().0,
+                                    "meta": e.get_meta().1,
+                                })
+                            }))?;
+                        Ok(res)
+                    }
+                    let res = ser(&dependency_graph.read().unwrap())?;
+                    let result: Arc<RwLock<String>> = Arc::new(RwLock::new(res));
+
+                    let (msg_sender, msg_receiver) = mpsc::channel::<OwnedMessage>();
+                    let (stmt_sender, stmt_receiver) =
+                        mpsc::channel::<(std::net::SocketAddr, String)>();
+                    let mut clients: Arc<
+                        Mutex<HashMap<std::net::SocketAddr, websocket::sender::Writer<_>>>,
+                    > = Arc::new(Mutex::new(HashMap::new()));
+
+
+                    debug!("Listening for requests.");
+                    let server = Server::bind("127.0.0.1:2794").unwrap();
+                    let clients_clone = clients.clone();
+                    let result_clone = result.clone();
+                    thread::spawn(move || {
+                        for request in server.filter_map(Result::ok) {
+                            trace!("New request.");
+                            if !request
+                                .protocols()
+                                .contains(&"tractus-websocket".to_string())
+                            {
+                                debug!("New request rejected.");
+                                request.reject().unwrap();
+                            } else {
+                                let mut client =
+                                    request.use_protocol("tractus-websocket").accept().unwrap();
+                                debug!("New request accepted.");
+
+                                let res = result_clone.read().unwrap().to_string();
+                                let message = OwnedMessage::Text(res);
+                                client.send_message(&message).unwrap();
+                                let ip = client.peer_addr().unwrap();
+
+                                let (mut client_receiver, client_sender) = client.split().unwrap();
+                                let mut clients = clients_clone.lock().unwrap();
+                                clients.insert(ip, client_sender);
+
+                                let stmt_sender_clone = stmt_sender.clone();
+                                thread::spawn(move || {
+                                    for msg in client_receiver.incoming_messages() {
+                                        info!("Received new statement.");
+                                        match msg {
+                                            Ok(message) => {
+                                                use websocket::OwnedMessage::*;
+                                                match message {
+                                                    OwnedMessage::Text(stmt) => {
+                                                        stmt_sender_clone.send((ip, stmt));
+                                                    }
+                                                    _ => (),
+                                                }
+                                            }
+                                            Err(e) => {
+                                                debug!("Message contained error: {}", e);
+                                            }
+                                        }
+                                    }
+                                });
+                            }
+                        }
+                    });
+
+                    thread::spawn(move || {
+                        for msg in msg_receiver {
+                            trace!("Received message to send: {:?}", msg);
+                            let mut clients = clients.lock().unwrap();
+                            for (ip, client_sender) in clients.iter_mut() {
+                                trace!("Sending to IP: {}", ip);
+                                if let Err(e) = client_sender.send_message(&msg) {
+                                    debug!(
+                                        "Client {} responded with error after sending message: {}",
+                                        ip, e
+                                    );
+                                };
+                            }
+                        }
+                    });
+
+                    for (ip, stmt) in stmt_receiver {
+                        trace!("Parsing new statement.");
+                        let meta: MetaStmt = serde_json::from_str(&stmt)?;
+                        let stmt = Parsed::parse_stmt(&meta.statement)?;
+                        let meta_stmt = stmt.map(&mut |s| (s.clone(), meta.meta.clone()));
+                        let mut dep = dependency_graph.write().unwrap();
+                        if dep.insert(meta_stmt).is_some() {
+                            trace!("Publishing new graph.");
+                            let res = ser(&dep)?;
+                            let message = OwnedMessage::Text(res.clone());
+                            trace!("Sending message.");
+                            msg_sender.send(message)?;
+
+                            let mut result_store = result.write().unwrap();
+                            *result_store = res;
+                        }
                     }
                 }
-            }
+            },
         }
     } else {
         debug!("Watch is disabled.");
@@ -265,6 +397,12 @@ fn run(opt: Opt) -> Res {
     }
 
     Ok(())
+}
+
+#[derive(Deserialize)]
+struct MetaStmt {
+    statement: String,
+    meta: serde_json::Value,
 }
 
 fn watch<F: FnMut() -> Res>(input_path: &PathBuf, mut execute: F) -> Res {

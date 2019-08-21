@@ -12,7 +12,7 @@ pub type NodeIndex = petgraph::graph::NodeIndex<NodeIndexType>;
 type Graph<T> = petgraph::Graph<Rc<RExpression<T>>, String, petgraph::Directed, NodeIndexType>;
 
 #[derive(Default, Debug)]
-pub struct DependencyGraph<T: Eq> {
+pub struct DependencyGraph<T> {
     graph: Graph<T>,
     lines: Vec<NodeIndex>,
     variables: VariableMap,
@@ -39,7 +39,7 @@ impl VariableMap {
     }
 }
 
-impl<T: Eq> DependencyGraph<T> {
+impl<T> DependencyGraph<T> {
     pub fn new() -> Self {
         DependencyGraph {
             graph: Graph::new(),
@@ -63,7 +63,7 @@ impl<T: Eq> DependencyGraph<T> {
             .collect::<Vec<NodeIndex>>()
     }
 
-    fn insert(&mut self, statement: Rc<RStatement<T>>) -> Option<NodeIndex> {
+    pub fn insert(&mut self, statement: Rc<RStatement<T>>) -> Option<NodeIndex> {
         use RStatement::*;
         match &*statement {
             Expression(expression, _) => Some(register_dependencies(expression, self)),
@@ -104,7 +104,7 @@ impl<T: Eq> DependencyGraph<T> {
     }
 }
 
-impl<T: Eq + Clone> DependencyGraph<T> {
+impl<T: Clone> DependencyGraph<T> {
     pub fn inline_id(&self, id: NodeIndex) -> Option<RExpression<T>> {
         self.id(id).map(|exp| self.inline_exp(exp, id))
     }
@@ -213,7 +213,7 @@ impl<'a> std::fmt::Display for GraphLineDisplay<'a> {
     }
 }
 
-fn register_dependencies<T: Eq>(
+fn register_dependencies<T>(
     expression: &Rc<RExpression<T>>,
     dependency_graph: &mut DependencyGraph<T>,
 ) -> NodeIndex {
