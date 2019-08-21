@@ -1,12 +1,12 @@
 extern crate structopt;
 
 use std::borrow::Borrow;
-                                    use std::ops::Deref;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fs;
 use std::io;
 use std::io::{Read, Write};
+use std::ops::Deref;
 use std::path;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -300,7 +300,7 @@ fn run(opt: Opt) -> Res {
                             serde_json::Value,
                             String,
                             Vec<String>,
-                            Option<String>
+                            Option<String>,
                         )>,
                         out_path: &Option<PathBuf>,
                     ) -> Result<String, Error> {
@@ -421,7 +421,8 @@ fn run(opt: Opt) -> Res {
                                         } else {
                                             vec![]
                                         };
-                                    let fun_name = stmt.expression().and_then(|e| extract_function_name(&e));
+                                    let fun_name =
+                                        stmt.expression().and_then(|e| extract_function_name(&e));
                                     stmt.map(&mut |s| {
                                         (
                                             s.clone(),
@@ -505,7 +506,13 @@ fn parse_from_offset(
     input_path: &PathBuf,
     clean: &Option<Regex>,
     offset: Offset,
-    dependency_graph: &mut tractus::DependencyGraph<parser::Span>,
+    dependency_graph: &mut tractus::DependencyGraph<(
+        parser::Span,
+        (),
+        String,
+        Vec<String>,
+        Option<String>,
+    )>,
 ) -> Result<(Offset, String), Error> {
     debug!(
         "Reading from file {} with offset {}.",
@@ -569,6 +576,28 @@ fn parse_from_offset(
                     debug!("Parsed input successfully.");
                     unparsed_offset = total_offset;
                     unparsed.clear();
+                    let parsed_meta = parsed.iter().map(|stmt| {
+                        let vars =
+                            if let parser::RStatement::Assignment(left, add, _, _) = stmt.deref() {
+                                let mut vs = vec![format!("{}", left)];
+                                let mut addition: Vec<String> =
+                                    add.iter().map(|v| format!("{}", v)).collect();
+                                vs.append(&mut addition);
+                                vs
+                            } else {
+                                vec![]
+                            };
+                        let fun_name = stmt.expression().and_then(|e| extract_function_name(&e));
+                        stmt.map(&mut |s| {
+                            (
+                                s.clone(),
+                                (),
+                                format!("{}", stmt),
+                                vars.clone(),
+                                fun_name.clone(),
+                            )
+                        })
+                    });
                     Ok(parsed.to_vec())
                 }
             }
@@ -579,15 +608,40 @@ fn parse_from_offset(
         .collect();
 
     debug!("Parsing dependency graph...");
-    dependency_graph.batch_insert(new_parsed_statements.into_iter());
+    let stmts_meta = new_parsed_statements.iter().map(|stmt| {
+        let vars = if let parser::RStatement::Assignment(left, add, _, _) = stmt.deref() {
+            let mut vs = vec![format!("{}", left)];
+            let mut addition: Vec<String> = add.iter().map(|v| format!("{}", v)).collect();
+            vs.append(&mut addition);
+            vs
+        } else {
+            vec![]
+        };
+        let fun_name = stmt.expression().and_then(|e| extract_function_name(&e));
+        stmt.map(&mut |s| {
+            (
+                s.clone(),
+                (),
+                format!("{}", stmt),
+                vars.clone(),
+                fun_name.clone(),
+            )
+        })
+    });
+    dependency_graph.batch_insert(stmts_meta);
     debug!("Parsing hypothesis tree...");
     let hypotheses = tractus::parse_hypothesis_tree(&dependency_graph);
 
     debug!("Serializing...");
     let result = serde_json::to_string_pretty(&LineTree::with(&hypotheses, &mut |e| {
+        let meta = e.get_meta();
         json!({
             "expression": format!("{}", e),
-            "span": e.get_meta(),
+            "span": meta.0,
+            "meta": meta.1,
+            "statement": meta.2,
+            "assigned_variables": meta.3,
+            "function_name": meta.4
         })
     }))?;
 
