@@ -7,7 +7,7 @@ use std::rc::Rc;
 use itertools::Itertools;
 use log::debug;
 use pest::Parser;
-use serde::{Serialize, Serializer, Deserialize};
+use serde::{Deserialize, Serialize, Serializer};
 
 #[derive(Parser)]
 #[grammar = "r.pest"]
@@ -638,11 +638,6 @@ impl Parsed {
         self.0.append(&mut new_statements);
         let len = self.0.len();
         Ok(&self.0[len - added..])
-    }
-
-    pub fn parse_stmt(code: &str) -> Result<Rc<Statement>, Error> {
-        let mut parsed = RParser::parse(Rule::line, code)?;
-        Ok(parse_line(parsed.next().unwrap()))
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &Rc<Statement>> {

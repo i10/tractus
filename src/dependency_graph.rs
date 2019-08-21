@@ -3,8 +3,8 @@ use std::fmt::Debug;
 use std::ops::Deref;
 use std::rc::Rc;
 
-use serde::{Serialize, Deserialize};
 use petgraph;
+use serde::{Deserialize, Serialize};
 
 use crate::parser::{LineDisplay, RExpression, RIdentifier, RStatement, Span};
 

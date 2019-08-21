@@ -394,19 +394,25 @@ fn run(opt: Opt) -> Res {
 
                     for (ip, stmt) in stmt_receiver {
                         trace!("Parsing new statement.");
-                        let meta: MetaStmt = serde_json::from_str(&stmt)?;
-                        let stmt = Parsed::parse_stmt(&meta.statement)?;
-                        let meta_stmt = stmt.map(&mut |s| (s.clone(), meta.meta.clone()));
-                        let mut dep = dependency_graph.write().unwrap();
-                        if dep.insert(meta_stmt).is_some() {
-                            trace!("Publishing new graph.");
-                            let res = ser(&dep, &output)?;
-                            let message = OwnedMessage::Text(res.clone());
-                            trace!("Sending message.");
-                            msg_sender.send(message)?;
+                        if let Ok(meta) = serde_json::from_str::<MetaStmt>(&stmt) {
+                            let mut parser = Parsed::new();
+                            let stmts_result = parser.append(&meta.statement);
+                            if let Ok(stmts) = stmts_result {
+                                let stmts_meta = stmts
+                                    .iter()
+                                    .map(|stmt| stmt.map(&mut |s| (s.clone(), meta.meta.clone())));
+                                let mut dep = dependency_graph.write().unwrap();
+                                if !dep.batch_insert(stmts_meta).is_empty() {
+                                    trace!("Publishing new graph.");
+                                    let res = ser(&dep, &output)?;
+                                    let message = OwnedMessage::Text(res.clone());
+                                    trace!("Sending message.");
+                                    msg_sender.send(message)?;
 
-                            let mut result_store = result.write().unwrap();
-                            *result_store = res;
+                                    let mut result_store = result.write().unwrap();
+                                    *result_store = res;
+                                }
+                            }
                         }
                     }
                 }
