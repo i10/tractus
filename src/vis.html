@@ -37,12 +37,23 @@
             font-weight: bold;
         }
 
-        .hypothesis, .expression {
+        .hypothesis,
+        .expression {
             z-index: 0;
+        }
+        
+        .expression > * {
+            display: inline-block;
+            overflow: hidden;
+        }
+
+        .variables {
+            font-weight: normal;
+            margin-right: 0.3em;
+            background-color: lightgray;
         }
 
         .short-info {
-            display: inline-block;
             max-width: 12em;
             white-space: nowrap;
             overflow: hidden;
@@ -53,19 +64,17 @@
             display: none;
         }
 
-        .hypothesis:hover >.long-info,
-        .expression:hover >.long-info {
+        .hypothesis:hover>.long-info,
+        .expression:hover>.long-info {
             float: left;
             display: inherit;
             white-space: pre;
-            max-width: 26em;
             position: absolute;
-            overflow: hidden;
-            text-overflow: ellipsis;
             background-color: white;
             border: 1px solid black;
             z-index: 2;
-            pointer-events: none; /* Enables scrubbing through the entries. */
+            pointer-events: none;
+            /* Enables scrubbing through the entries. */
         }
 
         .hypothesis {
@@ -211,11 +220,15 @@
 
             nodes.each(function (d) {
                 let data = d.data.expression;
-                let div = d3.select(this).append("div");
-                div.classed("expression", true);
+                let div = d3.select(this).append("div").classed("expression", true);
+                if (data.assigned_variables.length > 0) {
+                    div.append("span").classed("variables", true).text(
+                        `${data.assigned_variables.join(" <- ")}`
+                    );
+                }
                 div.append("span").text(d => {
                     if (data.function_name) {
-                        return data.function_name + "(…)"
+                        return data.function_name + "(…)";
                     } else {
                         return truncate(data.statement, 25);
                     }
