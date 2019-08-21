@@ -28,17 +28,13 @@ pub fn detect_hypotheses<T>(expression: &RExpression<T>) -> BTreeSet<Hypothesis>
                 if inner.len() == 2 && inner[1].is_none() {
                     if let Some(infix) = &inner[0] {
                         if let Infix(_, inner_left, _, _) = infix.deref() {
-                            if let Column(inner_variable, independent, _) = inner_left.deref() {
+                            if let Column(_, independent, _) = inner_left.deref() {
                                 if let Variable(_, _) = independent.deref() {
-                                    if let (Variable(first, _), Variable(second, _)) =
-                                        (variable.deref(), inner_variable.deref())
-                                    {
-                                        if first == second {
-                                            return BTreeSet::from_iter(vec![format!(
-                                                "{} ~ {}",
-                                                dependent, independent
-                                            )]);
-                                        }
+                                    if let Variable(_, _) = dependent.deref() {
+                                        return BTreeSet::from_iter(vec![format!(
+                                            "{} ~ {}",
+                                            dependent, independent
+                                        )]);
                                     }
                                 }
                             }
@@ -54,10 +50,12 @@ pub fn detect_hypotheses<T>(expression: &RExpression<T>) -> BTreeSet<Hypothesis>
                         if let Some(right) = args.get(1) {
                             if let Infix(_, independent, _, _) = right.1.deref() {
                                 if let Variable(_, _) = independent.deref() {
-                                    return BTreeSet::from_iter(vec![format!(
-                                        "{} ~ {}",
-                                        dependent, independent
-                                    )]);
+                                    if let Variable(_, _) = dependent.deref() {
+                                        return BTreeSet::from_iter(vec![format!(
+                                            "{} ~ {}",
+                                            dependent, independent
+                                        )]);
+                                    }
                                 }
                             }
                         }
@@ -108,6 +106,13 @@ mod tests {
     #[test]
     fn parses_column_hypothesis() {
         let code = r#"variable[variable$independent == "level",]$dependent"#;
+        let expected = BTreeSet::from_iter(vec!["dependent ~ independent".to_string()]);
+        test_hypothesis(expected, code);
+    }
+
+    #[test]
+    fn parses_inlined_hypothesis() {
+        let code = r#"read("file")[read("file")$independent == "level",]$dependent"#;
         let expected = BTreeSet::from_iter(vec!["dependent ~ independent".to_string()]);
         test_hypothesis(expected, code);
     }
