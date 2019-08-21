@@ -1,6 +1,7 @@
 extern crate structopt;
 
 use std::borrow::Borrow;
+                                    use std::ops::Deref;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fs;
@@ -299,6 +300,7 @@ fn run(opt: Opt) -> Res {
                             serde_json::Value,
                             String,
                             Vec<String>,
+                            Option<String>
                         )>,
                         out_path: &Option<PathBuf>,
                     ) -> Result<String, Error> {
@@ -314,7 +316,8 @@ fn run(opt: Opt) -> Res {
                                     "span": meta.0,
                                     "meta": meta.1,
                                     "statement": meta.2,
-                                    "assigned_variables": meta.3
+                                    "assigned_variables": meta.3,
+                                    "function_name": meta.4
                                 })
                             }))?;
                         if let Some(p) = out_path {
@@ -406,7 +409,6 @@ fn run(opt: Opt) -> Res {
                             let stmts_result = parser.append(&meta.statement);
                             if let Ok(stmts) = stmts_result {
                                 let stmts_meta = stmts.iter().map(|stmt| {
-                                    use std::ops::Deref;
                                     let vars =
                                         if let parser::RStatement::Assignment(left, add, _, _) =
                                             stmt.deref()
@@ -419,12 +421,14 @@ fn run(opt: Opt) -> Res {
                                         } else {
                                             vec![]
                                         };
+                                    let fun_name = stmt.expression().and_then(|e| extract_function_name(&e));
                                     stmt.map(&mut |s| {
                                         (
                                             s.clone(),
                                             meta.meta.clone(),
                                             format!("{}", stmt),
                                             vars.clone(),
+                                            fun_name.clone(),
                                         )
                                     })
                                 });
@@ -451,6 +455,15 @@ fn run(opt: Opt) -> Res {
     }
 
     Ok(())
+}
+
+fn extract_function_name<T>(expression: &Rc<parser::RExpression<T>>) -> Option<String> {
+    use parser::RExpression::*;
+    match expression.deref() {
+        Call(name, _, _) => name.extract_variable_name(),
+        Column(left, _, _) => extract_function_name(&left),
+        _ => None,
+    }
 }
 
 #[derive(Deserialize)]
