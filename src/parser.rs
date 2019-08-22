@@ -608,7 +608,7 @@ macro_rules! unexpected_rule {
     };
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct Parsed(Vec<Rc<Statement>>);
 
 impl Parsed {

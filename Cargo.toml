@@ -3,6 +3,7 @@ name = "tractus"
 version = "0.1.0"
 authors = ["Y0hy0h <Y0hy0h@users.noreply.github.com>"]
 edition = "2018"
+description = "Generate a hypotheses tree from R code"
 
 [lib]
 name = "tractus"
