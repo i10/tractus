@@ -29,7 +29,10 @@ impl Tractus {
         }
     }
 
-    pub fn parse_lines<S: AsRef<str>>(&mut self, lines: Vec<S>) -> Result<Vec<Rc<Statement>>, parser::Error> {
+    pub fn parse_lines<S: AsRef<str>>(
+        &mut self,
+        lines: Vec<S>,
+    ) -> Result<Vec<Rc<Statement>>, parser::Error> {
         let mut parsed = Parsed::new();
         for line in lines {
             // TODO: Does not retry lines.
