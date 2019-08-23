@@ -29,16 +29,11 @@ impl Tractus {
         }
     }
 
-    pub fn clear(&mut self) {
-        self.dependency_graph = DependencyGraph::new();
-        self.result = parse_hypothesis_tree(&self.dependency_graph);
-    }
-
-    pub fn parse_lines(&mut self, lines: Vec<String>) -> Result<Vec<Rc<Statement>>, parser::Error> {
+    pub fn parse_lines<S: AsRef<str>>(&mut self, lines: Vec<S>) -> Result<Vec<Rc<Statement>>, parser::Error> {
         let mut parsed = Parsed::new();
         for line in lines {
             // TODO: Does not retry lines.
-            parsed.append(&line)?;
+            parsed.append(line.as_ref())?;
         }
 
         self.dependency_graph

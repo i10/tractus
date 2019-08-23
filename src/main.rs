@@ -27,28 +27,52 @@ enum Subcommand {
     /// Runs on files
     Run {
         #[structopt(flatten)]
-        opts: CommonOpts,
+        opts: RunOpts,
     },
     #[structopt(name = "serve")]
     /// Starts a websocket server
     Serve {
         #[structopt(flatten)]
-        opts: CommonOpts,
+        opts: ServeOpts,
     },
 }
 
 #[derive(StructOpt)]
-struct CommonOpts {
+struct RunOpts {
     #[structopt(short, long, parse(from_os_str))]
     /// Input file, stdin if not present
     input: Option<PathBuf>,
+    #[structopt(flatten)]
+    processing: ProcessingOpts,
+    #[structopt(short, long, parse(from_os_str))]
+    /// Output file, stdout if not present
+    output: Option<PathBuf>,
+    #[structopt(short, long)]
+    /// Forces overwriting the output without prompting
+    force: bool,
+}
+
+#[derive(StructOpt)]
+struct ServeOpts {
+    #[structopt(short, long, parse(from_os_str))]
+    /// Input file, websocket if missing
+    input: Option<PathBuf>,
+    #[structopt(flatten)]
+    processing: ProcessingOpts,
+    #[structopt(short, long, parse(from_os_str))]
+    /// File for persistency, no persistency if missing
+    store: Option<PathBuf>,
+}
+
+#[derive(StructOpt)]
+struct ProcessingOpts {
     #[structopt(short, long)]
     /// Declares that the input file is only appended to
     ///
     /// Can be more efficient. If set, tractus will parse the entire file once and then only the newly appended lines.
     ///
     /// Note that if the file is changed other by appending, tractus might not detect the changes or even stop.
-    append: bool,
+    append_only: bool,
     #[structopt(short, long)]
     /// A regular expression to clean each input line with
     ///
@@ -61,12 +85,6 @@ struct CommonOpts {
     /// Convenience flag for enabling --append and --clean "(?m)^\d+:".
     /// Cannot be used at the same time as --append or --clean.
     history_desktop: bool,
-    #[structopt(short, long, parse(from_os_str))]
-    /// Output file, stdout if not present
-    output: Option<PathBuf>,
-    #[structopt(short, long)]
-    /// Forces overwriting the output without prompting
-    force: bool,
 }
 
 #[derive(StructOpt)]
@@ -122,152 +140,118 @@ fn execute(cmd: Subcommand) -> Res {
     use Subcommand::*;
     match cmd {
         Run { opts } => {
-            let config = CommonConfig::try_from(opts)?;
+            let config = RunConfig::try_from(opts)?;
             run(config)
         }
         Serve { opts } => Ok(()),
     }
 }
 
-fn run(mut conf: CommonConfig) -> Res {
-    let mut tractus = Tractus::new();
+fn run(conf: RunConfig) -> Res {
+    let input = conf.input.map(|input| input.path);
+    let clean = conf.clean;
+    let mut output = conf.output;
 
-    run_once(&mut tractus, &mut conf)?;
+    let mut run_once = || -> Res { process(&input, &clean, &mut output) };
 
-    if let Some(input) = &conf.input {
+    run_once()?;
+
+    if let Some(path) = &input {
         use notify::{DebouncedEvent, RecommendedWatcher, RecursiveMode, Watcher};
         use std::time::Duration;
 
         let (sender, receiver) = std::sync::mpsc::channel();
         let mut watcher: RecommendedWatcher = Watcher::new(sender, Duration::from_millis(500))?;
-        watcher.watch(&input.path, RecursiveMode::NonRecursive)?;
+        watcher.watch(&path, RecursiveMode::NonRecursive)?;
 
-        println!("Watching file {}.", &input.path.display());
+        println!("Watching file {}.", &path.display());
         for event in receiver {
             trace!("Received new file event.");
-            if let DebouncedEvent::Write(input) = event {
-                debug!("File changed: {}", input.display());
-                run_once(&mut tractus, &mut conf)?;
+            if let DebouncedEvent::Write(_) = event {
+                debug!("File changed: {}", path.display());
+                run_once()?;
             }
         }
     }
+
     Ok(())
 }
 
-fn run_once(tractus: &mut Tractus, conf: &mut CommonConfig) -> Result<String, Error> {
-    match &mut conf.input {
+fn process(
+    input: &Option<PathBuf>,
+    clean: &Option<Regex>,
+    mut output: &mut Option<OutputPath>,
+) -> Res {
+    let lines = match input {
         None => {
-            tractus.clear();
-
             let stdin = io::stdin();
             let mut reader = io::BufReader::new(stdin);
 
-            let lines = read_lines(&mut reader, &conf.clean)?;
-            tractus.parse_lines(lines)?;
+            clean_lines(&mut reader, &clean)?
         }
-        Some(input) => {
-            let file = std::fs::File::open(&input.path)?;
+        Some(path) => {
+            let file = std::fs::File::open(&path)?;
             let mut reader = io::BufReader::new(file);
 
-            match input.append {
-                None => {
-                    // Since we do not append, we start fresh.
-                    tractus.clear();
-                }
-                Some(offset) => {
-                    trace!("Reading from offset {}.", offset);
-                    reader.seek(io::SeekFrom::Start(offset))?;
-                }
-            }
-
-            let lines = read_lines(&mut reader, &conf.clean)?;
-            tractus.parse_lines(lines)?;
-
-            input.append = input
-                .append
-                .map(|_| reader.seek(io::SeekFrom::Current(0)))
-                .transpose()?;
+            clean_lines(&mut reader, &clean)?
         }
-    }
+    };
+    let mut tractus = Tractus::new();
+    tractus.parse_lines(lines)?;
     let result = serde_json::to_string(&tractus.hypotheses_tree())?;
-    let output = if let Some(out) = &conf.output {
+    let out = if let Some(out) = &output {
         out.path.display().to_string()
     } else {
         "stdout".to_string()
     };
-    println!("Writing to {}.", output);
-    write_result(&mut conf.output, &result)?;
-
-    Ok(result)
+    println!("Writing to {}.", out);
+    write_result(&mut output, &result)?;
+    Ok(())
 }
 
-fn read_lines(reader: &mut impl BufRead, clean: &Option<Regex>) -> Result<Vec<String>, io::Error> {
-    reader
-        .lines()
-        .map(|line_result| {
-            line_result.map(|mut line| {
-                if let Some(regex) = &clean {
-                    line = regex.replace_all(&line, "").to_string();
-                }
-                line
-            })
-        })
-        .collect()
+fn clean_lines(reader: &mut impl BufRead, clean: &Option<Regex>) -> Result<Vec<String>, io::Error> {
+    match clean {
+        None => reader.lines().collect(),
+        Some(regex) => reader
+            .lines()
+            .map(|line_result| line_result.map(|line| regex.replace_all(&line, "").to_string()))
+            .collect(),
+    }
 }
 
-type Offset = u64;
-
-// struct RunConfig {
-//     common: CommonConfig,
-//     single_run: bool,
-// }
-
-// impl TryFrom<RunOpts> for RunConfig {
-//     type Error = <CommonConfig as TryFrom<CommonOpts>>::Error;
-
-//     fn try_from(other: RunOpts) -> Result<Self, Self::Error> {
-//         let common = other.common.try_into()?;
-//         Ok(RunConfig {
-//             common,
-//             single_run: other.single_run,
-//         })
-//     }
-// }
-
-struct CommonConfig {
+struct RunConfig {
     input: Option<InputPath>,
     clean: Option<Regex>,
     output: Option<OutputPath>,
 }
 
-impl TryFrom<CommonOpts> for CommonConfig {
+impl TryFrom<RunOpts> for RunConfig {
     type Error = ArgumentError;
 
-    fn try_from(other: CommonOpts) -> Result<Self, Self::Error> {
-        let (append_bool, clean) = if other.history_desktop {
-            if other.append || other.clean.is_some() {
+    fn try_from(other: RunOpts) -> Result<Self, Self::Error> {
+        let (append_bool, clean) = if other.processing.history_desktop {
+            if other.processing.append_only || other.processing.clean.is_some() {
                 return Err(ArgumentError::HistoryConflict);
             } else {
-                // The regex removes the timestamp form each line.
+                // This regex removes the timestamp from each line in the `history_desktop`.
                 (true, Some(Regex::new(r#"(?m)^\d+:"#).unwrap()))
             }
         } else {
-            (other.append, other.clean)
+            (other.processing.append_only, other.processing.clean)
         };
         let append = if append_bool { Some(0) } else { None };
-        let input = match (other.input, append) {
-            (Some(path), app) => Some(InputPath { path, append: app }),
-            (None, None) => None,
-            (None, Some(_)) => return Err(ArgumentError::AppendWithoutPath),
-        };
+        let input = other.input.map(|path| InputPath { path, append });
         let force = other.force;
-        Ok(CommonConfig {
+        let output = other.output.map(|path| OutputPath { path, force });
+        Ok(RunConfig {
             input,
             clean,
-            output: other.output.map(|path| OutputPath { path, force }),
+            output,
         })
     }
 }
+
+type Offset = u64;
 
 #[derive(Debug)]
 enum ArgumentError {
