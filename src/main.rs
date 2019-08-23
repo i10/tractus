@@ -68,7 +68,7 @@ struct ServeOpts {
 struct ProcessingOpts {
     #[structopt(name = "append-only", short, long)]
     /// Only parses lines that are appended while watching
-    /// 
+    ///
     /// Note that if the file is changed other than by appending, tractus might not detect the changes or even stop.
     append_only: bool,
     #[structopt(short, long)]
@@ -151,13 +151,14 @@ fn execute(cmd: Subcommand) -> Res {
 }
 
 fn run(mut conf: RunConfig) -> Res {
-    let input= conf.input;
+    let input = conf.input;
     let clean = conf.clean;
     let mut output = conf.output;
     match input {
         RunInput::SingleRun(input) => {
+            let mut process = get_process(input.clone(), clean);
             let mut run_once = || -> Res {
-                let result = process(&input, &clean)?;
+                let result = process()?;
                 write_result(&mut output, &result)
             };
 
@@ -173,9 +174,10 @@ fn run(mut conf: RunConfig) -> Res {
             let mut offset = reader.seek(io::SeekFrom::End(0))?; // Skip the inital contents of the file.
             let mut tractus = Tractus::new();
 
+            let mut clean_lines = get_cleaner(clean);
             let mut run_once = || -> Res {
                 reader.seek(io::SeekFrom::Start(offset))?;
-                let lines = clean_lines(&mut reader, &clean)?;
+                let lines = clean_lines(&mut reader)?;
                 offset = reader.seek(io::SeekFrom::Current(0))?; // Update offset for next run.
 
                 tractus.parse_lines(lines)?;
@@ -199,7 +201,7 @@ struct RunConfig {
 
 enum RunInput {
     SingleRun(Option<PathBuf>),
-    AppendOnly(PathBuf)
+    AppendOnly(PathBuf),
 }
 
 impl TryFrom<RunOpts> for RunConfig {
@@ -218,11 +220,11 @@ impl TryFrom<RunOpts> for RunConfig {
         };
         let input = if append_bool {
             if let Some(path) = other.input {
-            RunInput::AppendOnly(path)
+                RunInput::AppendOnly(path)
             } else {
                 return Err(ArgumentError::AppendWithoutPath);
             }
-        } else { 
+        } else {
             RunInput::SingleRun(other.input)
         };
         let force = other.force;
@@ -235,7 +237,10 @@ impl TryFrom<RunOpts> for RunConfig {
     }
 }
 
-fn watch<F>(path: &PathBuf, mut execute: F) -> Res where F: FnMut() -> Res {
+fn watch<F>(path: &PathBuf, mut execute: F) -> Res
+where
+    F: FnMut() -> Res,
+{
     use notify::{DebouncedEvent, RecommendedWatcher, RecursiveMode, Watcher};
     use std::time::Duration;
 
@@ -269,10 +274,11 @@ fn serve(conf: ServeConfig) -> Res {
         let result: Arc<RwLock<String>> = Arc::new(RwLock::new(String::new()));
         let mut clients: Arc<Mutex<Vec<Client<_>>>> = Arc::new(Mutex::new(vec![]));
 
+        let mut process = get_process(Some(input.clone()), clean);
         let input_clone = Some(input.clone());
         let result_clone = Arc::clone(&result);
         let mut run_once = || -> Res {
-            let res = process(&input_clone, &clean)?;
+            let res = process()?;
 
             let mut clients = clients.lock().unwrap();
             for client in clients.iter_mut() {
@@ -419,35 +425,43 @@ impl std::fmt::Display for ArgumentError {
 
 impl std::error::Error for ArgumentError {}
 
-fn process(input: &Option<PathBuf>, clean: &Option<Regex>) -> Result<String, Error> {
-    let lines = match input {
-        None => {
+fn get_process(
+    input: Option<PathBuf>,
+    clean: Option<Regex>,
+) -> Box<dyn FnMut() -> Result<String, Error>> {
+    let mut get_reader: Box<dyn FnMut() -> Result<Box<dyn BufRead>, Error>> = match input {
+        None => Box::new(|| {
             let stdin = io::stdin();
-            let mut reader = io::BufReader::new(stdin);
-
-            clean_lines(&mut reader, &clean)?
-        }
-        Some(path) => {
+            Ok(Box::new(io::BufReader::new(stdin)))
+        }),
+        Some(path) => Box::new(move || {
             let file = std::fs::File::open(&path)?;
-            let mut reader = io::BufReader::new(file);
-
-            clean_lines(&mut reader, &clean)?
-        }
+            Ok(Box::new(io::BufReader::new(file)))
+        }),
     };
-    let mut tractus = Tractus::new();
-    tractus.parse_lines(lines)?;
-    let result = serde_json::to_string(&tractus.hypotheses_tree())?;
+    let mut clean_lines = get_cleaner(clean);
 
-    Ok(result)
+    Box::new(move || {
+        let mut reader = get_reader()?;
+        let lines = clean_lines(&mut reader)?;
+        let mut tractus = Tractus::new();
+        tractus.parse_lines(lines)?;
+        let result = serde_json::to_string(&tractus.hypotheses_tree())?;
+        Ok(result)
+    })
 }
 
-fn clean_lines(reader: &mut impl BufRead, clean: &Option<Regex>) -> Result<Vec<String>, io::Error> {
+fn get_cleaner<R: BufRead>(
+    clean: Option<Regex>,
+) -> Box<dyn FnMut(&mut R) -> Result<Vec<String>, io::Error>> {
     match clean {
-        None => reader.lines().collect(),
-        Some(regex) => reader
-            .lines()
-            .map(|line_result| line_result.map(|line| regex.replace_all(&line, "").to_string()))
-            .collect(),
+        None => Box::new(|reader: &mut R| reader.lines().collect()),
+        Some(regex) => Box::new(move |reader: &mut R| {
+            reader
+                .lines()
+                .map(|line_result| line_result.map(|line| regex.replace_all(&line, "").to_string()))
+                .collect()
+        }),
     }
 }
 
