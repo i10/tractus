@@ -66,12 +66,10 @@ struct ServeOpts {
 
 #[derive(StructOpt)]
 struct ProcessingOpts {
-    #[structopt(short, long)]
-    /// Declares that the input file is only appended to
-    ///
-    /// Can be more efficient. If set, tractus will parse the entire file once and then only the newly appended lines.
-    ///
-    /// Note that if the file is changed other by appending, tractus might not detect the changes or even stop.
+    #[structopt(name = "append-only", short, long)]
+    /// Only parses lines that are appended while watching
+    /// 
+    /// Note that if the file is changed other than by appending, tractus might not detect the changes or even stop.
     append_only: bool,
     #[structopt(short, long)]
     /// A regular expression to clean each input line with
@@ -82,8 +80,8 @@ struct ProcessingOpts {
     #[structopt(short, long)]
     /// Declares the input file as an RStudio `history_desktop` file
     ///
-    /// Convenience flag for enabling --append and --clean "(?m)^\d+:".
-    /// Cannot be used at the same time as --append or --clean.
+    /// Convenience flag for enabling --append-only and --clean "(?m)^\d+:".
+    /// Cannot be used at the same time as --append-only or --clean.
     history_desktop: bool,
 }
 
@@ -152,43 +150,56 @@ fn execute(cmd: Subcommand) -> Res {
     Ok(())
 }
 
-fn run(conf: RunConfig) -> Res {
-    let input = conf.input.map(|input| input.path); // TODO: Ignores append.
+fn run(mut conf: RunConfig) -> Res {
+    let input= conf.input;
     let clean = conf.clean;
     let mut output = conf.output;
+    match input {
+        RunInput::SingleRun(input) => {
+            let mut run_once = || -> Res {
+                let result = process(&input, &clean)?;
+                write_result(&mut output, &result)
+            };
 
-    let mut run_once = || -> Res {
-        let result = process(&input, &clean)?;
-        write_result(&mut output, &result)
-    };
+            run_once()?;
 
-    run_once()?;
-
-    if let Some(path) = &input {
-        use notify::{DebouncedEvent, RecommendedWatcher, RecursiveMode, Watcher};
-        use std::time::Duration;
-
-        let (sender, receiver) = std::sync::mpsc::channel();
-        let mut watcher: RecommendedWatcher = Watcher::new(sender, Duration::from_millis(500))?;
-        watcher.watch(&path, RecursiveMode::NonRecursive)?;
-
-        println!("Watching file {}.", &path.display());
-        for event in receiver {
-            trace!("Received new file event.");
-            if let DebouncedEvent::Write(_) = event {
-                debug!("File changed: {}", path.display());
-                run_once()?;
+            if let Some(path) = &input {
+                watch(path, run_once)?;
             }
         }
-    }
+        RunInput::AppendOnly(path) => {
+            let file = std::fs::File::open(&path)?;
+            let mut reader = io::BufReader::new(file);
+            let mut offset = reader.seek(io::SeekFrom::End(0))?; // Skip the inital contents of the file.
+            let mut tractus = Tractus::new();
 
+            let mut run_once = || -> Res {
+                reader.seek(io::SeekFrom::Start(offset))?;
+                let lines = clean_lines(&mut reader, &clean)?;
+                offset = reader.seek(io::SeekFrom::Current(0))?; // Update offset for next run.
+
+                tractus.parse_lines(lines)?;
+                let result = serde_json::to_string(&tractus.hypotheses_tree())?;
+                write_result(&mut output, &result)
+            };
+
+            run_once()?;
+
+            watch(&path, run_once)?;
+        }
+    }
     Ok(())
 }
 
 struct RunConfig {
-    input: Option<InputPath>,
+    input: RunInput,
     clean: Option<Regex>,
     output: Option<OutputPath>,
+}
+
+enum RunInput {
+    SingleRun(Option<PathBuf>),
+    AppendOnly(PathBuf)
 }
 
 impl TryFrom<RunOpts> for RunConfig {
@@ -205,8 +216,15 @@ impl TryFrom<RunOpts> for RunConfig {
         } else {
             (other.processing.append_only, other.processing.clean)
         };
-        let append = if append_bool { Some(0) } else { None };
-        let input = other.input.map(|path| InputPath { path, append });
+        let input = if append_bool {
+            if let Some(path) = other.input {
+            RunInput::AppendOnly(path)
+            } else {
+                return Err(ArgumentError::AppendWithoutPath);
+            }
+        } else { 
+            RunInput::SingleRun(other.input)
+        };
         let force = other.force;
         let output = other.output.map(|path| OutputPath { path, force });
         Ok(RunConfig {
@@ -215,6 +233,26 @@ impl TryFrom<RunOpts> for RunConfig {
             output,
         })
     }
+}
+
+fn watch<F>(path: &PathBuf, mut execute: F) -> Res where F: FnMut() -> Res {
+    use notify::{DebouncedEvent, RecommendedWatcher, RecursiveMode, Watcher};
+    use std::time::Duration;
+
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let mut watcher: RecommendedWatcher = Watcher::new(sender, Duration::from_millis(500))?;
+    watcher.watch(&path, RecursiveMode::NonRecursive)?;
+
+    println!("Watching file {}.", &path.display());
+    for event in receiver {
+        trace!("Received new file event.");
+        if let DebouncedEvent::Write(_) = event {
+            debug!("File changed: {}", path.display());
+            execute()?;
+        }
+    }
+
+    Ok(())
 }
 
 fn serve(conf: ServeConfig) -> Res {
