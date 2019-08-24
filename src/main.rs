@@ -285,12 +285,12 @@ fn serve(conf: ServeConfig) -> Res {
 
                 let mut clean_lines = get_cleaner(conf.clean);
                 let mut process = move || -> Result<String, Error> {
-                    reader.seek(io::SeekFrom::Start(offset))?;
+                    reader.seek(io::SeekFrom::Start(offset + 1))?; // The + 1 skips the newline, which would lead to wrong line numbers.
                     let lines = (&mut reader)
                         .lines()
                         .collect::<Result<Vec<String>, io::Error>>()?;
                     let lines = clean_lines(lines);
-                    offset = reader.seek(io::SeekFrom::Current(0))?; // Update offset for next run.
+                    offset = reader.seek(io::SeekFrom::End(0))?; // Update offset for next run.
 
                     tractus.parse_lines(lines)?;
                     let result = serde_json::to_string(&tractus.hypotheses_tree())?;
@@ -298,7 +298,7 @@ fn serve(conf: ServeConfig) -> Res {
                 };
                 let mut update_and_broadcast = init_server(|_, _| {})?;
                 Box::new(move || {
-                    let result = dbg!(process()?);
+                    let result = process()?;
                     update_and_broadcast(result);
 
                     Ok(())
