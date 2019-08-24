@@ -208,17 +208,8 @@ impl TryFrom<RunOpts> for RunConfig {
     type Error = ArgumentError;
 
     fn try_from(other: RunOpts) -> Result<Self, Self::Error> {
-        let (append_bool, clean) = if other.processing.history_desktop {
-            if other.processing.append_only || other.processing.clean.is_some() {
-                return Err(ArgumentError::HistoryConflict);
-            } else {
-                // This regex removes the timestamp from each line in the `history_desktop`.
-                (true, Some(Regex::new(r#"(?m)^\d+:"#).unwrap()))
-            }
-        } else {
-            (other.processing.append_only, other.processing.clean)
-        };
-        let input = if append_bool {
+        let processing = ProcessingConfig::try_from(other.processing)?;
+        let input = if processing.append_only {
             if let Some(path) = other.input {
                 RunInput::AppendOnly(path)
             } else {
@@ -231,7 +222,7 @@ impl TryFrom<RunOpts> for RunConfig {
         let output = other.output.map(|path| OutputPath { path, force });
         Ok(RunConfig {
             input,
-            clean,
+            clean: processing.clean,
             output,
         })
     }
@@ -261,90 +252,106 @@ where
 }
 
 fn serve(conf: ServeConfig) -> Res {
+    match conf.input {
+        ServeInput::File { path, append_only } => {
+            debug!("Serving from file.");
+            if !append_only {
+                debug!("Append-only inactive, reparsing whole file on changes.");
+                let process = get_process(Some(path.clone()), conf.clean);
+                let run_once = init_server(process)?;
+
+                watch(&path, run_once)?;
+            } else {
+                debug!("Only considering appends.");
+                let file = std::fs::File::open(&path)?;
+                let mut reader = io::BufReader::new(file);
+                let mut offset = reader.seek(io::SeekFrom::End(0))?; // Skip the inital contents of the file.
+                let mut tractus = Tractus::new();
+
+                let mut clean_lines = get_cleaner(conf.clean);
+                let process = Box::new(|| -> Result<String, Error> {
+                    reader.seek(io::SeekFrom::Start(offset))?;
+                    let lines = clean_lines(&mut reader)?;
+                    offset = reader.seek(io::SeekFrom::Current(0))?; // Update offset for next run.
+
+                    tractus.parse_lines(lines)?;
+                    let result = serde_json::to_string(&tractus.hypotheses_tree())?;
+                    Ok(result)
+                });
+                let run_once = init_server(process)?;
+
+                watch(&path, run_once)?;
+            };
+        }
+        ServeInput::Websocket { store } => {}
+    };
+
+    Ok(())
+}
+
+fn init_server<'a>(
+    mut process: Box<dyn FnMut() -> Result<String, Error> + 'a>,
+) -> Result<Box<dyn FnMut() -> Res + 'a>, Error> {
     use std::sync::{Arc, Mutex, RwLock};
     use websocket::{
         sync::{Client, Server},
         Message,
     };
 
-    if let ServeInput::File(input) = conf.input {
-        let input = input.path; // TODO: Ignores append.
-        let clean = conf.clean;
+    let result: Arc<RwLock<String>> = Arc::new(RwLock::new(String::new()));
+    let mut clients: Arc<Mutex<Vec<Client<_>>>> = Arc::new(Mutex::new(vec![]));
 
-        let result: Arc<RwLock<String>> = Arc::new(RwLock::new(String::new()));
-        let mut clients: Arc<Mutex<Vec<Client<_>>>> = Arc::new(Mutex::new(vec![]));
+    let result_clone = Arc::clone(&result);
+    let clients_clone = Arc::clone(&clients);
+    let mut run_once = move || -> Res {
+        let res = process()?;
 
-        let mut process = get_process(Some(input.clone()), clean);
-        let input_clone = Some(input.clone());
-        let result_clone = Arc::clone(&result);
-        let mut run_once = || -> Res {
-            let res = process()?;
+        let mut clients = clients_clone.lock().unwrap();
+        for client in clients.iter_mut() {
+            let message = Message::text(&res);
+            if let Err(e) = client.send_message(&message) {
+                debug!("Error while attempting to send message to client:\n{}", e);
+            }
+        }
 
-            let mut clients = clients.lock().unwrap();
-            for client in clients.iter_mut() {
+        let mut result = result_clone.write().unwrap();
+        *result = res;
+
+        Ok(())
+    };
+
+    run_once()?;
+
+    use std::thread;
+    let result_clone = Arc::clone(&result);
+    let clients_clone = Arc::clone(&clients);
+    thread::spawn(move || {
+        let server = Server::bind("127.0.0.1:2794").unwrap();
+        for request in server.filter_map(Result::ok) {
+            if !request
+                .protocols()
+                .contains(&"tractus-websocket".to_string())
+            {
+                debug!("New websocket request rejected.");
+                request.reject().unwrap();
+            } else {
+                let mut client = request.use_protocol("tractus-websocket").accept().unwrap();
+                debug!("New websocket request accepted.");
+
+                let res = result_clone.read().unwrap().to_string();
                 let message = Message::text(&res);
                 if let Err(e) = client.send_message(&message) {
                     debug!("Error while attempting to send message to client:\n{}", e);
                 }
-            }
 
-            let mut result = result_clone.write().unwrap();
-            *result = res;
-
-            Ok(())
-        };
-
-        run_once()?;
-
-        use std::thread;
-        let result_clone = Arc::clone(&result);
-        let clients_clone = Arc::clone(&clients);
-        thread::spawn(move || {
-            let server = Server::bind("127.0.0.1:2794").unwrap();
-            for request in server.filter_map(Result::ok) {
-                if !request
-                    .protocols()
-                    .contains(&"tractus-websocket".to_string())
-                {
-                    debug!("New websocket request rejected.");
-                    request.reject().unwrap();
-                } else {
-                    let mut client = request.use_protocol("tractus-websocket").accept().unwrap();
-                    debug!("New websocket request accepted.");
-
-                    let res = result_clone.read().unwrap().to_string();
-                    let message = Message::text(&res);
-                    if let Err(e) = client.send_message(&message) {
-                        debug!("Error while attempting to send message to client:\n{}", e);
-                    }
-
-                    let mut clients = clients_clone.lock().unwrap();
-                    clients.push(client);
-                }
-            }
-            debug!("Stopping server.")
-        });
-
-        use notify::{DebouncedEvent, RecommendedWatcher, RecursiveMode, Watcher};
-        use std::time::Duration;
-
-        let (sender, receiver) = std::sync::mpsc::channel();
-        let mut watcher: RecommendedWatcher = Watcher::new(sender, Duration::from_millis(500))?;
-        watcher.watch(&input, RecursiveMode::NonRecursive)?;
-
-        println!("Watching file {}.", &input.display());
-        for event in receiver {
-            trace!("Received new file event.");
-            if let DebouncedEvent::Write(_) = event {
-                debug!("File changed: {}", input.display());
-                run_once()?;
+                let mut clients = clients_clone.lock().unwrap();
+                clients.push(client);
             }
         }
+        debug!("Stopping server.")
+    });
 
-        Ok(())
-    } else {
-        panic!("Do not support websockets at the moment.");
-    }
+    Ok(Box::new(run_once))
 }
 
 struct ServeConfig {
@@ -353,7 +360,7 @@ struct ServeConfig {
 }
 
 enum ServeInput {
-    File(InputPath),
+    File { path: PathBuf, append_only: bool },
     Websocket { store: Option<PathBuf> },
 }
 
@@ -368,10 +375,10 @@ impl TryFrom<ServeOpts> for ServeConfig {
                 if other.store.is_some() {
                     return Err(ArgumentError::StoreWithPath);
                 }
-                ServeInput::File(InputPath {
+                ServeInput::File {
                     path,
-                    append: processing.append,
-                })
+                    append_only: processing.append_only,
+                }
             }
         };
         let clean = processing.clean;
@@ -380,7 +387,7 @@ impl TryFrom<ServeOpts> for ServeConfig {
 }
 
 struct ProcessingConfig {
-    append: Option<Offset>,
+    append_only: bool,
     clean: Option<Regex>,
 }
 
@@ -388,7 +395,7 @@ impl TryFrom<ProcessingOpts> for ProcessingConfig {
     type Error = ArgumentError;
 
     fn try_from(other: ProcessingOpts) -> Result<Self, ArgumentError> {
-        let (append_bool, clean) = if other.history_desktop {
+        let (append_only, clean) = if other.history_desktop {
             if other.append_only || other.clean.is_some() {
                 return Err(ArgumentError::HistoryConflict);
             } else {
@@ -398,9 +405,8 @@ impl TryFrom<ProcessingOpts> for ProcessingConfig {
         } else {
             (other.append_only, other.clean)
         };
-        let append = if append_bool { Some(0) } else { None };
 
-        Ok(ProcessingConfig { append, clean })
+        Ok(ProcessingConfig { append_only, clean })
     }
 }
 
@@ -464,13 +470,6 @@ fn get_cleaner<R: BufRead>(
         }),
     }
 }
-
-struct InputPath {
-    path: PathBuf,
-    append: Option<Offset>,
-}
-
-type Offset = u64;
 
 fn write_result(output: &mut Option<OutputPath>, result: &str) -> Res {
     let out = if let Some(out) = &output {
