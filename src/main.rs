@@ -86,12 +86,12 @@ struct ProcessingOpts {
     /// The regex syntax used is documented at https://docs.rs/regex/1.2.1/regex/#syntax.
     /// Whatever the regex matches will be removed from the line.
     clean: Option<Regex>,
-    #[structopt(short, long)]
-    /// Declares the input file as an RStudio `history_desktop` file
+    #[structopt(name = "history-database", short, long)]
+    /// Declares the input file as an RStudio `history_database` file
     ///
     /// Convenience flag for enabling --append-only and --clean "(?m)^\d+:".
     /// Cannot be used at the same time as --append-only or --clean.
-    history_desktop: bool,
+    history_database: bool,
 }
 
 #[derive(StructOpt)]
@@ -248,11 +248,11 @@ where
     let mut watcher: RecommendedWatcher = Watcher::new(sender, Duration::from_millis(500))?;
     watcher.watch(&path, RecursiveMode::NonRecursive)?;
 
-    println!("Watching file {}.", &path.display());
+    println!("Watching file {}...", &path.display());
     for event in receiver {
         trace!("Received new file event.");
         if let DebouncedEvent::Write(_) = event {
-            debug!("File changed: {}", path.display());
+            println!("File {} changed. Updating.", path.display());
             execute()?;
         }
     }
@@ -381,6 +381,7 @@ where
     let result_clone = Arc::clone(&result);
     let clients_clone = Arc::clone(&clients);
     let update_and_broadcast = move |res| {
+        println!("Broadcasting new hypotheses tree to all websockets.");
         let mut clients = clients_clone.lock().unwrap();
         for (ip, client) in clients.iter_mut() {
             let message = Message::text(&res);
@@ -470,11 +471,11 @@ impl TryFrom<ProcessingOpts> for ProcessingConfig {
     type Error = ArgumentError;
 
     fn try_from(other: ProcessingOpts) -> Result<Self, ArgumentError> {
-        let (append_only, clean) = if other.history_desktop {
+        let (append_only, clean) = if other.history_database {
             if other.append_only || other.clean.is_some() {
                 return Err(ArgumentError::HistoryConflict);
             } else {
-                // This regex removes the timestamp from each line in the `history_desktop`.
+                // This regex removes the timestamp from each line in the `history_database`.
                 (true, Some(Regex::new(r#"(?m)^\d+:"#).unwrap()))
             }
         } else {
