@@ -150,7 +150,7 @@ fn execute(cmd: Subcommand) -> Res {
     Ok(())
 }
 
-fn run(mut conf: RunConfig) -> Res {
+fn run(conf: RunConfig) -> Res {
     let input = conf.input;
     let clean = conf.clean;
     let mut output = conf.output;
@@ -299,7 +299,7 @@ fn init_server<'a>(
     };
 
     let result: Arc<RwLock<String>> = Arc::new(RwLock::new(String::new()));
-    let mut clients: Arc<Mutex<Vec<Client<_>>>> = Arc::new(Mutex::new(vec![]));
+    let clients: Arc<Mutex<Vec<Client<_>>>> = Arc::new(Mutex::new(vec![]));
 
     let result_clone = Arc::clone(&result);
     let clients_clone = Arc::clone(&clients);
