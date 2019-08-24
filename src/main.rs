@@ -310,9 +310,16 @@ fn serve(conf: ServeConfig) -> Res {
             watch(&path, run_once)?;
         }
         ServeInput::Websocket { store } => {
-            println!("Waiting for input via websockets.");
             let mut tractus = if let Some(path) = &store {
-                serde_json::from_reader(std::fs::File::open(path)?)?
+                if let Ok(file) = std::fs::File::open(path) {
+                    debug!("Restoring from store.");
+                    serde_json::from_reader(file)?
+                } else {
+                    debug!("No store file. Starting fresh.");
+                    let tractus = Tractus::new();
+                    std::fs::write(path, serde_json::to_string(&tractus)?)?; // Store file does not yet exist, so create it.
+                    tractus
+                }
             } else {
                 Tractus::new()
             };
@@ -340,6 +347,7 @@ fn serve(conf: ServeConfig) -> Res {
             let mut clean_lines = get_cleaner(conf.clean);
             update_and_broadcast(serde_json::to_string(&tractus.hypotheses_tree())?);
 
+            println!("Waiting for input via websockets.");
             for (ip, stmt) in stmt_receiver {
                 debug!("Parsing statement received from {}.", ip);
                 let lines = stmt.lines().map(|line| line.to_string()).collect();
