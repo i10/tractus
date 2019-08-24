@@ -8,6 +8,33 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
     <style>
+        #connection-lost {
+            display: none;
+        }
+
+        #connection-lost .error {
+            color: red;
+            font-weight: bold;
+        }
+
+        #connection-lost.show-error {
+            display: block;
+            animation-name: fadeIn;
+            animation-duration: 1s;
+            animation-delay: 0.25s;
+            animation-fill-mode: both;
+        }
+
+        @keyframes fadeIn {
+            0% {
+                opacity: 0;
+            }
+
+            100% {
+                opacity: 1;
+            }
+        }
+
         .hypotheses {
             display: flex;
             align-items: flex-start;
@@ -159,6 +186,9 @@
         var data;
 
         let socket = new WebSocket("ws://127.0.0.1:2794", "tractus-websocket");
+        socket.onopen = function (event) {
+            document.getElementById("connection-lost").setAttribute("class", "");
+        };
         socket.onmessage = function (event) {
             console.log("Received new data. (You can inspect it in the global variable `data`.)");
             let parsed = JSON.parse(event.data);
@@ -173,6 +203,7 @@
         }
         socket.onclose = function (event) {
             console.warn("Websocket closed.");
+            document.getElementById("connection-lost").setAttribute("class", "show-error");
         }
 
         let width = 1000;
@@ -262,6 +293,10 @@
             return str.substr(0, n - 1) + (str.length > n ? '…' : '');
         }
     </script>
+    <div id="connection-lost" class="show-error">
+        <p class="error">Not connected to Tractus!</p>
+        <p>Ensure that Tractus is running and reload this page.</p>
+    </div>
 </body>
 
 </html>
