@@ -313,10 +313,10 @@ fn serve(conf: ServeConfig) -> Res {
         ServeInput::Websocket { store } => {
             let mut tractus = if let Some(path) = &store {
                 if let Ok(file) = std::fs::File::open(path) {
-                    debug!("Restoring from store.");
+                    println!("Restoring from store at {}.", path.display());
                     serde_json::from_reader(file)?
                 } else {
-                    debug!("No store file. Starting fresh.");
+                    println!("No store file. Starting fresh.");
                     let tractus = Tractus::new();
                     std::fs::write(path, serde_json::to_string(&tractus)?)?; // Store file does not yet exist, so create it.
                     tractus
