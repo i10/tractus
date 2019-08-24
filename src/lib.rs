@@ -1,8 +1,8 @@
 #[macro_use]
 extern crate pest_derive;
 
-use std::rc::Rc;
 use std::ops::Deref;
+use std::rc::Rc;
 
 use log::{debug, trace};
 use serde::{Deserialize, Serialize};
@@ -73,12 +73,13 @@ impl Tractus {
     pub fn parse_lines<S: AsRef<str>>(
         &mut self,
         lines: Vec<S>,
-    ) -> Result<Vec<Rc<RStatement<(Span, String, Vec<String>)>>>, parser::Error>{
+    ) -> Result<Vec<Rc<RStatement<(Span, String, Vec<String>)>>>, parser::Error> {
         let mut parsed = vec![];
         for line in lines.iter() {
             self.line_count += 1;
             self.unparsed.push(line.as_ref().to_string()); // Push to unparsed, such that all currently unparsed lines are treated together.
-            let parse_result = Parsed::parse_stmts(&self.unparsed.join("\n"));
+            let to_parse = &self.unparsed.join("\n");
+            let parse_result = Parsed::parse_stmts(to_parse);
             match parse_result {
                 Ok(stmts) => {
                     parsed.append(
@@ -111,15 +112,16 @@ impl Tractus {
                 Err(e) => {
                     // If the parsing error occurred at the very last symbol,
                     // we assume that it is simply incomplete and will try again when we have more input.
+                    trace!("Encountered error while parsing {}:\n{}", to_parse, e);
                     if let pest::error::InputLocation::Pos(pos) = e.location {
                         trace!(
                             "Error position is {}, last position is {}.",
                             pos,
-                            line.as_ref().len()
+                            to_parse.len()
                         );
-                        if pos == line.as_ref().len() {
+                        if pos == to_parse.len() {
                             debug!("Will retry with more input.");
-                            // Current line is already pushed to self.unparsed, so it will be retried on next iteration.
+                            continue; // Current line is already pushed to self.unparsed, so it will be retried on next iteration.
                         }
                     }
                     debug!("Skipping this input.");
@@ -136,8 +138,6 @@ impl Tractus {
 
     pub fn hypotheses_tree(&mut self) -> LineTree<ExpressionMeta> {
         self.result = parse_hypothesis_tree(&self.dependency_graph);
-        LineTree::with(&self.result, &mut |exp| {
-            ExpressionMeta::from(exp)
-        })
+        LineTree::with(&self.result, &mut |exp| ExpressionMeta::from(exp))
     }
 }
