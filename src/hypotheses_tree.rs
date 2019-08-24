@@ -4,14 +4,14 @@ use std::fmt::Debug;
 use std::rc::Rc;
 
 use petgraph::Direction;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::dependency_graph;
 use crate::hypotheses::{detect_hypotheses, Hypothesis};
 use crate::parser::{LineDisplay, RExpression, Span};
 use dependency_graph::{DependencyGraph, NodeIndex};
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct HypothesisTree<T> {
     root: Branches<Rc<RExpression<T>>>,
     hypotheses: BTreeMap<HypothesesId, Hypotheses>,
@@ -79,7 +79,7 @@ pub type HypothesesId = usize;
 
 pub type Branches<C> = BTreeMap<HypothesesId, Vec<Node<C>>>;
 
-#[derive(Debug, PartialEq, Eq, Serialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Node<C> {
     #[serde(rename = "expression")]
     pub content: C,
@@ -128,7 +128,7 @@ fn convert<T>(
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Serialize)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Hypotheses(BTreeSet<Hypothesis>);
 
 impl std::cmp::Ord for Hypotheses {

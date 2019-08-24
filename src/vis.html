@@ -160,13 +160,12 @@
 
         let socket = new WebSocket("ws://127.0.0.1:2794", "tractus-websocket");
         socket.onmessage = function (event) {
-            console.log("Received data.");
+            console.log("Received new data. (You can inspect it in the global variable `data`.)");
             let parsed = JSON.parse(event.data);
             parsed.root = parsed.root = {
                 hypotheses: parsed.root,
             };
             data = parsed;
-            console.log(parsed);
             render(parsed);
         }
         socket.onerror = function (event) {

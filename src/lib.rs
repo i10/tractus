@@ -3,6 +3,8 @@ extern crate pest_derive;
 
 use std::rc::Rc;
 
+use serde::{Deserialize, Serialize};
+
 pub mod dependency_graph;
 pub mod hypotheses;
 pub mod hypotheses_tree;
@@ -14,6 +16,7 @@ pub use crate::parser::{
     Expression, LineDisplay, Parsed, RExpression, RStatement, Span, Statement,
 };
 
+#[derive(Serialize, Deserialize)]
 pub struct Tractus {
     dependency_graph: DependencyGraph<Span>,
     result: HypothesisTree<Span>,

@@ -1,15 +1,24 @@
 extern crate tractus;
 
+use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 use std::io;
 use std::io::prelude::*;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, RwLock};
+use std::thread;
+use std::time::Duration;
 
 use env_logger;
 use failure::Error;
 use log::{debug, error, info, trace, warn};
+use notify::{DebouncedEvent, RecommendedWatcher, RecursiveMode, Watcher};
 use regex::Regex;
 use structopt::StructOpt;
+use websocket::{
+    sync::{Client, Server},
+    Message, OwnedMessage,
+};
 
 use tractus::Tractus;
 
@@ -177,7 +186,10 @@ fn run(conf: RunConfig) -> Res {
             let mut clean_lines = get_cleaner(clean);
             let mut run_once = || -> Res {
                 reader.seek(io::SeekFrom::Start(offset))?;
-                let lines = clean_lines(&mut reader)?;
+                let lines = (&mut reader)
+                    .lines()
+                    .collect::<Result<Vec<String>, io::Error>>()?;
+                let lines = clean_lines(lines);
                 offset = reader.seek(io::SeekFrom::Current(0))?; // Update offset for next run.
 
                 tractus.parse_lines(lines)?;
@@ -232,9 +244,6 @@ fn watch<F>(path: &PathBuf, mut execute: F) -> Res
 where
     F: FnMut() -> Res,
 {
-    use notify::{DebouncedEvent, RecommendedWatcher, RecursiveMode, Watcher};
-    use std::time::Duration;
-
     let (sender, receiver) = std::sync::mpsc::channel();
     let mut watcher: RecommendedWatcher = Watcher::new(sender, Duration::from_millis(500))?;
     watcher.watch(&path, RecursiveMode::NonRecursive)?;
@@ -255,12 +264,18 @@ fn serve(conf: ServeConfig) -> Res {
     match conf.input {
         ServeInput::File { path, append_only } => {
             debug!("Serving from file.");
-            if !append_only {
+            let mut run_once: Box<dyn FnMut() -> Res> = if !append_only {
                 debug!("Append-only inactive, reparsing whole file on changes.");
-                let process = get_process(Some(path.clone()), conf.clean);
-                let run_once = init_server(process)?;
 
-                watch(&path, run_once)?;
+                let mut update_and_broadcast = init_server(|_, _| {})?;
+                let mut process = get_process(Some(path.clone()), conf.clean);
+
+                Box::new(move || -> Res {
+                    let result = process()?;
+                    update_and_broadcast(result);
+
+                    Ok(())
+                })
             } else {
                 debug!("Only considering appends.");
                 let file = std::fs::File::open(&path)?;
@@ -269,60 +284,108 @@ fn serve(conf: ServeConfig) -> Res {
                 let mut tractus = Tractus::new();
 
                 let mut clean_lines = get_cleaner(conf.clean);
-                let process = Box::new(|| -> Result<String, Error> {
+                let mut process = move || -> Result<String, Error> {
                     reader.seek(io::SeekFrom::Start(offset))?;
-                    let lines = clean_lines(&mut reader)?;
+                    let lines = (&mut reader)
+                        .lines()
+                        .collect::<Result<Vec<String>, io::Error>>()?;
+                    let lines = clean_lines(lines);
                     offset = reader.seek(io::SeekFrom::Current(0))?; // Update offset for next run.
 
                     tractus.parse_lines(lines)?;
                     let result = serde_json::to_string(&tractus.hypotheses_tree())?;
                     Ok(result)
-                });
-                let run_once = init_server(process)?;
+                };
+                let mut update_and_broadcast = init_server(|_, _| {})?;
+                Box::new(move || {
+                    let result = dbg!(process()?);
+                    update_and_broadcast(result);
 
-                watch(&path, run_once)?;
+                    Ok(())
+                })
             };
+
+            run_once()?;
+
+            watch(&path, run_once)?;
         }
-        ServeInput::Websocket { store } => {}
+        ServeInput::Websocket { store } => {
+            println!("Waiting for input via websockets.");
+            let mut tractus = if let Some(path) = &store {
+                serde_json::from_reader(std::fs::File::open(path)?)?
+            } else {
+                Tractus::new()
+            };
+            let (stmt_sender, stmt_receiver) = std::sync::mpsc::channel();
+
+            let mut update_and_broadcast =
+                init_server(move |ip, mut receiver: websocket::sync::Reader<_>| {
+                    let stmt_sender_clone = stmt_sender.clone();
+                    thread::spawn(move || {
+                        for msg in receiver.incoming_messages() {
+                            debug!("Received new input.");
+                            match msg {
+                                Ok(message) => {
+                                    if let OwnedMessage::Text(stmt) = message {
+                                        stmt_sender_clone.send((ip, stmt)).unwrap();
+                                    }
+                                }
+                                Err(e) => {
+                                    debug!("Message contained error: {}", e);
+                                }
+                            }
+                        }
+                    });
+                })?;
+            let mut clean_lines = get_cleaner(conf.clean);
+            update_and_broadcast(serde_json::to_string(&tractus.hypotheses_tree())?);
+
+            for (ip, stmt) in stmt_receiver {
+                debug!("Parsing statement received from {}.", ip);
+                let lines = stmt.lines().map(|line| line.to_string()).collect();
+                let lines = clean_lines(lines);
+                tractus.parse_lines(lines)?;
+                if let Some(path) = &store {
+                    debug!("Updating store.");
+                    std::fs::write(path, serde_json::to_string(&tractus)?)?;
+                }
+                let result = serde_json::to_string(&tractus.hypotheses_tree())?;
+
+                println!("Broadcasting new hypotheses tree.");
+                update_and_broadcast(result);
+            }
+        }
     };
 
     Ok(())
 }
 
-fn init_server<'a>(
-    mut process: Box<dyn FnMut() -> Result<String, Error> + 'a>,
-) -> Result<Box<dyn FnMut() -> Res + 'a>, Error> {
-    use std::sync::{Arc, Mutex, RwLock};
-    use websocket::{
-        sync::{Client, Server},
-        Message,
-    };
-
+fn init_server<'a, F>(mut new_client: F) -> Result<Box<dyn FnMut(String) + 'a>, Error>
+where
+    F: std::marker::Send
+        + FnMut(std::net::SocketAddr, websocket::receiver::Reader<std::net::TcpStream>)
+        + 'static,
+{
     let result: Arc<RwLock<String>> = Arc::new(RwLock::new(String::new()));
-    let clients: Arc<Mutex<Vec<Client<_>>>> = Arc::new(Mutex::new(vec![]));
+    let clients: Arc<Mutex<HashMap<std::net::SocketAddr, websocket::sender::Writer<_>>>> =
+        Arc::new(Mutex::new(HashMap::new()));
 
     let result_clone = Arc::clone(&result);
     let clients_clone = Arc::clone(&clients);
-    let mut run_once = move || -> Res {
-        let res = process()?;
-
+    let update_and_broadcast = move |res| {
         let mut clients = clients_clone.lock().unwrap();
-        for client in clients.iter_mut() {
+        for (ip, client) in clients.iter_mut() {
             let message = Message::text(&res);
             if let Err(e) = client.send_message(&message) {
-                debug!("Error while attempting to send message to client:\n{}", e);
+                debug!("Error while attempting to send message to {}:\n{}", ip, e);
+                // TODO: Remove client.
             }
         }
 
         let mut result = result_clone.write().unwrap();
         *result = res;
-
-        Ok(())
     };
 
-    run_once()?;
-
-    use std::thread;
     let result_clone = Arc::clone(&result);
     let clients_clone = Arc::clone(&clients);
     thread::spawn(move || {
@@ -339,19 +402,23 @@ fn init_server<'a>(
                 debug!("New websocket request accepted.");
 
                 let res = result_clone.read().unwrap().to_string();
+                let ip = client.peer_addr().unwrap();
                 let message = Message::text(&res);
                 if let Err(e) = client.send_message(&message) {
-                    debug!("Error while attempting to send message to client:\n{}", e);
+                    debug!("Error while attempting to send message to {}:\n{}", ip, e);
                 }
 
+                let (client_receiver, client_sender) = client.split().unwrap();
                 let mut clients = clients_clone.lock().unwrap();
-                clients.push(client);
+                clients.insert(ip, client_sender);
+
+                new_client(ip, client_receiver);
             }
         }
         debug!("Stopping server.")
     });
 
-    Ok(Box::new(run_once))
+    Ok(Box::new(update_and_broadcast))
 }
 
 struct ServeConfig {
@@ -449,7 +516,10 @@ fn get_process(
 
     Box::new(move || {
         let mut reader = get_reader()?;
-        let lines = clean_lines(&mut reader)?;
+        let lines = (&mut reader)
+            .lines()
+            .collect::<Result<Vec<String>, io::Error>>()?;
+        let lines = clean_lines(lines);
         let mut tractus = Tractus::new();
         tractus.parse_lines(lines)?;
         let result = serde_json::to_string(&tractus.hypotheses_tree())?;
@@ -457,15 +527,13 @@ fn get_process(
     })
 }
 
-fn get_cleaner<R: BufRead>(
-    clean: Option<Regex>,
-) -> Box<dyn FnMut(&mut R) -> Result<Vec<String>, io::Error>> {
+fn get_cleaner(clean: Option<Regex>) -> Box<dyn FnMut(Vec<String>) -> Vec<String>> {
     match clean {
-        None => Box::new(|reader: &mut R| reader.lines().collect()),
-        Some(regex) => Box::new(move |reader: &mut R| {
-            reader
-                .lines()
-                .map(|line_result| line_result.map(|line| regex.replace_all(&line, "").to_string()))
+        None => Box::new(|lines| lines),
+        Some(regex) => Box::new(move |lines| {
+            lines
+                .iter()
+                .map(|line| regex.replace_all(&line, "").to_string())
                 .collect()
         }),
     }
