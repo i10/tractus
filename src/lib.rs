@@ -22,8 +22,8 @@ pub use crate::parser::{
 pub struct Tractus {
     line_count: usize,
     unparsed: Vec<String>,
-    dependency_graph: DependencyGraph<(Span, String, Vec<String>)>,
-    result: HypothesisTree<(Span, String, Vec<String>)>,
+    dependency_graph: DependencyGraph<(Span, String, Vec<String>, serde_json::Value)>,
+    result: HypothesisTree<(Span, String, Vec<String>, serde_json::Value)>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -33,10 +33,11 @@ pub struct ExpressionMeta {
     statement: String,
     assigned_variables: Vec<String>,
     function_name: Option<String>,
+    meta: serde_json::Value
 }
 
-impl From<&Rc<RExpression<(Span, String, Vec<String>)>>> for ExpressionMeta {
-    fn from(other: &Rc<RExpression<(Span, String, Vec<String>)>>) -> Self {
+impl From<&Rc<RExpression<(Span, String, Vec<String>, serde_json::Value)>>> for ExpressionMeta {
+    fn from(other: &Rc<RExpression<(Span, String, Vec<String>, serde_json::Value)>>) -> Self {
         let meta = other.get_meta();
         let function_name = extract_function_name(&other);
         ExpressionMeta {
@@ -45,6 +46,7 @@ impl From<&Rc<RExpression<(Span, String, Vec<String>)>>> for ExpressionMeta {
             statement: meta.1.clone(),
             assigned_variables: meta.2.clone(),
             function_name,
+            meta: meta.3.clone()
         }
     }
 }
@@ -73,7 +75,15 @@ impl Tractus {
     pub fn parse_lines<S: AsRef<str>>(
         &mut self,
         lines: Vec<S>,
-    ) -> Result<Vec<Rc<RStatement<(Span, String, Vec<String>)>>>, parser::Error> {
+    ) -> Result<Vec<Rc<RStatement<(Span, String, Vec<String>, serde_json::Value)>>>, parser::Error> {
+        self.parse_lines_with_meta(lines, serde_json::Value::Null)
+    }
+
+    pub fn parse_lines_with_meta<S: AsRef<str>>(
+        &mut self,
+        lines: Vec<S>,
+        meta: serde_json::Value,
+    ) -> Result<Vec<Rc<RStatement<(Span, String, Vec<String>, serde_json::Value)>>>, parser::Error> {
         let mut parsed = vec![];
         for line in lines.iter() {
             self.line_count += 1;
@@ -102,7 +112,7 @@ impl Tractus {
                                 stmt.map(&mut |span| {
                                     let mut span = span.clone();
                                     span.shift_line(self.line_count);
-                                    (span, stmt_display.clone(), assigned_variables.clone())
+                                    (span, stmt_display.clone(), assigned_variables.clone(), meta.clone())
                                 })
                             })
                             .collect(),

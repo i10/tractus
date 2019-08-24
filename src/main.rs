@@ -14,6 +14,7 @@ use failure::Error;
 use log::{debug, error, info, trace, warn};
 use notify::{DebouncedEvent, RecommendedWatcher, RecursiveMode, Watcher};
 use regex::Regex;
+use serde::{Deserialize, Serialize};
 use structopt::StructOpt;
 use websocket::{
     sync::{Client, Server},
@@ -349,23 +350,40 @@ fn serve(conf: ServeConfig) -> Res {
 
             println!("Waiting for input via websockets.");
             for (ip, stmt) in stmt_receiver {
-                debug!("Parsing statement received from {}.", ip);
-                let lines = stmt.lines().map(|line| line.to_string()).collect();
-                let lines = clean_lines(lines);
-                tractus.parse_lines(lines)?;
-                if let Some(path) = &store {
-                    debug!("Updating store.");
-                    std::fs::write(path, serde_json::to_string(&tractus)?)?;
-                }
-                let result = serde_json::to_string(&tractus.hypotheses_tree())?;
+                match serde_json::from_str::<StatementInput>(&stmt) {
+                    Ok(stmt_input) => {
+                        debug!("Parsing statement received from {}.", ip);
+                        let lines = stmt_input
+                            .statement
+                            .lines()
+                            .map(|line| line.to_string())
+                            .collect();
+                        let lines = clean_lines(lines);
+                        tractus.parse_lines_with_meta(lines, stmt_input.meta)?;
+                        if let Some(path) = &store {
+                            debug!("Updating store.");
+                            std::fs::write(path, serde_json::to_string(&tractus)?)?;
+                        }
+                        let result = serde_json::to_string(&tractus.hypotheses_tree())?;
 
-                println!("Broadcasting new hypotheses tree.");
-                update_and_broadcast(result);
+                        println!("Broadcasting new hypotheses tree.");
+                        update_and_broadcast(result);
+                    }
+                    Err(e) => {
+                        eprintln!("Error parsing input received via websocket:\n{}", e);
+                    }
+                }
             }
         }
     };
 
     Ok(())
+}
+
+#[derive(Serialize, Deserialize)]
+struct StatementInput {
+    statement: String,
+    meta: serde_json::Value,
 }
 
 fn init_server<'a, F>(mut new_client: F) -> Result<Box<dyn FnMut(String) + 'a>, Error>
