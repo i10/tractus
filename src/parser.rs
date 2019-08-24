@@ -572,6 +572,13 @@ pub struct Span {
     to: Position,
 }
 
+impl Span {
+    pub fn shift_line(&mut self, begin_at: usize) {
+        self.from.shift_line(begin_at);
+        self.to.shift_line(begin_at);
+    }
+}
+
 impl<'i, P: Borrow<pest::iterators::Pair<'i, Rule>>> From<P> for Span {
     fn from(other: P) -> Self {
         let span = other.borrow().as_span();
@@ -586,6 +593,12 @@ impl<'i, P: Borrow<pest::iterators::Pair<'i, Rule>>> From<P> for Span {
 pub struct Position {
     line: usize,
     column: usize,
+}
+
+impl Position {
+    pub fn shift_line(&mut self, begin_at: usize) {
+        self.line = begin_at + self.line - 1; // Minus one, because line count starts at one.
+    }
 }
 
 impl<'i> From<&pest::Position<'i>> for Position {
@@ -622,17 +635,23 @@ impl Parsed {
         Ok(parsed)
     }
 
-    pub fn append(&mut self, code: &str) -> Result<&[Rc<Statement>], Error> {
+    pub fn parse_stmts(code: &str) -> Result<Vec<Rc<Statement>>, Error> {
         debug!("Pest parsing...");
         let parsed = RParser::parse(Rule::r_code, code)?;
 
         debug!("Assembling AST...");
-        let mut new_statements: Vec<Rc<Statement>> = parsed
+        let new_statements: Vec<Rc<Statement>> = parsed
             .filter_map(|token| match token.as_rule() {
                 Rule::EOI => None,
                 _ => Some(parse_line(token)),
             })
             .collect();
+
+        Ok(new_statements)
+    }
+
+    pub fn append(&mut self, code: &str) -> Result<&[Rc<Statement>], Error> {
+        let mut new_statements = Self::parse_stmts(code)?;
 
         let added = new_statements.len();
         self.0.append(&mut new_statements);
