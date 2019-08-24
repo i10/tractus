@@ -2,6 +2,7 @@
 extern crate pest_derive;
 
 use std::rc::Rc;
+use std::ops::Deref;
 
 use log::{debug, trace};
 use serde::{Deserialize, Serialize};
@@ -21,8 +22,40 @@ pub use crate::parser::{
 pub struct Tractus {
     line_count: usize,
     unparsed: Vec<String>,
-    dependency_graph: DependencyGraph<Span>,
-    result: HypothesisTree<Span>,
+    dependency_graph: DependencyGraph<(Span, String, Vec<String>)>,
+    result: HypothesisTree<(Span, String, Vec<String>)>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct ExpressionMeta {
+    expression: String,
+    span: Span,
+    statement: String,
+    assigned_variables: Vec<String>,
+    function_name: Option<String>,
+}
+
+impl From<&Rc<RExpression<(Span, String, Vec<String>)>>> for ExpressionMeta {
+    fn from(other: &Rc<RExpression<(Span, String, Vec<String>)>>) -> Self {
+        let meta = other.get_meta();
+        let function_name = extract_function_name(&other);
+        ExpressionMeta {
+            expression: format!("{}", other),
+            span: meta.0.clone(),
+            statement: meta.1.clone(),
+            assigned_variables: meta.2.clone(),
+            function_name,
+        }
+    }
+}
+
+fn extract_function_name<T>(expression: &Rc<parser::RExpression<T>>) -> Option<String> {
+    use parser::RExpression::*;
+    match expression.deref() {
+        Call(name, _, _) => name.extract_variable_name(),
+        Column(left, _, _) => extract_function_name(&left),
+        _ => None,
+    }
 }
 
 impl Tractus {
@@ -40,7 +73,7 @@ impl Tractus {
     pub fn parse_lines<S: AsRef<str>>(
         &mut self,
         lines: Vec<S>,
-    ) -> Result<Vec<Rc<Statement>>, parser::Error> {
+    ) -> Result<Vec<Rc<RStatement<(Span, String, Vec<String>)>>>, parser::Error>{
         let mut parsed = vec![];
         for line in lines.iter() {
             self.line_count += 1;
@@ -52,10 +85,23 @@ impl Tractus {
                         &mut stmts
                             .into_iter()
                             .map(|stmt| {
+                                let stmt_display = format!("{}", stmt);
+                                let assigned_variables =
+                                    if let parser::RStatement::Assignment(left, add, _, _) =
+                                        stmt.deref()
+                                    {
+                                        let mut vs = vec![format!("{}", left)];
+                                        let mut addition: Vec<String> =
+                                            add.iter().map(|v| format!("{}", v)).collect();
+                                        vs.append(&mut addition);
+                                        vs
+                                    } else {
+                                        vec![]
+                                    };
                                 stmt.map(&mut |span| {
                                     let mut span = span.clone();
                                     span.shift_line(self.line_count);
-                                    span
+                                    (span, stmt_display.clone(), assigned_variables.clone())
                                 })
                             })
                             .collect(),
@@ -88,8 +134,10 @@ impl Tractus {
         Ok(parsed.into_iter().collect())
     }
 
-    pub fn hypotheses_tree(&mut self) -> LineTree<String> {
+    pub fn hypotheses_tree(&mut self) -> LineTree<ExpressionMeta> {
         self.result = parse_hypothesis_tree(&self.dependency_graph);
-        LineTree::with_span(&self.result)
+        LineTree::with(&self.result, &mut |exp| {
+            ExpressionMeta::from(exp)
+        })
     }
 }

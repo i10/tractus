@@ -220,22 +220,21 @@
             nodes.each(function (d) {
                 let data = d.data.expression;
                 let div = d3.select(this).append("div").classed("expression", true);
-                // if (data.assigned_variables.length > 0) {
-                //     div.append("span").classed("variables", true).text(
-                //         `${data.assigned_variables.join(" <- ")}`
-                //     );
-                // }
+                if (data.assigned_variables.length > 0) {
+                    div.append("span").classed("variables", true).text(
+                        `${data.assigned_variables.join(" <- ")}`
+                    );
+                }
                 div.append("span").text(d => {
-                    return data;
-                    // if (data.function_name) {
-                    //     return data.function_name + "(…)";
-                    // } else {
-                    //     return truncate(data.statement, 25);
-                    // }
+                    if (data.function_name) {
+                        return data.function_name + "(…)";
+                    } else {
+                        return truncate(data.statement, 25);
+                    }
                 }).classed("short-info", true);
-                // div.append("div").classed("long-info", true).text(
-                //     `${data.index}: ${data.statement}`
-                // );
+                div.append("div").classed("long-info", true).text(
+                    `${data.span.from.line}: ${data.statement}`
+                );
             });
             if (!nodes.empty()) {
                 makeNestedListItems(nodes)
