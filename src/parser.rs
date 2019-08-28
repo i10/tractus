@@ -696,7 +696,7 @@ fn parse_line(line_pair: pest::iterators::Pair<Rule>) -> Rc<Statement> {
                         }
                         Rule::assignment => {
                             // Can be multiple assignment, e. g. a=b=c=1. We want to extract the right-most expression,
-                            // wich is assigned to all others, and the left-most one, which prevents an empty left side.
+                            // which is assigned to all others.
                             let mut elements: Vec<Rc<Expression>> =
                                 statement.into_inner().map(parse_expression).collect();
                             let error = "Assignment did not have enough elements.";

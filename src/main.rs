@@ -1,25 +1,22 @@
 extern crate tractus;
 
 use std::collections::HashMap;
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryFrom;
 use std::io;
 use std::io::prelude::*;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 use std::time::Duration;
 
 use env_logger;
 use failure::Error;
-use log::{debug, error, info, trace, warn};
+use log::{debug, trace};
 use notify::{DebouncedEvent, RecommendedWatcher, RecursiveMode, Watcher};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use structopt::StructOpt;
-use websocket::{
-    sync::{Client, Server},
-    Message, OwnedMessage,
-};
+use websocket::{sync::Server, Message, OwnedMessage};
 
 use tractus::Tractus;
 
