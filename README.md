@@ -1,6 +1,17 @@
 # Tractus
 Dependency analyzer for R code that visualizes the decisions taken during exploratory programming.
 
+# Quickstart
+Listen to websocket input:
+```
+tractus serve --store ./tractus
+```
+
+Watch an RStudio `history_database` file:
+```
+tractus serve --input ~/.rstudio-desktop/history_database
+```
+
 # Usage
 `tractus serve` will listen to `ws://127.0.0.1:2794` under the protocol `tractus-websocket`. Whenever the hypotheses tree is updated, it will push a message on all connected websockets in JSON form.
 
