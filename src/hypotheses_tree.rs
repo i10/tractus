@@ -71,9 +71,7 @@ pub type Branches<C> = BTreeMap<HypothesesId, Vec<Node<C>>>;
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Node<C> {
-    #[serde(rename = "expression")]
     pub content: C,
-    #[serde(rename = "hypotheses")]
     pub children: Branches<C>,
 }
 
