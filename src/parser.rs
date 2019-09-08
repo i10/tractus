@@ -254,11 +254,12 @@ impl<M> Statements<M> {
     }
 
     pub fn batch_append(&mut self, mut stmts: Statements<M>) -> Vec<StatementId> {
-        let first_index = self.stmts.len() + 1;
+        let first_index = self.stmts.len();
         self.stmts.append(&mut stmts.stmts);
         let last_index = self.stmts.len();
 
-        (first_index..last_index).map(StatementId).collect()
+        let id_range = first_index..last_index;
+        id_range.map(StatementId).collect()
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (StatementId, &Statement, &M)> {
@@ -301,7 +302,7 @@ impl Parsed<LineSpan> {
     }
 }
 
-impl<M> Parsed<M> {
+impl<M: std::fmt::Debug> Parsed<M> {
     pub fn new() -> Self {
         Parsed {
             statements: Statements::new(),
@@ -377,7 +378,7 @@ pub fn parse_statements(code: &str) -> Result<Statements<LineSpan>, Error> {
     Ok(Statements::from_iter(new_statements))
 }
 
-#[derive(Debug, Serialize, Default, Deserialize, Clone)]
+#[derive(Debug, Serialize, PartialEq, Eq, Default, Deserialize, Clone)]
 pub struct LineSpan {
     from: usize,
     to: usize,
@@ -1287,6 +1288,61 @@ while (TRUE)
             ),
         ];
         assert_matches(code, expected);
+    }
+
+    mod ids {
+        use super::*;
+        use pretty_assertions::assert_eq;
+
+        #[test]
+        fn iter_ids_match_statement() {
+            let code = "\
+# First
+second <- 2
+third(second)";
+            let stmts =
+                parse_statements(code).unwrap_or_else(|e| panic!("Could not parse code:\n{}", e));
+            for (id, stmt, meta) in stmts.iter() {
+                let by_id = &stmts[id];
+                assert_eq!((&by_id.0, &by_id.1), (stmt, meta));
+            }
+        }
+
+        #[test]
+        fn batch_insert_ids_correspond_to_lines() {
+            let code = "\
+# First
+second <- 2
+if (third)
+    fourth()
+";
+            let mut parsed = Parsed::new();
+            let inserted = parsed.append(code.lines().collect());
+            assert_eq!(3, inserted.len());
+            assert_eq!(parsed.statements()[inserted[0]].0, comment!("# First"));
+            assert_eq!(
+                parsed.statements()[inserted[1]].0,
+                assignment!(variable!("second"), vec![], constant!("2"))
+            );
+            assert_eq!(
+                parsed.statements()[inserted[2]].0,
+                if_stmt!(
+                    variable!("third"),
+                    vec![expression!(call!(variable!("fourth"), vec![]))],
+                    None
+                )
+            );
+
+            let more_code = "\
+# Fifth
+sixth()";
+            let inserted = parsed.append(more_code.lines().collect());
+            assert_eq!(parsed.statements()[inserted[0]].0, comment!("# Fifth"));
+            assert_eq!(
+                parsed.statements()[inserted[1]].0,
+                expression!(call!(variable!("sixth"), vec![]))
+            );
+        }
     }
 
     mod extracts_variable_name {
