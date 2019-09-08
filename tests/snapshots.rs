@@ -76,8 +76,10 @@ fn test_snapshot(snapshot_path: &path::PathBuf, maybe_prefix: Option<&'static st
         .unwrap_or_else(|| file_stem.into_owned());
     assert_debug_snapshot_matches!(format!("{}-parsed", snapshot_name), parsed);
     let dependency_graph = tractus::DependencyGraph::from_input(&parsed);
+    let tree = 
+        tractus::parse_hypothesis_tree(&parsed, &dependency_graph);
     assert_debug_snapshot_matches!(
         format!("{}-dependencies", snapshot_name),
-        tractus::parse_hypothesis_tree(&parsed, &dependency_graph)
+        tractus::DisplayTree::with(&tree, &mut |stmt_id| parsed[stmt_id].clone())
     );
 }

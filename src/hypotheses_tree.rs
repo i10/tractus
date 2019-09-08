@@ -13,7 +13,7 @@ pub struct HypothesisTree {
     hypotheses: BTreeMap<HypothesesId, Hypotheses>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 pub struct DisplayTree<T> {
     root: Branches<T>,
     hypotheses: BTreeMap<HypothesesId, Hypotheses>,
