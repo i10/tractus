@@ -326,7 +326,11 @@ impl<M: std::fmt::Debug> Parsed<M> {
 
             match parse_result {
                 Ok(stmts) => {
-                    let stmts = stmts.into_map(mapping);
+                    let stmts = stmts.into_map(&mut |stmt, span| {
+                        let first_unparsed_line = self.line_count - self.unparsed.len() + 1; // +1 because unparsed always contains the current line.
+                        let shifted_span = span.shifted(first_unparsed_line);
+                        mapping(stmt, shifted_span)
+                    });
                     let mut new_ids = self.statements.batch_append(stmts);
                     self.unparsed.clear(); // We have parsed everything successfully.
                     added_ids.append(&mut new_ids);
@@ -1318,6 +1322,7 @@ if (third)
 ";
             let mut parsed = Parsed::new();
             let inserted = parsed.append(code.lines().collect());
+            dbg!(&parsed);
             assert_eq!(3, inserted.len());
             assert_eq!(parsed.statements()[inserted[0]].0, comment!("# First"));
             assert_eq!(
@@ -1395,6 +1400,69 @@ sixth()";
         fn rejects_constant_in_column() {
             let name = column!(constant!("x"), variable!("a"));
             assert_matches(None, name);
+        }
+    }
+
+    mod line_span {
+        use super::*;
+        use pretty_assertions::assert_eq;
+
+        #[test]
+        fn associates_correct_line_number() {
+            let code = "\
+# First
+second <- 2
+if (third)
+    fourth()
+";
+            let stmts =
+                parse_statements(code).unwrap_or_else(|e| panic!("Failed to parse code:\n{}", e));
+            let spans: Vec<LineSpan> = stmts.into_iter().map(|(_, span)| span).collect();
+            assert_eq!(
+                vec![
+                    LineSpan { from: 1, to: 1 },
+                    LineSpan { from: 2, to: 2 },
+                    LineSpan { from: 3, to: 4 }
+                ],
+                spans
+            );
+        }
+
+        #[test]
+        fn successive_appends_remember_line_number() {
+            let code = "\
+# First
+second <- 2
+if (third)
+    fourth()
+";
+            let mut parsed = Parsed::new();
+            let inserted = parsed.append(code.lines().collect());
+            let spans: Vec<LineSpan> = inserted
+                .iter()
+                .map(|id| parsed.statements()[id].1.clone())
+                .collect();
+            assert_eq!(
+                vec![
+                    LineSpan { from: 1, to: 1 },
+                    LineSpan { from: 2, to: 2 },
+                    LineSpan { from: 3, to: 4 }
+                ],
+                spans
+            );
+
+            let more_code = "\
+# Fifth
+sixth()";
+            let inserted = parsed.append(more_code.lines().collect());
+            let spans: Vec<LineSpan> = inserted
+                .iter()
+                .map(|id| parsed.statements()[id].1.clone())
+                .collect();
+            assert_eq!(
+                vec![LineSpan { from: 5, to: 5 }, LineSpan { from: 6, to: 6 },],
+                spans
+            );
         }
     }
 }
