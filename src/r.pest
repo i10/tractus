@@ -5,7 +5,9 @@ r_code = _{ SOI ~ lines ~ EOI }
 lines = _{ (line ~ line_separator | empty ~ NEWLINE )* ~ (line ~ ";"?)? }
 line_separator = _{ ";" ~ NEWLINE | ";" | NEWLINE }
 line = { statement ~ comment | statement | comment }
-statement = { assignment | if_statement | while_statement | for_statement | library | expression }
+// The "else"? is a hack to work around the issue of multi-line if else statements when parsing line-by-line.
+statement = { ("else" ~ ("(" ~ statement_ ~ ")" | statement_) | statement_) }
+statement_ = _{ assignment | if_statement | while_statement | for_statement | library | expression }
 
 assignment = { (expression ~ ("<-" | "<<-" | "=") ~ NEWLINE*)+ ~ expression}
 if_statement = { "if" ~ "(" ~ expression ~ ")" ~ block ~ (NEWLINE* ~ "else" ~ block)? }
@@ -32,7 +34,8 @@ infix_operator = { "<=" | ">=" | !"<-" ~ "<" | ">" | "==" | "!=" | "+" | "-" | "
 custom_infix_operator = { "%" ~ (!("%" | WHITESPACE | NEWLINE) ~ ANY)* ~ "%" }
 
 identifier = @{ "\"" ~ raw_identifier ~ "\"" | raw_identifier }
-raw_identifier = _{ !(ASCII_DIGIT | "_" | "." ~ ASCII_DIGIT) ~ identifier_character+ ~ ("::" ~ ":"* ~ identifier)? }
+raw_identifier = _{ !keyword ~ !(ASCII_DIGIT | "_" | "." ~ ASCII_DIGIT) ~ identifier_character+ ~ ("::" ~ ":"* ~ identifier)? }
+keyword = _{ "if" | "else" | "while" | "for" | "function" }
 identifier_character = _{ ASCII_ALPHANUMERIC | "." | "_" }
 
 constant = ${ number | string | "TRUE" | "FALSE" }

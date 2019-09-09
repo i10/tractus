@@ -362,6 +362,10 @@ impl<M: std::fmt::Debug> Parsed<M> {
     pub fn statements(&self) -> &Statements<M> {
         &self.statements
     }
+
+    pub fn into_statements(self) -> Statements<M> {
+        self.statements
+    }
 }
 
 pub fn parse_statements(code: &str) -> Result<Statements<LineSpan>, Error> {
@@ -784,7 +788,35 @@ mod tests {
             .into_iter()
             .map(|(stmt, _)| stmt)
             .collect();
-        assert_eq!(expected, actual);
+        assert_eq!(expected, actual, "Failed using parse_statements");
+
+        let mut parsed = Parsed::new();
+        parsed.append(code.lines().collect());
+        let actual_parsed: Vec<Statement> = parsed
+            .into_statements()
+            .into_iter()
+            .map(|(stmt, _)| stmt)
+            .collect();
+        let expected: Vec<Statement> = expected.into_iter().flat_map(clean_for_parsed).collect();
+        assert_eq!(expected, actual_parsed, "Failed using Parsed.");
+    }
+
+    fn clean_for_parsed(stmt: Statement) -> Vec<Statement> {
+        use Statement::*;
+        match stmt {
+            Empty => vec![],
+            If(condition, body, maybe_else_body) => {
+                if let Some(else_body) = maybe_else_body {
+                    let mut broken = vec![If(condition, body, None)];
+                    let mut else_body = else_body.into_iter().flat_map(clean_for_parsed).collect();
+                    broken.append(&mut else_body);
+                    broken
+                } else {
+                    vec![If(condition, body, None)]
+                }
+            }
+            _ => vec![stmt],
+        }
     }
 
     #[test]
