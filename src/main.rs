@@ -11,7 +11,7 @@ use std::time::Duration;
 
 use env_logger;
 use failure::Error;
-use log::{debug, trace};
+use log::{debug, warn, info, trace};
 use notify::{DebouncedEvent, RecommendedWatcher, RecursiveMode, Watcher};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -69,6 +69,8 @@ struct ServeOpts {
     processing: ProcessingOpts,
     #[structopt(short, long, parse(from_os_str))]
     /// File for persistency, no persistency if missing
+    /// 
+    /// Cannot be used when `input` is set, because the input file is already persistent.
     store: Option<PathBuf>,
 }
 
@@ -77,6 +79,7 @@ struct ProcessingOpts {
     #[structopt(name = "append-only", short, long)]
     /// Only parses lines that are appended while watching
     ///
+    /// The existing content of the file is ignored. Only newly added lines will be parsed.
     /// Note that if the file is changed other than by appending, tractus might not detect the changes or even stop.
     append_only: bool,
     #[structopt(short, long)]
@@ -89,7 +92,7 @@ struct ProcessingOpts {
     /// Declares the input file as an RStudio `history_database` file
     ///
     /// Convenience flag for enabling --append-only and --clean "(?m)^\d+:".
-    /// Cannot be used at the same time as --append-only or --clean.
+    /// Cannot be used at the same time as --append-only or --clean, since this flag would overwrite those options.
     history_database: bool,
 }
 
@@ -142,6 +145,7 @@ fn init_logger(level: Option<log::Level>) {
     }
 }
 
+/// Delegates to the correct subcommand.
 fn execute(cmd: Subcommand) -> Res {
     use Subcommand::*;
     match cmd {
@@ -158,6 +162,7 @@ fn execute(cmd: Subcommand) -> Res {
     Ok(())
 }
 
+/// Executes the `run` subcommand.
 fn run(conf: RunConfig) -> Res {
     let input = conf.input;
     let clean = conf.clean;
@@ -180,6 +185,7 @@ fn run(conf: RunConfig) -> Res {
             let file = std::fs::File::open(&path)?;
             let mut reader = io::BufReader::new(file);
             let mut offset = reader.seek(io::SeekFrom::End(0))?; // Skip the inital contents of the file.
+            trace!("Skipping file contents until offset {}.", offset);
             let mut tractus = Tractus::new();
 
             let mut clean_lines = get_cleaner(clean);
@@ -204,6 +210,7 @@ fn run(conf: RunConfig) -> Res {
     Ok(())
 }
 
+/// Configuration for the `run` subcommand.
 struct RunConfig {
     input: RunInput,
     clean: Option<Regex>,
@@ -211,13 +218,14 @@ struct RunConfig {
 }
 
 enum RunInput {
-    SingleRun(Option<PathBuf>),
-    AppendOnly(PathBuf),
+    SingleRun(Option<PathBuf>), // Run either on stdin when None, or on Some(path).
+    AppendOnly(PathBuf), // Run in append mode on a path.
 }
 
 impl TryFrom<RunOpts> for RunConfig {
     type Error = ArgumentError;
 
+    /// Attempt to convert cli options into configuration.
     fn try_from(other: RunOpts) -> Result<Self, Self::Error> {
         let processing = ProcessingConfig::try_from(other.processing)?;
         let input = if processing.append_only {
@@ -239,6 +247,7 @@ impl TryFrom<RunOpts> for RunConfig {
     }
 }
 
+/// Watch the file path and execute a closure on changes.
 fn watch<F>(path: &PathBuf, mut execute: F) -> Res
 where
     F: FnMut() -> Res,
@@ -259,6 +268,7 @@ where
     Ok(())
 }
 
+/// Execute the `serve` subcommand.
 fn serve(conf: ServeConfig) -> Res {
     match conf.input {
         ServeInput::File { path, append_only } => {
@@ -280,11 +290,12 @@ fn serve(conf: ServeConfig) -> Res {
                 let file = std::fs::File::open(&path)?;
                 let mut reader = io::BufReader::new(file);
                 let mut offset = reader.seek(io::SeekFrom::End(0))?; // Skip the inital contents of the file.
+                trace!("Skipping file contents until offset {}.", offset);
                 let mut tractus = Tractus::new();
 
                 let mut clean_lines = get_cleaner(conf.clean);
                 let mut process = move || -> Result<String, Error> {
-                    reader.seek(io::SeekFrom::Start(offset + 1))?; // The + 1 skips the newline, which would lead to wrong line numbers.
+                    reader.seek(io::SeekFrom::Start(offset + 1))?; // The + 1 skips the newline, which would otherwise cause wrong line numbers.
                     let lines = (&mut reader)
                         .lines()
                         .collect::<Result<Vec<String>, io::Error>>()?;
@@ -314,7 +325,7 @@ fn serve(conf: ServeConfig) -> Res {
                     println!("Restoring from store at {}.", path.display());
                     serde_json::from_reader(file)?
                 } else {
-                    println!("No store file. Starting fresh.");
+                    println!("No store file at {}. Starting fresh.", path.display());
                     let tractus = Tractus::new();
                     std::fs::write(path, serde_json::to_string(&tractus)?)?; // Store file does not yet exist, so create it.
                     tractus
@@ -322,7 +333,7 @@ fn serve(conf: ServeConfig) -> Res {
             } else {
                 Tractus::new()
             };
-            let (stmt_sender, stmt_receiver) = std::sync::mpsc::channel();
+            let (stmt_sender, stmt_receiver) = std::sync::mpsc::channel(); // Channel for passing new statements from websockets to the main loop.
 
             let mut update_and_broadcast =
                 init_server(move |ip, mut receiver: websocket::sync::Reader<_>| {
@@ -364,7 +375,6 @@ fn serve(conf: ServeConfig) -> Res {
                         }
                         let result = serde_json::to_string(&tractus.hypotheses_tree())?;
 
-                        println!("Broadcasting new hypotheses tree.");
                         update_and_broadcast(result);
                     }
                     Err(e) => {
@@ -378,19 +388,21 @@ fn serve(conf: ServeConfig) -> Res {
     Ok(())
 }
 
+/// The interface for accepting new statements via websocket.
 #[derive(Serialize, Deserialize)]
 struct StatementInput {
     statement: String,
     meta: serde_json::Value,
 }
 
+/// Start a websocket server and execute the `new_client` closure whenever a new websocket client connects.
 fn init_server<'a, F>(mut new_client: F) -> Result<Box<dyn FnMut(String) + 'a>, Error>
 where
     F: std::marker::Send
         + FnMut(std::net::SocketAddr, websocket::receiver::Reader<std::net::TcpStream>)
         + 'static,
 {
-    let result: Arc<RwLock<String>> = Arc::new(RwLock::new(String::new()));
+    let result: Arc<RwLock<String>> = Arc::new(RwLock::new(String::new())); // Cache the current result in order to send it to newly connected clients.
     let clients: Arc<Mutex<HashMap<std::net::SocketAddr, websocket::sender::Writer<_>>>> =
         Arc::new(Mutex::new(HashMap::new()));
 
@@ -414,23 +426,27 @@ where
     let result_clone = Arc::clone(&result);
     let clients_clone = Arc::clone(&clients);
     thread::spawn(move || {
-        let server = Server::bind("127.0.0.1:2794").unwrap();
+        let address = "127.0.0.1:2794";
+        let protocol = "tractus-websocket";
+        let server = Server::bind(address).unwrap();
+        println!("Listening for websocket clients on `ws://{}` under protocol `{}`.", address, protocol);
         for request in server.filter_map(Result::ok) {
             if !request
                 .protocols()
-                .contains(&"tractus-websocket".to_string())
+                .contains(&protocol.into())
             {
-                debug!("New websocket request rejected.");
+                warn!("New websocket request rejected, because it didn't offer the protocol `{}`.", protocol);
                 request.reject().unwrap();
             } else {
                 let mut client = request.use_protocol("tractus-websocket").accept().unwrap();
-                debug!("New websocket request accepted.");
+                info!("New websocket request accepted.");
 
                 let res = result_clone.read().unwrap().to_string();
                 let ip = client.peer_addr().unwrap();
+                // Send it current result.
                 let message = Message::text(&res);
                 if let Err(e) = client.send_message(&message) {
-                    debug!("Error while attempting to send message to {}:\n{}", ip, e);
+                    warn!("Error while attempting to send message to {}:\n{}", ip, e);
                 }
 
                 let (client_receiver, client_sender) = client.split().unwrap();
@@ -440,25 +456,27 @@ where
                 new_client(ip, client_receiver);
             }
         }
-        debug!("Stopping server.")
+        debug!("Stopping websocket server.")
     });
 
     Ok(Box::new(update_and_broadcast))
 }
 
+// Configuration for `serve` subcommand.
 struct ServeConfig {
     input: ServeInput,
     clean: Option<Regex>,
 }
 
 enum ServeInput {
-    File { path: PathBuf, append_only: bool },
-    Websocket { store: Option<PathBuf> },
+    File { path: PathBuf, append_only: bool }, // Serve from file, possibly in append-only mode.
+    Websocket { store: Option<PathBuf> }, // Listen to websockets, possibly persist state in store.
 }
 
 impl TryFrom<ServeOpts> for ServeConfig {
     type Error = ArgumentError;
 
+    /// Attempt to convert cli options into configuration.
     fn try_from(other: ServeOpts) -> Result<Self, Self::Error> {
         let processing = ProcessingConfig::try_from(other.processing)?;
         let input = match other.input {
@@ -478,6 +496,7 @@ impl TryFrom<ServeOpts> for ServeConfig {
     }
 }
 
+/// Shared config for processing input file.
 struct ProcessingConfig {
     append_only: bool,
     clean: Option<Regex>,
@@ -486,6 +505,7 @@ struct ProcessingConfig {
 impl TryFrom<ProcessingOpts> for ProcessingConfig {
     type Error = ArgumentError;
 
+    /// Attempt to convert cli options into configuration.
     fn try_from(other: ProcessingOpts) -> Result<Self, ArgumentError> {
         let (append_only, clean) = if other.history_database {
             if other.append_only || other.clean.is_some() {
@@ -523,6 +543,7 @@ impl std::fmt::Display for ArgumentError {
 
 impl std::error::Error for ArgumentError {}
 
+/// Construct a closure that processes the input file with the provided config and returns the serialized result.
 fn get_process(
     input: Option<PathBuf>,
     clean: Option<Regex>,
@@ -552,6 +573,7 @@ fn get_process(
     })
 }
 
+/// Construct a closure that cleans the input according to the passed config.
 fn get_cleaner(clean: Option<Regex>) -> Box<dyn FnMut(Vec<String>) -> Vec<String>> {
     match clean {
         None => Box::new(|lines| lines),
@@ -564,6 +586,7 @@ fn get_cleaner(clean: Option<Regex>) -> Box<dyn FnMut(Vec<String>) -> Vec<String
     }
 }
 
+/// Write the result to the output specified.
 fn write_result(output: &mut Option<OutputPath>, result: &str) -> Res {
     let out = if let Some(out) = &output {
         out.path.display().to_string()
@@ -584,12 +607,14 @@ fn write_result(output: &mut Option<OutputPath>, result: &str) -> Res {
     Ok(())
 }
 
+/// A path that keeps track of whether it is allowed to overwrite.
 struct OutputPath {
     path: PathBuf,
     force: bool,
 }
 
 impl OutputPath {
+    /// Ask the user for confirmation, if overwrite is not already enforced. If overwrite is confirmed, remember to force next time.
     pub fn confirm(&mut self) -> Result<bool, Error> {
         Ok(if !std::path::Path::exists(&self.path) {
             true
@@ -617,6 +642,7 @@ impl OutputPath {
         })
     }
 
+    /// Write to the file. If overwrite is not yet enforced, ask the user for confirmation.
     pub fn write_confirmed(&mut self, output: &str) -> Res {
         if self.confirm()? {
             std::fs::write(&self.path, output)?;
