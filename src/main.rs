@@ -21,6 +21,7 @@ use websocket::{sync::Server, Message, OwnedMessage};
 use tractus::Tractus;
 
 #[derive(StructOpt)]
+#[structopt(about)]
 struct Opts {
     #[structopt(flatten)]
     verbosity: Verbosity,
