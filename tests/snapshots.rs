@@ -4,7 +4,7 @@ use std::fs;
 use std::io::prelude::*;
 use std::path;
 
-use insta::assert_debug_snapshot_matches;
+use insta::assert_debug_snapshot;
 
 #[test]
 fn snapshots() {
@@ -74,11 +74,10 @@ fn test_snapshot(snapshot_path: &path::PathBuf, maybe_prefix: Option<&'static st
     let snapshot_name = maybe_prefix
         .map(|prefix| format!("{}-{}", prefix, file_stem))
         .unwrap_or_else(|| file_stem.into_owned());
-    assert_debug_snapshot_matches!(format!("{}-parsed", snapshot_name), parsed);
+    assert_debug_snapshot!(format!("{}-parsed", snapshot_name), parsed);
     let dependency_graph = tractus::DependencyGraph::from_input(&parsed);
-    let tree = 
-        tractus::parse_hypothesis_tree(&parsed, &dependency_graph);
-    assert_debug_snapshot_matches!(
+    let tree = tractus::parse_hypothesis_tree(&parsed, &dependency_graph);
+    assert_debug_snapshot!(
         format!("{}-dependencies", snapshot_name),
         tractus::DisplayTree::with(&tree, &mut |stmt_id| parsed[stmt_id].clone())
     );
