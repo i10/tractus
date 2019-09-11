@@ -6,8 +6,12 @@ use crate::parser::{Expression, RIdentifier};
 
 pub type Hypothesis = String;
 
-/// Requires the expression to have all dependencies inlined!
-pub fn detect_hypotheses(expression: &Expression) -> BTreeSet<Hypothesis> {
+pub type Hypotheses = BTreeSet<Hypothesis>;
+
+/// Analyzes the `expression` for Hypotheses.
+/// 
+/// Requires the expression to have all dependencies inlined, or hypothesis behind variables may not be detected.
+pub fn detect_hypotheses(expression: &Expression) -> Hypotheses {
     use Expression::*;
     match expression {
         TwoSidedFormula(left, right) => BTreeSet::from_iter(vec![format!("{} ~ {}", left, right)]),
@@ -69,7 +73,8 @@ pub fn detect_hypotheses(expression: &Expression) -> BTreeSet<Hypothesis> {
     }
 }
 
-fn detect_hypotheses_in_args(args: &[(Option<RIdentifier>, Expression)]) -> BTreeSet<Hypothesis> {
+/// Helper function for extracting and merging the hypotheses out of function arguments.
+fn detect_hypotheses_in_args(args: &[(Option<RIdentifier>, Expression)]) -> Hypotheses {
     args.iter()
         .map(|(_, exp)| detect_hypotheses(exp))
         .flatten()

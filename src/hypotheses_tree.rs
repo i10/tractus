@@ -1,9 +1,9 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, HashMap};
 
 use serde::{Deserialize, Serialize};
 
 use crate::dependency_graph;
-use crate::hypotheses::{detect_hypotheses, Hypothesis};
+use crate::hypotheses::{detect_hypotheses, Hypothesis, Hypotheses};
 use crate::parser::{StatementId, Statements};
 use dependency_graph::DependencyGraph;
 
@@ -86,30 +86,6 @@ fn map_node<C, N, F: FnMut(&C) -> N>(node: &Node<C>, mapping: &mut F) -> Node<N>
     Node {
         content: mapping(&node.content),
         children: map_branches(&node.children, mapping),
-    }
-}
-
-#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
-pub struct Hypotheses(BTreeSet<Hypothesis>);
-
-impl std::cmp::Ord for Hypotheses {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        match self.0.len().cmp(&other.0.len()) {
-            std::cmp::Ordering::Equal => {
-                let mut mine: Vec<&String> = self.0.iter().collect();
-                mine.sort_unstable();
-                let mut others: Vec<&String> = other.0.iter().collect();
-                others.sort_unstable();
-                mine.cmp(&others)
-            }
-            ord => ord,
-        }
-    }
-}
-
-impl PartialOrd for Hypotheses {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
     }
 }
 
@@ -197,7 +173,6 @@ fn collect_hypotheses<T>(
             hypotheses_map
                 .get(hypotheses_id)
                 .unwrap()
-                .0
                 .iter()
                 .cloned()
                 .collect::<Vec<Hypothesis>>()
@@ -206,9 +181,9 @@ fn collect_hypotheses<T>(
         .collect();
 
     let inlined_exp = dependency_graph.inline_id(id, stmts).unwrap();
-    let mut hypotheses = Hypotheses(detect_hypotheses(&inlined_exp));
+    let mut hypotheses = detect_hypotheses(&inlined_exp);
     for hyp in inherited_hypotheses {
-        hypotheses.0.insert(hyp);
+        hypotheses.insert(hyp);
     }
     hypotheses_map.insert(hypotheses)
 }
@@ -328,11 +303,11 @@ mod tests {
         let hypotheses = hyp
             .iter()
             .map(|h| h.to_string())
-            .collect::<BTreeSet<String>>();
+            .collect::<Hypotheses>();
         *tree
             .hypotheses
             .iter()
-            .find(|(_, other)| other.0 == hypotheses)
+            .find(|(_, other)| other == &&hypotheses)
             .unwrap_or_else(|| panic!("Could not find hypotheses {:?} in actual tree.", hyp))
             .0
     }

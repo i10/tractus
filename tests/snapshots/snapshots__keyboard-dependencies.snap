@@ -1,6 +1,4 @@
 ---
-Gcreated: "2019-09-08T08:48:11.900188362Z"
-creator: insta@0.8.2
 source: tests/snapshots.rs
 expression: "tractus::DisplayTree::with(&tree, &mut (|stmt_id| parsed[stmt_id].clone()))"
 ---
@@ -2033,24 +2031,16 @@ DisplayTree {
         ],
     },
     hypotheses: {
-        0: Hypotheses(
-            {},
-        ),
-        1: Hypotheses(
-            {
-                "Speed ~ Layout",
-            },
-        ),
-        2: Hypotheses(
-            {
-                "logSpeed ~ Layout",
-            },
-        ),
-        3: Hypotheses(
-            {
-                "Speed ~ Layout",
-                "pairwise ~ Layout",
-            },
-        ),
+        0: {},
+        1: {
+            "Speed ~ Layout",
+        },
+        2: {
+            "logSpeed ~ Layout",
+        },
+        3: {
+            "Speed ~ Layout",
+            "pairwise ~ Layout",
+        },
     },
 }
