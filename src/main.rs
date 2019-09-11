@@ -11,7 +11,7 @@ use std::time::Duration;
 
 use env_logger;
 use failure::Error;
-use log::{debug, warn, info, trace};
+use log::{debug, info, trace, warn};
 use notify::{DebouncedEvent, RecommendedWatcher, RecursiveMode, Watcher};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -69,7 +69,7 @@ struct ServeOpts {
     processing: ProcessingOpts,
     #[structopt(short, long, parse(from_os_str))]
     /// File for persistency, no persistency if missing
-    /// 
+    ///
     /// Cannot be used when `input` is set, because the input file is already persistent.
     store: Option<PathBuf>,
 }
@@ -219,7 +219,7 @@ struct RunConfig {
 
 enum RunInput {
     SingleRun(Option<PathBuf>), // Run either on stdin when None, or on Some(path).
-    AppendOnly(PathBuf), // Run in append mode on a path.
+    AppendOnly(PathBuf),        // Run in append mode on a path.
 }
 
 impl TryFrom<RunOpts> for RunConfig {
@@ -429,13 +429,16 @@ where
         let address = "127.0.0.1:2794";
         let protocol = "tractus-websocket";
         let server = Server::bind(address).unwrap();
-        println!("Listening for websocket clients on `ws://{}` under protocol `{}`.", address, protocol);
+        println!(
+            "Listening for websocket clients on `ws://{}` under protocol `{}`.",
+            address, protocol
+        );
         for request in server.filter_map(Result::ok) {
-            if !request
-                .protocols()
-                .contains(&protocol.into())
-            {
-                warn!("New websocket request rejected, because it didn't offer the protocol `{}`.", protocol);
+            if !request.protocols().contains(&protocol.into()) {
+                warn!(
+                    "New websocket request rejected, because it didn't offer the protocol `{}`.",
+                    protocol
+                );
                 request.reject().unwrap();
             } else {
                 let mut client = request.use_protocol("tractus-websocket").accept().unwrap();
