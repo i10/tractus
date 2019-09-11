@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 #[grammar = "r.pest"]
 struct RParser;
 
+/// An AST statement.
 #[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize)]
 pub enum Statement {
     Empty,
@@ -26,6 +27,7 @@ pub enum Statement {
 }
 
 impl Statement {
+    /// Returns the expression contained in the statement, if it exists.
     pub fn expression(&self) -> Option<&Expression> {
         use Statement::*;
         match self {
@@ -81,10 +83,12 @@ impl Display for Statement {
     }
 }
 
+/// Render lines with line breaks.
 fn display_lines(lines: &[Statement]) -> String {
     lines.iter().map(|line| line.to_string()).join("\n")
 }
 
+/// An AST expression.
 #[derive(PartialEq, Debug, Eq, Clone, Serialize, Deserialize)]
 pub enum Expression {
     Constant(String),
@@ -101,7 +105,7 @@ pub enum Expression {
 }
 
 impl Expression {
-    // TODO: Move to dependency graph.
+    /// If the expression contains a unique variable, return its name.
     pub fn extract_variable_name(&self) -> Option<RIdentifier> {
         use Expression::*;
         match self {
@@ -199,6 +203,7 @@ pub type RIdentifier = String;
 
 pub type Error = pest::error::Error<Rule>;
 
+/// A collections of `Statement`s with associated `Meta`-data.
 #[derive(Debug, Deserialize, Default, Serialize, Clone)]
 pub struct Statements<Meta> {
     stmts: Vec<(Statement, Meta)>,
@@ -227,6 +232,7 @@ impl<M> IntoIterator for Statements<M> {
     }
 }
 
+/// An id used for indexing `Statements`.
 #[derive(
     Hash, PartialEq, PartialOrd, Default, Eq, Debug, Clone, Serialize, Deserialize, Copy, Ord,
 )]
@@ -249,11 +255,13 @@ impl<M> Statements<M> {
         Self { stmts: Vec::new() }
     }
 
+    /// Append a statement with its meta-data to the collection.
     pub fn append(&mut self, stmt: Statement, meta: M) -> StatementId {
-        self.batch_append(Statements::from_iter(vec![(stmt, meta)]))[0]
+        self.concat(Statements::from_iter(vec![(stmt, meta)]))[0]
     }
 
-    pub fn batch_append(&mut self, mut stmts: Statements<M>) -> Vec<StatementId> {
+    /// Concatenate the passed statements to this collection. Returns the ids of the statements added.
+    pub fn concat(&mut self, mut stmts: Statements<M>) -> Vec<StatementId> {
         let first_index = self.stmts.len();
         self.stmts.append(&mut stmts.stmts);
         let last_index = self.stmts.len();
@@ -262,6 +270,7 @@ impl<M> Statements<M> {
         id_range.map(StatementId).collect()
     }
 
+    /// Returns an iterator over the items with their ids.
     pub fn iter(&self) -> impl Iterator<Item = (StatementId, &Statement, &M)> {
         self.stmts
             .iter()
@@ -269,6 +278,7 @@ impl<M> Statements<M> {
             .map(|(idx, (s, m))| (StatementId(idx), s, m))
     }
 
+    /// Consumes this collection and returns a new collection with mapped entries.
     pub fn into_map<F, N>(self, mapping: &mut F) -> Statements<N>
     where
         F: FnMut(&Statement, M) -> N,
@@ -286,6 +296,7 @@ impl<M> Statements<M> {
     }
 }
 
+/// A stateful collection to which new lines can be added continuously.
 #[derive(Debug, Serialize, Default, Deserialize, Clone)]
 pub struct Parsed<M = LineSpan> {
     statements: Statements<M>,
@@ -294,6 +305,7 @@ pub struct Parsed<M = LineSpan> {
 }
 
 impl Parsed<LineSpan> {
+    /// Convenience function.
     pub fn append<S>(&mut self, lines: Vec<S>) -> Vec<StatementId>
     where
         S: AsRef<str>,
@@ -311,6 +323,8 @@ impl<M: std::fmt::Debug> Parsed<M> {
         }
     }
 
+    /// Parses `lines` and appends all resulting statments to this collection,
+    /// while transforming the meta-data according to the `mapping` closure.
     pub fn append_with_meta<S, F>(&mut self, lines: Vec<S>, mapping: &mut F) -> Vec<StatementId>
     where
         S: AsRef<str>,
@@ -331,7 +345,7 @@ impl<M: std::fmt::Debug> Parsed<M> {
                         let shifted_span = span.shifted(first_unparsed_line);
                         mapping(stmt, shifted_span)
                     });
-                    let mut new_ids = self.statements.batch_append(stmts);
+                    let mut new_ids = self.statements.concat(stmts);
                     self.unparsed.clear(); // We have parsed everything successfully.
                     added_ids.append(&mut new_ids);
                 }
@@ -359,24 +373,27 @@ impl<M: std::fmt::Debug> Parsed<M> {
         added_ids
     }
 
+    /// Returns this collection's `Statements` by reference.
     pub fn statements(&self) -> &Statements<M> {
         &self.statements
     }
 
+    /// Consumes this collection and returns its `Statements`.
     pub fn into_statements(self) -> Statements<M> {
         self.statements
     }
 }
 
+/// Parses `code` into a collection of `Statements` associated with their `LineSpan` information.
+/// If the parser fails, the parsing error is returned instead.
 pub fn parse_statements(code: &str) -> Result<Statements<LineSpan>, Error> {
-    debug!("Pest parsing...");
     let parsed = RParser::parse(Rule::r_code, code)?;
 
-    debug!("Assembling AST...");
     let new_statements: Vec<(Statement, LineSpan)> = parsed
         .filter_map(|token| match token.as_rule() {
             Rule::EOI => None,
             _ => {
+                // parse_line handles all other cases.
                 let line_span = LineSpan::from(token.as_span());
                 Some((parse_line(token), line_span))
             }
@@ -386,13 +403,17 @@ pub fn parse_statements(code: &str) -> Result<Statements<LineSpan>, Error> {
     Ok(Statements::from_iter(new_statements))
 }
 
+/// Information on which source code lines a statement spans.
 #[derive(Debug, Serialize, PartialEq, Eq, Default, Deserialize, Clone)]
 pub struct LineSpan {
+    /// First line number the statement occupies.
     from: usize,
+    /// Last line number the statement occupies.
     to: usize,
 }
 
 impl LineSpan {
+    /// Shift this span's line numbers such that it starts at the `new_start`.
     pub fn shifted(self, new_start: usize) -> Self {
         let offset = new_start - 1; // Minus one, because line count starts at one.
         Self {
@@ -426,6 +447,11 @@ macro_rules! unexpected_rule {
     };
 }
 
+/// Parses a token representing a single line of code.
+///
+/// # Panics
+///
+/// This function panics if the token does not represent a line.
 fn parse_line(line_pair: pest::iterators::Pair<Rule>) -> Statement {
     match line_pair.as_rule() {
         Rule::empty => Statement::Empty,
@@ -517,6 +543,11 @@ fn parse_line(line_pair: pest::iterators::Pair<Rule>) -> Statement {
     }
 }
 
+/// Parses a token representing an expression.
+///
+/// # Panics
+///
+/// This function panics if the token does not represent an expression.
 fn parse_expression(expression_pair: pest::iterators::Pair<Rule>) -> Expression {
     let mut whole_expression = expression_pair.into_inner();
     let expression = whole_expression.next().unwrap(); // Expression is always non-empty.
@@ -558,6 +589,7 @@ fn parse_expression(expression_pair: pest::iterators::Pair<Rule>) -> Expression 
     };
 
     // Process all binary operators that follow.
+    // This process is due to the workaround for preventing left-recursion for these binary operators in the parser.
     for infix in whole_expression {
         rexp = match infix.as_rule() {
             Rule::function_call => parse_function_expression(rexp, infix),
@@ -604,6 +636,11 @@ fn parse_expression(expression_pair: pest::iterators::Pair<Rule>) -> Expression 
     rexp
 }
 
+/// Parse a token representing a function expression.
+///
+/// # Panics
+///
+/// This function panics if the token does not represent function expression.
 fn parse_function_expression(
     expression: Expression,
     function_pair: pest::iterators::Pair<Rule>,
@@ -641,6 +678,8 @@ fn parse_function_expression(
 mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
+
+    // Helper macros for succinctly defining expected ASTs.
 
     #[macro_export]
     macro_rules! empty {
@@ -782,6 +821,7 @@ mod tests {
         };
     }
 
+    /// Assert that the parsed result of `code` matches the `expected` AST.
     fn assert_matches(code: &'static str, expected: Vec<Statement>) {
         let actual: Vec<Statement> = parse_statements(code)
             .unwrap_or_else(|e| panic!("{}", e))
@@ -801,6 +841,8 @@ mod tests {
         assert_eq!(expected, actual_parsed, "Failed using Parsed.");
     }
 
+    /// The line-by-line nature of `Parsed` leads to a slightly different AST without empty statements and without else statements.
+    /// This functions takes a statement and returns a collection of statement that satisfies these constraints.
     fn clean_for_parsed(stmt: Statement) -> Vec<Statement> {
         use Statement::*;
         match stmt {
