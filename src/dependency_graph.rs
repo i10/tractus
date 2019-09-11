@@ -5,6 +5,14 @@ use serde::{Deserialize, Serialize};
 
 use crate::parser::{Expression, RIdentifier, Statement, StatementId, Statements};
 
+/// A graph modelling dependencies between statement as a graph of `StatementId`s with the variable names as edges.
+#[derive(Debug, Serialize, Deserialize, Default)]
+pub struct DependencyGraph {
+    graph: Graph,
+    variables: VariableMap,
+}
+
+// Helper type definitions
 type NodeIndexType = petgraph::graph::DefaultIx;
 pub type NodeIndex = petgraph::graph::NodeIndex<NodeIndexType>;
 #[derive(Serialize, Default, Deserialize, Debug)]
@@ -14,6 +22,8 @@ struct Graph {
 }
 type Variable = String;
 
+// We use a custom Graph type, since petgraph::GraphMap is not serializable out of the box.
+// This structure manages the converting between `StatementId`s and internal `NodexIndex`.
 impl Graph {
     fn new() -> Self {
         Graph {
@@ -47,33 +57,6 @@ impl Graph {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Default)]
-pub struct DependencyGraph {
-    graph: Graph,
-    variables: VariableMap,
-}
-
-#[derive(Default, Debug, PartialEq, Eq, Deserialize, Serialize)]
-struct VariableMap(HashMap<String, Vec<StatementId>>);
-
-impl VariableMap {
-    fn new() -> Self {
-        VariableMap(HashMap::new())
-    }
-
-    fn push(&mut self, variable: String, index: StatementId) {
-        self.0.entry(variable).or_insert_with(|| vec![]).push(index);
-    }
-
-    fn get(&self, index: &str) -> Option<&StatementId> {
-        self.get_all(index).and_then(|v| v.last())
-    }
-
-    fn get_all(&self, index: &str) -> Option<&Vec<StatementId>> {
-        self.0.get(index)
-    }
-}
-
 impl DependencyGraph {
     pub fn new() -> Self {
         DependencyGraph {
@@ -82,6 +65,7 @@ impl DependencyGraph {
         }
     }
 
+    /// Constructs a new `DependencyGraph` from a collection of statements.
     pub fn from_input<M>(stmts: &Statements<M>) -> Self {
         let mut graph = Self::new();
         for (id, stmt, _) in stmts.iter() {
@@ -91,6 +75,9 @@ impl DependencyGraph {
         graph
     }
 
+    /// Inserts all `StatementId`s from input into the graph.
+    ///
+    /// Requires that all statements corresponding to the ids can be looked up in `stmts`.
     pub fn batch_insert<M>(
         &mut self,
         input: impl Iterator<Item = StatementId>,
@@ -101,6 +88,9 @@ impl DependencyGraph {
             .collect::<Vec<StatementId>>()
     }
 
+    /// Inserts a single `StatementId` into the graph.
+    ///
+    /// Requires that the statment corresponding to the id can be looked up in `stmts`.
     pub fn insert(&mut self, id: StatementId, statement: &Statement) -> Option<StatementId> {
         use Statement::*;
         match statement {
@@ -129,6 +119,9 @@ impl DependencyGraph {
         }
     }
 
+    /// Analyzes the expression for dependencies and adds the `StatementId` into the graph along with edges for the dependencies.
+    ///
+    /// Assumes that `expression` is from a statement with the passed `id`.
     fn register_dependencies(&mut self, id: StatementId, expression: &Expression) {
         let dependencies = extract_dependencies(&expression);
         self.graph.add_node(id);
@@ -142,11 +135,17 @@ impl DependencyGraph {
         }
     }
 
+    /// Returns all `StatementId`s that assign to a variable used by the statement with `id`.
     pub fn parents(&self, id: StatementId) -> Vec<StatementId> {
         self.graph
             .neighbors_directed(id, petgraph::Direction::Incoming)
     }
 
+    /// If the statement behind `id` contains an expression,
+    /// constructs a new `Expression` where all variables used by that expression are inlined.
+    /// Otherwise returns `None`.
+    ///
+    /// Requires that the statment corresponding to the id can be looked up in `stmts`.
     pub fn inline_id<M>(&self, id: StatementId, stmts: &Statements<M>) -> Option<Expression> {
         let statement = &stmts[id].0;
         statement
@@ -154,6 +153,9 @@ impl DependencyGraph {
             .map(|exp| self.inline_exp(exp, id, stmts))
     }
 
+    /// Constructs a new `Expression` where all variables used are inlined.
+    ///
+    /// Requires that the expression comes from a statement that can be looked up with `stmt_id` in `stmts`.
     fn inline_exp<M>(
         &self,
         exp: &Expression,
@@ -237,6 +239,7 @@ impl DependencyGraph {
     }
 }
 
+/// Returns the names of the variables used in the `expression`.
 fn extract_dependencies(expression: &Expression) -> Vec<RIdentifier> {
     use Expression::*;
     match expression {
@@ -248,6 +251,32 @@ fn extract_dependencies(expression: &Expression) -> Vec<RIdentifier> {
         Column(left, _) => extract_dependencies(left),
         Index(left, _) => extract_dependencies(left),
         _ => vec![],
+    }
+}
+
+/// A map that keeps track of what variables are defined in what statements.
+/// The variable names are used as keys and each value contains the defining `StatementId` in source code order.
+#[derive(Default, Debug, PartialEq, Eq, Deserialize, Serialize)]
+struct VariableMap(HashMap<String, Vec<StatementId>>);
+
+impl VariableMap {
+    fn new() -> Self {
+        VariableMap(HashMap::new())
+    }
+
+    /// Add a new `StatementId` for the `variable`.
+    fn push(&mut self, variable: String, index: StatementId) {
+        self.0.entry(variable).or_insert_with(|| vec![]).push(index);
+    }
+
+    /// Returns the last `StatementId` that defined the `variable`, or returns `None` if the variable is undefined.
+    fn get(&self, variable: &str) -> Option<&StatementId> {
+        self.get_all(variable).and_then(|v| v.last())
+    }
+
+    /// Returns all `StatementId`s that defined the `variable`.
+    fn get_all(&self, variable: &str) -> Option<&Vec<StatementId>> {
+        self.0.get(variable)
     }
 }
 
