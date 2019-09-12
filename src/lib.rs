@@ -11,7 +11,7 @@ pub mod hypotheses_tree;
 pub mod parser;
 
 pub use crate::dependency_graph::DependencyGraph;
-pub use crate::hypotheses_tree::{parse_hypothesis_tree, DisplayTree, HypothesisTree};
+pub use crate::hypotheses_tree::HypothesisTree;
 pub use crate::parser::{Expression, LineSpan, Parsed, Statement};
 
 #[derive(Serialize, Deserialize, Default)]
@@ -91,9 +91,9 @@ impl Tractus {
         Ok(())
     }
 
-    pub fn hypotheses_tree(&self) -> DisplayTree<StatementMeta> {
-        let tree = parse_hypothesis_tree(self.parsed.statements(), &self.dependency_graph);
-        DisplayTree::with(&tree, &mut |stmt_id| {
+    pub fn hypotheses_tree(&self) -> HypothesisTree<StatementMeta> {
+        let tree = HypothesisTree::new(self.parsed.statements(), &self.dependency_graph);
+        tree.into_map(|stmt_id| {
             let (statement, (span, meta)) = &self.parsed.statements()[stmt_id];
             StatementMeta::with(&statement, span.clone(), meta.clone())
         })

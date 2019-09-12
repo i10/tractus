@@ -9,7 +9,7 @@ pub type Hypothesis = String;
 pub type Hypotheses = BTreeSet<Hypothesis>;
 
 /// Analyzes the `expression` for Hypotheses.
-/// 
+///
 /// Requires the expression to have all dependencies inlined, or hypothesis behind variables may not be detected.
 pub fn detect_hypotheses(expression: &Expression) -> Hypotheses {
     use Expression::*;
