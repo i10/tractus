@@ -205,6 +205,7 @@
             parsed.root = {
                 children: parsed.root,
             };
+            parsed.hypotheses = color_hypotheses(parsed.hypotheses);
             data = parsed;
             render(parsed);
         }
@@ -237,24 +238,30 @@
             });
 
             var rootNode = d3.select('body').selectAll("ol").data([root]).join("ol");
-            makeNestedListItems(rootNode);
+            makeNestedListItems(rootNode, data.hypotheses);
         }
 
-        function makeNestedListItems(rootNode) {
+        function makeNestedListItems(rootNode, hyp_map) {
             let hyps = rootNode.append('ol').classed("hypotheses", true)
                 .selectAll('li').data(d => {
                     return d.children || []
                 })
                 .join("li");
             hyps.each(function (d) {
-                let hypColor = d.data.hypothesis.color || "white";
+                let hyp = hyp_map[d.data.hypothesis_id];
+                console.log(hyp.hypothesis.join(", "))
+                let hypColor = hyp.color || "white";
                 let li = d3.select(this);
+                li.style("border-top-color", hypColor == "white" ? "rgba(0, 0, 0, 0.1)" : hypColor);
                 li.append("div").classed("marker", true).style("background-color", hypColor);
                 let div = d3.select(this).append("div").classed("hypothesis-container", true);
-                if (d.data.hypothesis) {
-                    hyp = div.append("div").classed("hypothesis", true);
-                    hyp.append("span").text(d => d.data.hypothesis).classed("short-info", true);
-                    hyp.append("div").classed("long-info", true).text(d.data.hypothesis)
+                if (hyp.hypothesis) {
+                    let hypDisplay = hyp.hypothesis.join(", ");
+                    h = div.append("div").classed("hypothesis", true);
+                    h.append("span").text(hypDisplay).classed("short-info", true);
+                    if (hypDisplay != "") {
+                        h.append("div").classed("long-info", true).text(hypDisplay)
+                    }
                 }
             });
             let nodes = hyps.append("ol").classed("nodes", true)
@@ -285,7 +292,7 @@
                 div.append("div").classed("long-info", true).text(longInfo);
             });
             if (!nodes.empty()) {
-                makeNestedListItems(nodes)
+                makeNestedListItems(nodes, hyp_map)
             }
         }
 
@@ -297,7 +304,7 @@
                 const children = Object.keys(hyps).map(
                     key => {
                         return {
-                            hypothesis: hypotheses_map[key].join(", "),
+                            hypothesis_id: key,
                             expressions: hyps[key]
                         };
                     }
@@ -308,6 +315,29 @@
 
         function truncate(str, n) {
             return str.substr(0, n - 1) + (str.length > n ? '…' : '');
+        }
+
+        function color_hypotheses(hyps) {
+            let number_of_hyps = Object.keys(hyps).length;
+            let color_step = 360 / (number_of_hyps - 1);
+
+            for (let [key, value] of Object.entries(hyps)) {
+                if (key == 0) {
+                    hyps[key] = {
+                        hypothesis: value,
+                        color: "white"
+                    }
+                } else {
+                    let hue = key * color_step;
+                    let color = `hsl(${hue}, 100%, 50%)`;
+                    hyps[key] = {
+                        hypothesis: value,
+                        color: color
+                    }
+                }
+            }
+
+            return hyps;
         }
     </script>
     <div id="connected" class="show-error">
