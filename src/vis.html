@@ -254,8 +254,8 @@
                 let li = d3.select(this);
                 li.style("border-top-color", hypColor == "white" ? "rgba(0, 0, 0, 0.1)" : hypColor);
                 li.append("div").classed("marker", true).style("background-color", hypColor);
-                let div = d3.select(this).append("div").classed("hypothesis-container", true);
-                if (hyp.hypothesis) {
+                if (hyp.hypothesis != "") {
+                    let div = d3.select(this).append("div").classed("hypothesis-container", true);
                     let hypDisplay = hyp.hypothesis.join(", ");
                     h = div.append("div").classed("hypothesis", true);
                     h.append("span").text(hypDisplay).classed("short-info", true);
