@@ -17,6 +17,39 @@
             list-style: none;
         }
 
+        .legend {
+            margin: 1em;
+        }
+
+        .legend h1 {
+            font-size: 1.2rem;
+            font-weight: bold;
+            margin: 0;
+        }
+
+        .legend>ol {
+            display: flex;
+            flex-direction: row;
+            flex-wrap: wrap;
+            margin: 0;
+        }
+
+        .legend>ol>li {
+            display: flex;
+            flex-direction: row;
+            align-items: stretch;
+            border: 1px solid;
+            margin: 0.5em;
+            font-size: 0.8rem;
+            font-style: italic;
+        }
+
+        .legend>ol>li>.marker {
+            width: 0.3rem;
+            background-color: white;
+            margin-right: 0.3em;
+        }
+
         .hypotheses {
             display: flex;
             align-items: flex-start;
@@ -237,7 +270,15 @@
                 if (d.x < x0) x0 = d.x;
             });
 
-            var rootNode = d3.select('body').selectAll("ol").data([root]).join("ol");
+            let body = d3.select("body");
+            let hyps = Object.values(data.hypotheses).filter(h => h.hypothesis.length > 0);
+            let legend = body.append("aside").classed("legend", true);
+            legend.append("h1").text("Legend:");
+            legend_hyp = legend.append("ol").selectAll("li").data(hyps).join("li")
+                .style("border-color", d => d.color);
+            legend_hyp.append("div").classed("marker", true).style("background-color", d => d.color);
+            legend_hyp.append("span").text(d => d.hypothesis.join(", "));
+            let rootNode = body.append("main").selectAll("ol").data([root]).join("ol");
             makeNestedListItems(rootNode, data.hypotheses);
         }
 
@@ -249,7 +290,6 @@
                 .join("li");
             hyps.each(function (d) {
                 let hyp = hyp_map[d.data.hypothesis_id];
-                console.log(hyp.hypothesis.join(", "))
                 let hypColor = hyp.color || "white";
                 let li = d3.select(this);
                 li.style("border-top-color", hypColor == "white" ? "rgba(0, 0, 0, 0.1)" : hypColor);
