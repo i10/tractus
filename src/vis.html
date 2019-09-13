@@ -8,6 +8,147 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
     <style>
+        :root {
+            --column-width: 12em;
+        }
+
+        ol {
+            padding: 0;
+            list-style: none;
+        }
+
+        .hypotheses {
+            display: flex;
+            align-items: flex-start;
+        }
+
+        .nodes {
+            grid-area: nodes;
+            padding-left: 0.3rem;
+            display: grid;
+            grid-template-columns: auto;
+            grid-gap: 0.1em;
+        }
+
+        .hypothesis-container {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .hypotheses>li {
+            padding-right: 12px;
+            display: grid;
+            grid-gap: 0.3em;
+            grid-template-columns: 0.3rem auto;
+            grid-template-areas:
+                "marker hypothesis"
+                "marker nodes";
+            border-top: 1px solid rgba(0, 0, 0, 0.1);
+        }
+
+        .hypotheses>li:last-child {
+            margin-bottom: 0.5em;
+        }
+
+        .hypotheses>li>.marker {
+            grid-area: marker;
+            height: 100%;
+            width: 100%;
+            background-color: white;
+            border: 1px solid rgba(0, 0, 0, 0.2);
+            border-top: none;
+        }
+
+        .hypothesis {
+            grid-area: hypothesis;
+            max-width: var(--column-width);
+            font-style: italic;
+            font-size: 0.8rem;
+        }
+
+        .hypothesis {
+            position: sticky;
+            top: 0;
+        }
+
+        .expression-container {
+            max-width: var(--column-width);
+        }
+
+        .expression {
+            font-family: monospace;
+            font-weight: bold;
+        }
+
+        .expression>* {
+            display: inline-block;
+            overflow: hidden;
+        }
+
+        .variables {
+            font-weight: normal;
+            margin-right: 0.3em;
+            background-color: lightgray;
+        }
+
+        .hypothesis,
+        .expression {
+            position: relative;
+        }
+
+        /*
+         *
+         * INFORMATION HOVER
+         *
+         */
+
+        .short-info {
+            display: inline-block;
+            max-width: var(--column-width);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .long-info {
+            position: relative;
+            display: none;
+            white-space: pre;
+            background: white;
+            width: min-content;
+            padding: 0.3em;
+        }
+
+        .expression:hover {
+            background-color: white;
+            border: 1px solid black;
+            width: min-content;
+            z-index: 1;
+        }
+
+        .hypothesis:hover>.short-info {
+            display: none
+        }
+
+        .hypothesis:hover>.long-info,
+        .expression:hover>.long-info {
+            display: inherit;
+        }
+
+        .hypothesis:hover>.long-info {
+            background-color: white;
+            border: 1px solid black;
+            width: min-content;
+            z-index: 1;
+        }
+
+        /*
+         *
+         * CONNECTION INDICATOR
+         *
+         */
+
         #connection-lost {
             display: none;
         }
@@ -33,149 +174,6 @@
             100% {
                 opacity: 1;
             }
-        }
-
-        .hypotheses {
-            display: flex;
-            align-items: flex-start;
-        }
-
-        ol {
-            padding: 0;
-            list-style: none;
-        }
-
-        ol.nodes {
-            padding-left: 12px;
-        }
-
-        .hypotheses>li {
-            margin-top: 0.5em;
-            padding-right: 12px;
-        }
-
-        .hypothesis {
-            margin-left: 0.5em;
-            font-style: italic;
-        }
-
-        .expression {
-            font-family: monospace;
-            font-weight: bold;
-        }
-
-        .hypothesis,
-        .expression {
-            z-index: 0;
-        }
-
-        .expression>* {
-            display: inline-block;
-            overflow: hidden;
-        }
-
-        .variables {
-            font-weight: normal;
-            margin-right: 0.3em;
-            background-color: lightgray;
-        }
-
-        .short-info {
-            max-width: 12em;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .long-info {
-            display: none;
-        }
-
-        .hypothesis:hover>.long-info,
-        .expression:hover>.long-info {
-            float: left;
-            display: inherit;
-            white-space: pre;
-            position: absolute;
-            background-color: white;
-            border: 1px solid black;
-            z-index: 2;
-            pointer-events: none;
-            /* Enables scrubbing through the entries. */
-        }
-
-        .hypothesis {
-            position: sticky;
-            z-index: 1;
-            background-color: white;
-            top: 0;
-            padding: 0.3em;
-            margin-top: 2px;
-            border: 1px solid rgba(0, 0, 0, 0.1);
-        }
-
-        /*
-        * Directory lines inspired by https://two-wrongs.com/draw-a-tree-structure-with-only-css.
-        */
-        ol.nodes>li {
-            position: relative;
-        }
-
-        ol.nodes>li::before,
-        ol.nodes>li::after {
-            content: "";
-            position: absolute;
-            left: -12px;
-        }
-
-        ol.nodes>li::before {
-            border-top: 1px solid #000;
-            width: 8px;
-            height: 0;
-            transform: translateY(10px);
-        }
-
-        ol.nodes>li::after {
-            border-left: 1px solid #000;
-            height: 100%;
-            width: 0;
-            top: 2px;
-        }
-
-        ol.nodes>li:last-child::after {
-            height: 8px;
-        }
-
-        .hypotheses>li {
-            position: relative;
-        }
-
-        ol.hypotheses>li::before,
-        ol.hypotheses>li::after {
-            content: "";
-            position: absolute;
-            top: 0;
-        }
-
-        ol.hypotheses>li::before {
-            border-left: 1px solid #000;
-            width: 0;
-            height: 100%;
-        }
-
-        ol.hypotheses>li::after {
-            border-top: 1px solid #000;
-            width: 100%;
-            height: 0;
-            left: 0;
-        }
-
-        ol.hypotheses>li:first-child::before {
-            transform: translateY(-8px);
-        }
-
-        ol.hypotheses>li:last-child::after {
-            width: 0;
         }
     </style>
 </head>
@@ -236,11 +234,14 @@
                 })
                 .join("li");
             hyps.each(function (d) {
+                let hypColor = d.data.hypothesis.color || "white";
+                let li = d3.select(this);
+                li.append("div").classed("marker", true).style("background-color", hypColor);
+                let div = d3.select(this).append("div").classed("hypothesis-container", true);
                 if (d.data.hypothesis) {
-                    let div = d3.select(this).append("div");
-                    div.classed("hypothesis", true);
-                    div.append("span").text(d => d.data.hypothesis).classed("short-info", true);
-                    div.append("div").classed("long-info", true).text(d.data.hypothesis)
+                    hyp = div.append("div").classed("hypothesis", true);
+                    hyp.append("span").text(d => d.data.hypothesis).classed("short-info", true);
+                    hyp.append("div").classed("long-info", true).text(d.data.hypothesis)
                 }
             });
             let nodes = hyps.append("ol").classed("nodes", true)
@@ -249,9 +250,9 @@
                 }).join("li");
 
             nodes.each(function (d) {
-
                 let data = d.data.content;
-                let div = d3.select(this).append("div").classed("expression", true);
+                let div = d3.select(this).append("div").classed("expression-container", true)
+                    .append("div").classed("expression", true);
                 if (data.assigned_variables.length > 0) {
                     div.append("span").classed("variables", true).text(
                         `${data.assigned_variables.join(" <- ")}`
