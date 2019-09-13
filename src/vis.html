@@ -19,10 +19,12 @@
 
         .legend {
             margin: 1em;
+            border: 1px solid rgba(0, 0, 0, 0.2);
+            padding: 0.3em;
         }
 
-        .legend h1 {
-            font-size: 1.2rem;
+        .legend summary {
+            font-size: 1rem;
             font-weight: bold;
             margin: 0;
         }
@@ -47,7 +49,10 @@
         .legend>ol>li>.marker {
             width: 0.3rem;
             background-color: white;
-            margin-right: 0.3em;
+        }
+
+        .legend>ol>li>span {
+            margin: 0.3em;
         }
 
         .hypotheses {
@@ -65,16 +70,12 @@
         }
 
         .hypothesis-container {
-            position: sticky;
-            top: 0;
             width: 100%;
             display: flex;
             flex-direction: column;
-            z-index: 1;
         }
 
         .hypotheses>li {
-            padding-right: 12px;
             display: grid;
             grid-gap: 0.3em;
             grid-template-columns: 0.3rem auto;
@@ -98,7 +99,6 @@
             grid-area: hypothesis;
             max-width: var(--column-width);
             position: relative;
-            background-color: rgba(255, 255, 255, 0.925);
             font-style: italic;
             font-size: 0.8rem;
         }
@@ -135,11 +135,14 @@
          */
 
         .short-info {
+            position: relative;
             display: inline-block;
+            background: rgba(255, 255, 255, 0.925);
             max-width: var(--column-width);
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            z-index: -1;
         }
 
         .long-info {
@@ -150,18 +153,18 @@
             background: white;
             width: min-content;
             padding: 0.3em;
-        }
-
-        .expression:hover>.long-info {
-            background-color: white;
             border: 1px solid black;
-            z-index: 1;
+            z-index: 2;
             pointer-events: none;
         }
 
         .hypothesis>.short-info {
             padding: 0.3em;
             border: 1px solid transparent;
+        }
+
+        .hypothesis>.long-info {
+            top: 0;
         }
 
         .expression:hover {
@@ -172,14 +175,6 @@
         .expression:hover>.long-info {
             display: inherit;
             visibility: visible;
-        }
-
-        .hypothesis:hover>.long-info {
-            top: 0;
-            background-color: white;
-            border: 1px solid black;
-            width: min-content;
-            z-index: 1;
         }
 
         /*
@@ -272,8 +267,8 @@
 
             let body = d3.select("body");
             let hyps = Object.values(data.hypotheses).filter(h => h.hypothesis.length > 0);
-            let legend = body.append("aside").classed("legend", true);
-            legend.append("h1").text("Legend:");
+            let legend = body.append("aside").append("details").attr("open", "").classed("legend", true);
+            legend.append("summary").text("Legend of all hypotheses");
             legend_hyp = legend.append("ol").selectAll("li").data(hyps).join("li")
                 .style("border-color", d => d.color);
             legend_hyp.append("div").classed("marker", true).style("background-color", d => d.color);
