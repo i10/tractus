@@ -1,0 +1,4 @@
+Name: Execute code on console
+Description: Executes given code on to the console.
+Binding: executeCodeAddin
+Interactive: true

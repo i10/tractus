@@ -2,5 +2,9 @@
 **/*.rs.bk
 Cargo.lock
 
+/src/rstudio-addin/.Rproj.user
+/src/rstudio-addin/.Rhistory
+
 /tests/snapshots/hidden
 /tests/snapshots/snapshots__hidden-*
+
