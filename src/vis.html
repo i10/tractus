@@ -36,12 +36,6 @@
             flex-direction: column;
         }
 
-        .hypothesis-container>.marker {
-            border: 1px solid rgba(0, 0, 0, 0.1);
-            width: 100%;
-            height: 0.3rem;
-        }
-
         .hypotheses>li {
             padding-right: 12px;
             display: grid;
@@ -50,6 +44,7 @@
             grid-template-areas:
                 "marker hypothesis"
                 "marker nodes";
+            border-top: 1px solid rgba(0, 0, 0, 0.1);
         }
 
         .hypotheses>li:last-child {
@@ -62,6 +57,7 @@
             width: 100%;
             background-color: white;
             border: 1px solid rgba(0, 0, 0, 0.2);
+            border-top: none;
         }
 
         .hypothesis {
@@ -242,7 +238,6 @@
                 let li = d3.select(this);
                 li.append("div").classed("marker", true).style("background-color", hypColor);
                 let div = d3.select(this).append("div").classed("hypothesis-container", true);
-                div.append("div").classed("marker", true).style("background-color", hypColor);;
                 if (d.data.hypothesis) {
                     hyp = div.append("div").classed("hypothesis", true);
                     hyp.append("span").text(d => d.data.hypothesis).classed("short-info", true);
