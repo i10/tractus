@@ -1,23 +1,24 @@
 use std::collections::BTreeSet;
 use std::iter::FromIterator;
 use std::ops::Deref;
-use std::rc::Rc;
 
-use crate::parser::{RExpression, RIdentifier};
+use crate::parser::{Expression, RIdentifier};
 
 pub type Hypothesis = String;
 
-/// Requires the expression to have all dependencies inlined!
-pub fn detect_hypotheses<T>(expression: &RExpression<T>) -> BTreeSet<Hypothesis> {
-    use RExpression::*;
-    match expression {
-        TwoSidedFormula(left, right, _) => {
-            BTreeSet::from_iter(vec![format!("{} ~ {}", left, right)])
-        }
+pub type Hypotheses = BTreeSet<Hypothesis>;
 
-        // Because of the Rc, we cannot use one general pattern, but have to go step by step.
-        Column(left, dependent, _) => match left.deref() {
-            Index(variable, inner, _) => {
+/// Analyzes the `expression` for Hypotheses.
+///
+/// Requires the expression to have all dependencies inlined, or hypothesis behind variables may not be detected.
+pub fn detect_hypotheses(expression: &Expression) -> Hypotheses {
+    use Expression::*;
+    match expression {
+        TwoSidedFormula(left, right) => BTreeSet::from_iter(vec![format!("{} ~ {}", left, right)]),
+
+        // Because of the Box, we cannot (in current Rust) use one general pattern, but have to go step by step with some referencing magic.
+        Column(left, dependent) => match &**left {
+            Index(_variable, inner) => {
                 // variable[variable$independent == "level",]$dependent
                 // |----------------left--------------------|
                 //          |-----------inner--------------|
@@ -27,10 +28,10 @@ pub fn detect_hypotheses<T>(expression: &RExpression<T>) -> BTreeSet<Hypothesis>
                 //if let [Some(Infix(operator, inner_left, _, _)), None] = inner.as_slice() {
                 if inner.len() == 2 && inner[1].is_none() {
                     if let Some(infix) = &inner[0] {
-                        if let Infix(_, inner_left, _, _) = infix.deref() {
-                            if let Column(_, independent, _) = inner_left.deref() {
-                                if let Variable(_, _) = independent.deref() {
-                                    if let Variable(_, _) = dependent.deref() {
+                        if let Infix(_, inner_left, _) = &*infix {
+                            if let Column(_, independent) = &**inner_left {
+                                if let Variable(_) = &**independent {
+                                    if let Variable(_) = &**dependent {
                                         return BTreeSet::from_iter(vec![format!(
                                             "{} ~ {}",
                                             dependent, independent
@@ -44,13 +45,13 @@ pub fn detect_hypotheses<T>(expression: &RExpression<T>) -> BTreeSet<Hypothesis>
                 BTreeSet::new()
             }
             // subset(data, independent == "level")$dependent
-            Call(fun, args, _) => {
-                if let Variable(fun_name, _) = fun.deref() {
+            Call(fun, args) => {
+                if let Variable(fun_name) = fun.deref() {
                     if fun_name == "subset" {
                         if let Some(right) = args.get(1) {
-                            if let Infix(_, independent, _, _) = right.1.deref() {
-                                if let Variable(_, _) = independent.deref() {
-                                    if let Variable(_, _) = dependent.deref() {
+                            if let Infix(_, independent, _) = &right.1 {
+                                if let Variable(_) = &**independent {
+                                    if let Variable(_) = &**dependent {
                                         return BTreeSet::from_iter(vec![format!(
                                             "{} ~ {}",
                                             dependent, independent
@@ -67,14 +68,13 @@ pub fn detect_hypotheses<T>(expression: &RExpression<T>) -> BTreeSet<Hypothesis>
             left => detect_hypotheses(left),
         },
 
-        Call(_, args, _) => detect_hypotheses_in_args(args),
+        Call(_, args) => detect_hypotheses_in_args(args),
         _ => BTreeSet::new(),
     }
 }
 
-fn detect_hypotheses_in_args<T>(
-    args: &Vec<(Option<RIdentifier>, Rc<RExpression<T>>)>,
-) -> BTreeSet<Hypothesis> {
+/// Helper function for extracting and merging the hypotheses out of function arguments.
+fn detect_hypotheses_in_args(args: &[(Option<RIdentifier>, Expression)]) -> Hypotheses {
     args.iter()
         .map(|(_, exp)| detect_hypotheses(exp))
         .flatten()
@@ -85,7 +85,7 @@ fn detect_hypotheses_in_args<T>(
 mod tests {
     use pretty_assertions::assert_eq;
 
-    use crate::parser::Parsed;
+    use crate::parser;
 
     use super::*;
 
@@ -132,8 +132,8 @@ mod tests {
     }
 
     fn test_hypothesis(expected: BTreeSet<Hypothesis>, code: &'static str) {
-        let parsed = Parsed::parse(code).unwrap();
-        let stmt = parsed.into_iter().next().unwrap();
+        let parsed = parser::parse_statements(code).unwrap();
+        let stmt = parsed.into_iter().next().unwrap().0;
         let exp = stmt.expression().unwrap();
         let result = detect_hypotheses(&exp);
 

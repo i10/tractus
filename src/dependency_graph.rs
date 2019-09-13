@@ -1,266 +1,326 @@
 use std::collections::HashMap;
-use std::fmt::Debug;
-use std::ops::Deref;
-use std::rc::Rc;
 
 use petgraph;
 use serde::{Deserialize, Serialize};
 
-use crate::parser::{LineDisplay, RExpression, RIdentifier, RStatement, Span};
+use crate::parser::{Expression, RIdentifier, Statement, StatementId, Statements};
 
-type NodeIndexType = petgraph::graph::DefaultIx;
-pub type NodeIndex = petgraph::graph::NodeIndex<NodeIndexType>;
-type Graph<T> = petgraph::Graph<Rc<RExpression<T>>, String, petgraph::Directed, NodeIndexType>;
-
-#[derive(Default, Debug, Serialize, Deserialize)]
-pub struct DependencyGraph<T> {
-    graph: Graph<T>,
-    lines: Vec<NodeIndex>,
+/// A graph modelling dependencies between statement as a graph of `StatementId`s with the variable names as edges.
+#[derive(Debug, Serialize, Deserialize, Default)]
+pub struct DependencyGraph {
+    graph: Graph,
     variables: VariableMap,
 }
 
-#[derive(Default, Debug, Deserialize, Serialize)]
-struct VariableMap(HashMap<String, Vec<NodeIndex>>);
+// Helper type definitions
+type NodeIndexType = petgraph::graph::DefaultIx;
+pub type NodeIndex = petgraph::graph::NodeIndex<NodeIndexType>;
+#[derive(Serialize, Default, Deserialize, Debug)]
+struct Graph {
+    graph: petgraph::Graph<StatementId, Variable, petgraph::Directed, NodeIndexType>,
+    ids: HashMap<StatementId, NodeIndex>,
+}
+type Variable = String;
 
-impl VariableMap {
+// We use a custom Graph type, since petgraph::GraphMap is not serializable out of the box.
+// This structure manages the converting between `StatementId`s and internal `NodexIndex`.
+impl Graph {
     fn new() -> Self {
-        VariableMap(HashMap::new())
+        Graph {
+            graph: petgraph::Graph::new(),
+            ids: HashMap::new(),
+        }
     }
 
-    fn push(&mut self, variable: String, index: NodeIndex) {
-        self.0.entry(variable).or_insert_with(|| vec![]).push(index);
+    fn add_node(&mut self, content: StatementId) {
+        let node_id = self.graph.add_node(content);
+        self.ids.insert(content, node_id);
     }
 
-    fn get(&self, index: &str) -> Option<&NodeIndex> {
-        self.get_all(index).and_then(|v| v.last())
+    fn add_edge(&mut self, from: StatementId, to: StatementId, content: Variable) {
+        let from_idx = self.ids[&from];
+        let to_idx = self.ids[&to];
+        self.graph.add_edge(from_idx, to_idx, content);
     }
 
-    fn get_all(&self, index: &str) -> Option<&Vec<NodeIndex>> {
-        self.0.get(index)
+    fn neighbors_directed(
+        &self,
+        id: StatementId,
+        direction: petgraph::Direction,
+    ) -> Vec<StatementId> {
+        let node_id = self.ids[&id];
+        self.graph
+            .neighbors_directed(node_id, direction)
+            .map(|node_id| self.graph.node_weight(node_id).unwrap())
+            .cloned()
+            .collect()
     }
 }
 
-impl<T> DependencyGraph<T> {
+impl DependencyGraph {
     pub fn new() -> Self {
         DependencyGraph {
             graph: Graph::new(),
-            lines: vec![],
             variables: VariableMap::new(),
         }
     }
 
-    pub fn from_input(input: impl Iterator<Item = Rc<RStatement<T>>>) -> Self {
+    /// Constructs a new `DependencyGraph` from a collection of statements.
+    pub fn from_input<M>(stmts: &Statements<M>) -> Self {
         let mut graph = Self::new();
-        graph.batch_insert(input);
+        for (id, stmt, _) in stmts.iter() {
+            graph.insert(id, stmt);
+        }
+
         graph
     }
 
-    pub fn batch_insert(
+    /// Inserts all `StatementId`s from input into the graph.
+    ///
+    /// Requires that all statements corresponding to the ids can be looked up in `stmts`.
+    pub fn batch_insert<M>(
         &mut self,
-        input: impl Iterator<Item = Rc<RStatement<T>>>,
-    ) -> Vec<NodeIndex> {
+        input: impl Iterator<Item = StatementId>,
+        stmts: &Statements<M>,
+    ) -> Vec<StatementId> {
         input
-            .filter_map(|stmt| self.insert(stmt))
-            .collect::<Vec<NodeIndex>>()
+            .filter_map(|id| self.insert(id, &stmts[id].0))
+            .collect::<Vec<StatementId>>()
     }
 
-    pub fn insert(&mut self, statement: Rc<RStatement<T>>) -> Option<NodeIndex> {
-        use RStatement::*;
-        match &*statement {
-            Expression(expression, _) => Some(register_dependencies(expression, self)),
-            Assignment(left, additional, right, _) => {
-                let mut assigned = vec![left];
-                assigned.append(&mut additional.iter().collect());
-                let node_id = register_dependencies(right, self);
+    /// Inserts a single `StatementId` into the graph.
+    ///
+    /// Requires that the statment corresponding to the id can be looked up in `stmts`.
+    pub fn insert(&mut self, id: StatementId, statement: &Statement) -> Option<StatementId> {
+        use Statement::*;
+        match statement {
+            Expression(expression) => {
+                self.register_dependencies(id, expression);
+                Some(id)
+            }
+            Assignment(left, additional, right) => {
+                let first = [left.clone()];
+                let rest = additional.iter();
+                let assigned = first.iter().chain(rest);
+                self.register_dependencies(id, right);
                 for variable in assigned {
                     match variable.extract_variable_name() {
-                        Some(name) => self.variables.push(name, node_id),
+                        Some(name) => self.variables.push(name, id),
                         None => panic!(
                         "Could not find a variable in {}, in the left side of the assignment {}.",
                         variable, statement
                     ),
                     };
                 }
-                Some(node_id)
+                Some(id)
             }
-            TailComment(statement, _, _) => self.insert(statement.clone()),
+            TailComment(statement, _) => self.insert(id, statement),
             _ => None,
         }
     }
 
-    pub fn graph(&self) -> &Graph<T> {
-        &self.graph
+    /// Analyzes the expression for dependencies and adds the `StatementId` into the graph along with edges for the dependencies.
+    ///
+    /// Assumes that `expression` is from a statement with the passed `id`.
+    fn register_dependencies(&mut self, id: StatementId, expression: &Expression) {
+        let dependencies = extract_dependencies(&expression);
+        self.graph.add_node(id);
+        for dependency in dependencies {
+            if let Some(parent) = self.variables.get(&dependency) {
+                self.graph.add_edge(*parent, id, dependency);
+            }
+            // Else, we do not know the variable. But this might still be valid,
+            // e. g. if it is a library function that wasn't explicitly declared in the code.
+            // Therefore, we simply ignore this in the dependency graph.
+        }
     }
 
-    pub fn graph_mut(&mut self) -> &mut Graph<T> {
-        &mut self.graph
+    /// Returns all `StatementId`s that assign to a variable used by the statement with `id`.
+    pub fn parents(&self, id: StatementId) -> Vec<StatementId> {
+        self.graph
+            .neighbors_directed(id, petgraph::Direction::Incoming)
     }
 
-    pub fn id(&self, id: NodeIndex) -> Option<&Rc<RExpression<T>>> {
-        self.graph.node_weight(id)
+    /// If the statement behind `id` contains an expression,
+    /// constructs a new `Expression` where all variables used by that expression are inlined.
+    /// Otherwise returns `None`.
+    ///
+    /// Requires that the statment corresponding to the id can be looked up in `stmts`.
+    pub fn inline_id<M>(&self, id: StatementId, stmts: &Statements<M>) -> Option<Expression> {
+        let statement = &stmts[id].0;
+        statement
+            .expression()
+            .map(|exp| self.inline_exp(exp, id, stmts))
     }
 
-    pub fn lines(&self) -> impl Iterator<Item = NodeIndex> {
-        self.lines.clone().into_iter()
-    }
-}
-
-impl<T: Clone> DependencyGraph<T> {
-    pub fn inline_id(&self, id: NodeIndex) -> Option<RExpression<T>> {
-        self.id(id).map(|exp| self.inline_exp(exp, id))
-    }
-
-    fn inline_exp(&self, exp: &Rc<RExpression<T>>, id: NodeIndex) -> RExpression<T> {
-        use RExpression::*;
-        match exp.deref() {
-            Constant(constant, m) => Constant(constant.clone(), m.clone()),
-            Variable(name, m) => {
+    /// Constructs a new `Expression` where all variables used are inlined.
+    ///
+    /// Requires that the expression comes from a statement that can be looked up with `stmt_id` in `stmts`.
+    fn inline_exp<M>(
+        &self,
+        exp: &Expression,
+        stmt_id: StatementId,
+        stmts: &Statements<M>,
+    ) -> Expression {
+        use Expression::*;
+        match exp {
+            Constant(constant) => Constant(constant.clone()),
+            Variable(name) => {
                 if let Some(exps) = self.variables.get_all(name) {
-                    if let Some(replacement) = exps.iter().filter(|other| **other < id).last() {
-                        return self.inline_id(*replacement).unwrap();
+                    if let Some(replacement) = exps.iter().filter(|other| **other < stmt_id).last()
+                    {
+                        return self.inline_id(*replacement, stmts).unwrap();
                     }
                 }
-                Variable(name.clone(), m.clone())
+                Variable(name.clone())
             }
-            Call(exp, args, m) => Call(
-                Rc::new(self.inline_exp(exp, id)),
+            Call(exp, args) => Call(
+                Box::new(self.inline_exp(exp, stmt_id, stmts)),
                 args.iter()
-                    .map(|(name, exp)| (name.clone(), Rc::new(self.inline_exp(exp, id))))
+                    .map(|(name, exp)| (name.clone(), self.inline_exp(exp, stmt_id, stmts)))
                     .collect(),
-                m.clone(),
             ),
-            Column(left, right, m) => Column(
-                Rc::new(self.inline_exp(left, id)),
-                Rc::new(self.inline_exp(right, id)),
-                m.clone(),
+            Column(left, right) => Column(
+                Box::new(self.inline_exp(left, stmt_id, stmts)),
+                Box::new(self.inline_exp(right, stmt_id, stmts)),
             ),
-            Index(left, right, m) => Index(
-                Rc::new(self.inline_exp(left, id)),
+            Index(left, right) => Index(
+                Box::new(self.inline_exp(left, stmt_id, stmts)),
                 right
                     .iter()
                     .map(|maybe_exp| {
                         maybe_exp
                             .as_ref()
-                            .map(|exp| Rc::new(self.inline_exp(exp, id)))
+                            .map(|exp| self.inline_exp(exp, stmt_id, stmts))
                     })
                     .collect(),
-                m.clone(),
             ),
-            ListIndex(left, right, m) => ListIndex(
-                Rc::new(self.inline_exp(left, id)),
+            ListIndex(left, right) => ListIndex(
+                Box::new(self.inline_exp(left, stmt_id, stmts)),
                 right
                     .iter()
                     .map(|maybe_exp| {
                         maybe_exp
                             .as_ref()
-                            .map(|exp| Rc::new(self.inline_exp(exp, id)))
+                            .map(|exp| self.inline_exp(exp, stmt_id, stmts))
                     })
                     .collect(),
-                m.clone(),
             ),
-            OneSidedFormula(formula, m) => {
-                OneSidedFormula(Rc::new(self.inline_exp(formula, id)), m.clone())
+            OneSidedFormula(formula) => {
+                OneSidedFormula(Box::new(self.inline_exp(formula, stmt_id, stmts)))
             }
-            TwoSidedFormula(left, right, m) => TwoSidedFormula(
-                Rc::new(self.inline_exp(left, id)),
-                Rc::new(self.inline_exp(right, id)),
-                m.clone(),
+            TwoSidedFormula(left, right) => TwoSidedFormula(
+                Box::new(self.inline_exp(left, stmt_id, stmts)),
+                Box::new(self.inline_exp(right, stmt_id, stmts)),
             ),
-            Function(args, body, m) => Function(
+            Function(args, body) => Function(
                 args.iter()
-                    .map(|(name, maybe_statement)| {
+                    .map(|(name, maybe_expression)| {
                         (
                             name.clone(),
-                            maybe_statement
-                                .as_ref()
-                                .map(|statement| Rc::new(self.inline_exp(statement, id))),
+                            maybe_expression
+                                .clone()
+                                .map(|expression| self.inline_exp(&expression, stmt_id, stmts)),
                         )
                     })
                     .collect(),
-                body.iter()
-                    .map(|statement| Rc::new(RStatement::clone(statement))) // Ignore stuff in statements
-                    .collect(),
-                m.clone(),
+                body.to_vec(), // TODO: Investigate whether statements can be analyzed.
             ),
-            Prefix(operator, exp, m) => Prefix(
+            Prefix(operator, exp) => Prefix(
                 operator.clone(),
-                Rc::new(self.inline_exp(exp, id)),
-                m.clone(),
+                Box::new(self.inline_exp(exp, stmt_id, stmts)),
             ),
-            Infix(operator, left, right, m) => Infix(
+            Infix(operator, left, right) => Infix(
                 operator.clone(),
-                Rc::new(self.inline_exp(left, id)),
-                Rc::new(self.inline_exp(right, id)),
-                m.clone(),
+                Box::new(self.inline_exp(left, stmt_id, stmts)),
+                Box::new(self.inline_exp(right, stmt_id, stmts)),
             ),
         }
     }
 }
 
-pub struct GraphLineDisplay<'a>(&'a DependencyGraph<Span>);
-impl<'a> From<&'a DependencyGraph<Span>> for GraphLineDisplay<'a> {
-    fn from(other: &'a DependencyGraph<Span>) -> Self {
-        GraphLineDisplay(other)
-    }
-}
-impl<'a> std::fmt::Display for GraphLineDisplay<'a> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let dependency_graph = self.0;
-        let mapped = dependency_graph
-            .graph()
-            .map(|_, n| LineDisplay::from(n), |_, e| e);
-        let display_graph = petgraph::dot::Dot::new(&mapped);
-        write!(f, "{}", display_graph)
-    }
-}
-
-fn register_dependencies<T>(
-    expression: &Rc<RExpression<T>>,
-    dependency_graph: &mut DependencyGraph<T>,
-) -> NodeIndex {
-    let dependencies = extract_dependencies(&expression);
-    let node_id = dependency_graph.graph.add_node(expression.clone());
-    dependency_graph.lines.push(node_id);
-    for dependency in dependencies {
-        if let Some(parent) = dependency_graph.variables.get(&dependency) {
-            dependency_graph
-                .graph
-                .add_edge(*parent, node_id, dependency);
-        }
-        // Else, we do not know the variable. But this might still be valid,
-        // e. g. if it is a library function that wasn't explicitly declared in the code.
-        // Therefore, we simply ignore this in the dependency graph.
-    }
-    node_id
-}
-
-fn extract_dependencies<T>(expression: &Rc<RExpression<T>>) -> Vec<RIdentifier> {
-    use RExpression::*;
-    match expression.deref() {
-        Variable(name, _) => vec![name.clone()],
-        Call(_, arguments, _) => arguments
+/// Returns the names of the variables used in the `expression`.
+fn extract_dependencies(expression: &Expression) -> Vec<RIdentifier> {
+    use Expression::*;
+    match expression {
+        Variable(name) => vec![name.clone()],
+        Call(_, arguments) => arguments
             .iter()
             .flat_map(|(_, exp)| extract_dependencies(exp))
             .collect(),
-        Column(left, _, _) => extract_dependencies(left),
-        Index(left, _, _) => extract_dependencies(left),
+        Column(left, _) => extract_dependencies(left),
+        Index(left, _) => extract_dependencies(left),
         _ => vec![],
     }
 }
+
+/// A map that keeps track of what variables are defined in what statements.
+/// The variable names are used as keys and each value contains the defining `StatementId` in source code order.
+#[derive(Default, Debug, PartialEq, Eq, Deserialize, Serialize)]
+struct VariableMap(HashMap<String, Vec<StatementId>>);
+
+impl VariableMap {
+    fn new() -> Self {
+        VariableMap(HashMap::new())
+    }
+
+    /// Add a new `StatementId` for the `variable`.
+    fn push(&mut self, variable: String, index: StatementId) {
+        self.0.entry(variable).or_insert_with(|| vec![]).push(index);
+    }
+
+    /// Returns the last `StatementId` that defined the `variable`, or returns `None` if the variable is undefined.
+    fn get(&self, variable: &str) -> Option<&StatementId> {
+        self.get_all(variable).and_then(|v| v.last())
+    }
+
+    /// Returns all `StatementId`s that defined the `variable`.
+    fn get_all(&self, variable: &str) -> Option<&Vec<StatementId>> {
+        self.0.get(variable)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
     use std::collections::HashSet;
+    use std::iter::FromIterator;
 
     use petgraph::visit::Walker;
 
     use super::*;
-    use crate::parser::{RExpression, RStatement};
+    use crate::parser::{Expression, Statement};
     use crate::{assignment, call, column, constant, expression, tail_comment, variable};
 
-    fn compare_graphs(expected: DependencyGraph<()>, actual: DependencyGraph<()>) {
-        let expected = &expected.graph();
-        let actual = &actual.graph();
+    impl Graph {
+        fn from_ids(ids: impl Iterator<Item = StatementId>) -> Self {
+            let mut graph = petgraph::Graph::new();
+            let mut id_map = HashMap::new();
+
+            for id in ids {
+                let node_id = graph.add_node(id);
+                id_map.insert(id, node_id);
+            }
+
+            Graph { graph, ids: id_map }
+        }
+
+        fn extend_with_edges(
+            &mut self,
+            edges: impl Iterator<Item = (StatementId, StatementId, Variable)>,
+        ) {
+            let edges: Vec<(NodeIndex, NodeIndex, Variable)> = edges
+                .map(|(from, to, v)| (self.ids[&from], self.ids[&to], v))
+                .collect();
+            self.graph.extend_with_edges(edges);
+        }
+    }
+
+    fn compare_graphs(expected: DependencyGraph, actual: DependencyGraph) {
+        assert_eq!(expected.variables, actual.variables);
+
+        let expected = &expected.graph.graph;
+        let actual = &actual.graph.graph;
         let walk_expected = petgraph::visit::Topo::new(expected);
         let walk_actual = petgraph::visit::Topo::new(actual);
         for (expected_id, actual_id) in walk_expected.iter(expected).zip(walk_actual.iter(actual)) {
@@ -269,12 +329,12 @@ mod tests {
                     .neighbors(expected_id)
                     .map(|n_id| expected.node_weight(n_id).unwrap())
                     .cloned()
-                    .collect::<HashSet<Rc<RExpression<()>>>>(),
+                    .collect::<HashSet<StatementId>>(),
                 actual
                     .neighbors(actual_id)
                     .map(|n_id| actual.node_weight(n_id).unwrap())
                     .cloned()
-                    .collect::<HashSet<Rc<RExpression<()>>>>(),
+                    .collect::<HashSet<StatementId>>(),
                 "Nodes {:?} and {:?} have different neighbors.",
                 expected.node_weight(expected_id),
                 actual.node_weight(actual_id)
@@ -284,7 +344,7 @@ mod tests {
 
     #[test]
     fn detects_linear_graph() {
-        let input = vec![
+        let input = Statements::from_iter(vec![
             assignment!(variable!("x"), vec![], constant!("1")),
             assignment!(
                 variable!("y"),
@@ -296,28 +356,34 @@ mod tests {
                 "# modifies y"
             ),
             expression!(call!(variable!("change"), vec![(None, variable!("y"))])),
-        ];
-        let graph = DependencyGraph::from_input(input.into_iter());
+        ]);
+        let ids: Vec<StatementId> = input.iter().map(|(id, _, _)| id).collect();
+        let mut actual = DependencyGraph::new();
+        actual.batch_insert(ids.iter().cloned(), &input);
 
-        let mut expected = DependencyGraph::new();
-        let expected_graph = expected.graph_mut();
-        let e1 = constant!("1");
-        let n1 = expected_graph.add_node(e1);
-        let e2 = call!(variable!("transform"), vec![(None, variable!("x"))]);
-        let n2 = expected_graph.add_node(e2);
-        expected_graph.add_edge(n1, n2, "x".into());
-        let e3 = call!(variable!("modify"), vec![(None, variable!("y"))]);
-        let n3 = expected_graph.add_node(e3);
-        expected_graph.add_edge(n2, n3, "y".into());
-        let e4 = call!(variable!("change"), vec![(None, variable!("y"))]);
-        let n4 = expected_graph.add_node(e4);
-        expected_graph.add_edge(n2, n4, "y".into());
+        let variables: HashMap<String, Vec<StatementId>> = HashMap::from_iter(
+            vec![("x".into(), vec![ids[0]]), ("y".into(), vec![ids[1]])].into_iter(),
+        );
+        let mut graph = Graph::from_ids(ids.iter().cloned());
+        graph.extend_with_edges(
+            vec![
+                (ids[0], ids[1], "x".into()),
+                (ids[1], ids[2], "y".into()),
+                (ids[1], ids[3], "y".into()),
+            ]
+            .into_iter(),
+        );
+        let expected = DependencyGraph {
+            graph,
+            variables: VariableMap(variables),
+        };
 
-        compare_graphs(expected, graph);
+        compare_graphs(expected, actual);
     }
+
     #[test]
     fn detects_mutations() {
-        let input = vec![
+        let input = Statements::from_iter(vec![
             assignment!(variable!("x"), vec![], constant!("data frame")),
             assignment!(
                 column!(variable!("x"), constant!("column")),
@@ -328,53 +394,51 @@ mod tests {
                 )
             ),
             expression!(call!(variable!("summary"), vec![(None, variable!("x"))])),
-        ];
-        let graph = DependencyGraph::from_input(input.into_iter());
+        ]);
+        let ids: Vec<StatementId> = input.iter().map(|(id, _, _)| id).collect();
+        let mut actual = DependencyGraph::new();
+        actual.batch_insert(ids.iter().cloned(), &input);
 
-        let mut expected = DependencyGraph::new();
-        let expected_graph = expected.graph_mut();
-        let e1 = constant!("data frame");
-        let n1 = expected_graph.add_node(e1);
-        let e2 = call!(
-            variable!("factor"),
-            vec![(None, column!(variable!("x"), constant!("column")))]
+        let variables: HashMap<String, Vec<StatementId>> =
+            HashMap::from_iter(vec![("x".into(), vec![ids[0], ids[1]])].into_iter());
+        let mut graph = Graph::from_ids(ids.iter().cloned());
+        graph.extend_with_edges(
+            vec![(ids[0], ids[1], "x".into()), (ids[1], ids[2], "x".into())].into_iter(),
         );
-        let n2 = expected_graph.add_node(e2);
-        expected_graph.add_edge(n1, n2, "x".into());
-        let e3 = call!(variable!("summary"), vec![(None, variable!("x"))]);
-        let n3 = expected_graph.add_node(e3);
-        expected_graph.add_edge(n2, n3, "x".into());
+        let expected = DependencyGraph {
+            graph,
+            variables: VariableMap(variables),
+        };
 
-        compare_graphs(expected, graph);
+        compare_graphs(expected, actual);
     }
 
     #[test]
     fn detects_sibling_dependencies() {
-        let input = vec![
+        let input = Statements::from_iter(vec![
             assignment!(variable!("x"), vec![], constant!("data frame")),
             expression!(call!(
                 variable!("factor"),
                 vec![(None, column!(variable!("x"), constant!("column")))]
             )),
             expression!(call!(variable!("summary"), vec![(None, variable!("x"))])),
-        ];
-        let graph = DependencyGraph::from_input(input.into_iter());
+        ]);
+        let ids: Vec<StatementId> = input.iter().map(|(id, _, _)| id).collect();
+        let mut actual = DependencyGraph::new();
+        actual.batch_insert(ids.iter().cloned(), &input);
 
-        let mut expected = DependencyGraph::new();
-        let expected_graph = expected.graph_mut();
-        let e1 = constant!("data frame");
-        let n1 = expected_graph.add_node(e1);
-        let e2 = call!(
-            variable!("factor"),
-            vec![(None, column!(variable!("x"), constant!("column")))]
+        let variables: HashMap<String, Vec<StatementId>> =
+            HashMap::from_iter(vec![("x".into(), vec![ids[0]])].into_iter());
+        let mut graph = Graph::from_ids(ids.iter().cloned());
+        graph.extend_with_edges(
+            vec![(ids[0], ids[1], "x".into()), (ids[0], ids[2], "x".into())].into_iter(),
         );
-        let n2 = expected_graph.add_node(e2);
-        expected_graph.add_edge(n1, n2, "x".into());
-        let e3 = call!(variable!("summary"), vec![(None, variable!("x"))]);
-        let n3 = expected_graph.add_node(e3);
-        expected_graph.add_edge(n1, n3, "x".into());
+        let expected = DependencyGraph {
+            graph,
+            variables: VariableMap(variables),
+        };
 
-        compare_graphs(expected, graph);
+        compare_graphs(expected, actual);
     }
 
     mod dependencies {
@@ -434,22 +498,25 @@ mod tests {
 
         #[test]
         fn inlines_simple_shadowing() {
-            let input = vec![
+            let input = Statements::from_iter(vec![
                 assignment!(variable!("x"), vec![], constant!("old value")),
                 expression!(call!(variable!("print"), vec![(None, variable!("x"))])),
                 assignment!(variable!("x"), vec![], constant!("new value")),
                 expression!(call!(variable!("print"), vec![(None, variable!("x"))])),
-            ];
+            ]);
+
+            let ids: Vec<StatementId> = input.iter().map(|(id, _, _)| id).collect();
             let mut graph = DependencyGraph::new();
-            let inserted = graph.batch_insert(input.into_iter());
-            let result = graph.inline_id(inserted[1]).unwrap();
-            let expected: Rc<RExpression<()>> =
+            graph.batch_insert(ids.iter().cloned(), &input);
+
+            let result = graph.inline_id(ids[1], &input).unwrap();
+            let expected: Expression =
                 call!(variable!("print"), vec![(None, constant!("old value"))]);
-            assert_eq!(*expected, result);
-            let result = graph.inline_id(inserted[3]).unwrap();
-            let expected: Rc<RExpression<()>> =
+            assert_eq!(expected, result);
+            let result = graph.inline_id(ids[3], &input).unwrap();
+            let expected: Expression =
                 call!(variable!("print"), vec![(None, constant!("new value"))]);
-            assert_eq!(*expected, result);
+            assert_eq!(expected, result);
         }
     }
 }

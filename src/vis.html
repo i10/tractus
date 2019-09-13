@@ -181,7 +181,7 @@
 </head>
 
 <body>
-    <script src="https://d3js.org/d3.v5.min.js"></script>
+    <script src="d3js/d3.min.js"></script>
     <script>
         var data;
 
@@ -192,8 +192,8 @@
         socket.onmessage = function (event) {
             console.log("Received new data. (You can inspect it in the global variable `data`.)");
             let parsed = JSON.parse(event.data);
-            parsed.root = parsed.root = {
-                hypotheses: parsed.root,
+            parsed.root = {
+                children: parsed.root,
             };
             data = parsed;
             render(parsed);
@@ -249,7 +249,8 @@
                 }).join("li");
 
             nodes.each(function (d) {
-                let data = d.data.expression;
+
+                let data = d.data.content;
                 let div = d3.select(this).append("div").classed("expression", true);
                 if (data.assigned_variables.length > 0) {
                     div.append("span").classed("variables", true).text(
@@ -264,7 +265,7 @@
                     }
                 }).classed("short-info", true);
                 div.append("div").classed("long-info", true).text(
-                    `${data.span.from.line}: ${data.statement}`
+                    `${data.span.from}: ${data.statement}`
                 );
             });
             if (!nodes.empty()) {
@@ -275,8 +276,8 @@
         function get_children(item, hypotheses_map) {
             if (item.expressions) {
                 return item.expressions
-            } else if (item.hypotheses) {
-                const hyps = item.hypotheses;
+            } else if (item.children) {
+                const hyps = item.children;
                 const children = Object.keys(hyps).map(
                     key => {
                         return {
