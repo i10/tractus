@@ -112,7 +112,7 @@
         }
 
         .long-info {
-            position: relative;
+            position: absolute;
             display: none;
             white-space: pre;
             background: white;
@@ -120,15 +120,21 @@
             padding: 0.3em;
         }
 
-        .expression:hover {
+        .expression:hover>.long-info {
             background-color: white;
             border: 1px solid black;
             width: min-content;
             z-index: 1;
+            pointer-events: none;
         }
 
-        .hypothesis:hover>.short-info {
-            display: none
+        .hypothesis>.short-info {
+            padding: 0.3em;
+            border: 1px solid transparent;
+        }
+
+        .expression:hover {
+            background-color: rgba(0, 0, 0, 0.05);
         }
 
         .hypothesis:hover>.long-info,
@@ -137,6 +143,7 @@
         }
 
         .hypothesis:hover>.long-info {
+            top: 0;
             background-color: white;
             border: 1px solid black;
             width: min-content;
