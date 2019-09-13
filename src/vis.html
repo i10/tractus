@@ -149,6 +149,10 @@
          *
          */
 
+        #connected.show-error {
+            display: none;
+        }
+
         #connection-lost {
             display: none;
         }
@@ -186,6 +190,7 @@
         let socket = new WebSocket("ws://127.0.0.1:2794", "tractus-websocket");
         socket.onopen = function (event) {
             document.getElementById("connection-lost").setAttribute("class", "");
+            document.getElementById("connected").setAttribute("class", "");
         };
         socket.onmessage = function (event) {
             console.log("Received new data. (You can inspect it in the global variable `data`.)");
@@ -202,6 +207,7 @@
         socket.onclose = function (event) {
             console.warn("Websocket closed.");
             document.getElementById("connection-lost").setAttribute("class", "show-error");
+            document.getElementById("connected").setAttribute("class", "show-error");
         }
 
         let width = 1000;
@@ -295,8 +301,11 @@
             return str.substr(0, n - 1) + (str.length > n ? '…' : '');
         }
     </script>
+    <div id="connected" class="show-error">
+        ✔️️ Connected to Tractus.
+    </div>
     <div id="connection-lost" class="show-error">
-        <p class="error">Not connected to Tractus!</p>
+        <p class="error">❌ Not connected to Tractus!</p>
         <p>Ensure that Tractus is running and reload this page.</p>
     </div>
 </body>
