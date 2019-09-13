@@ -9,7 +9,6 @@ executeCodeAddin <- function() {
   history <- history$V1
 
   socket <- WebSocket$new("ws://127.0.0.1:2794", protocols = "tractus-websocket", autoConnect = FALSE)
-  cat("length(history)")
 
   socket$onOpen(function(event) {
     cat("Connection opened\n")
@@ -45,8 +44,6 @@ executeCodeAddin <- function() {
         output = str_replace_all(output, '"', '\\\\"')
         JSONToSend = paste('{"statement": "', statement, '", "meta": { "result": \"', output,'\" } }', sep = "")
       }
-
-      # cat(JSONToSend, "\n")
 
       # Send to websocket
       if (!isPluginExecution) {
