@@ -8,33 +8,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
     <style>
-        #connection-lost {
-            display: none;
-        }
-
-        #connection-lost .error {
-            color: red;
-            font-weight: bold;
-        }
-
-        #connection-lost.show-error {
-            display: block;
-            animation-name: fadeIn;
-            animation-duration: 1s;
-            animation-delay: 0.25s;
-            animation-fill-mode: both;
-        }
-
-        @keyframes fadeIn {
-            0% {
-                opacity: 0;
-            }
-
-            100% {
-                opacity: 1;
-            }
-        }
-
         .hypotheses {
             display: flex;
             align-items: flex-start;
@@ -115,67 +88,34 @@
         }
 
         /*
-        * Directory lines inspired by https://two-wrongs.com/draw-a-tree-structure-with-only-css.
-        */
-        ol.nodes>li {
-            position: relative;
+         * CONNECTION INDICATOR
+         */
+
+        #connection-lost {
+            display: none;
         }
 
-        ol.nodes>li::before,
-        ol.nodes>li::after {
-            content: "";
-            position: absolute;
-            left: -12px;
+        #connection-lost .error {
+            color: red;
+            font-weight: bold;
         }
 
-        ol.nodes>li::before {
-            border-top: 1px solid #000;
-            width: 8px;
-            height: 0;
-            transform: translateY(10px);
+        #connection-lost.show-error {
+            display: block;
+            animation-name: fadeIn;
+            animation-duration: 1s;
+            animation-delay: 0.25s;
+            animation-fill-mode: both;
         }
 
-        ol.nodes>li::after {
-            border-left: 1px solid #000;
-            height: 100%;
-            width: 0;
-            top: 2px;
-        }
+        @keyframes fadeIn {
+            0% {
+                opacity: 0;
+            }
 
-        ol.nodes>li:last-child::after {
-            height: 8px;
-        }
-
-        .hypotheses>li {
-            position: relative;
-        }
-
-        ol.hypotheses>li::before,
-        ol.hypotheses>li::after {
-            content: "";
-            position: absolute;
-            top: 0;
-        }
-
-        ol.hypotheses>li::before {
-            border-left: 1px solid #000;
-            width: 0;
-            height: 100%;
-        }
-
-        ol.hypotheses>li::after {
-            border-top: 1px solid #000;
-            width: 100%;
-            height: 0;
-            left: 0;
-        }
-
-        ol.hypotheses>li:first-child::before {
-            transform: translateY(-8px);
-        }
-
-        ol.hypotheses>li:last-child::after {
-            width: 0;
+            100% {
+                opacity: 1;
+            }
         }
     </style>
 </head>
