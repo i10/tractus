@@ -30,7 +30,7 @@ executeCodeAddin <- function() {
       if (isPackageInstallation | isPluginExecution) {
         result = NULL
       } else {
-        result = capture.output(eval(parse(text = statement)))
+        result = try(capture.output(eval(parse(text = statement))))
       }
 
       # Escape the quotes
