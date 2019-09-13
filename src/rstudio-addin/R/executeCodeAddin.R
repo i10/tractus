@@ -13,7 +13,7 @@ executeCodeAddin <- function() {
   socket$onOpen(function(event) {
     cat("Connection opened\n")
     if (!exists("lastSent")) {
-      lastSent <<- 1
+      lastSent <- 1
     }
 
     cat("lastSent = ", lastSent, "\n")
@@ -50,12 +50,12 @@ executeCodeAddin <- function() {
         socket$send(JSONToSend)
       }
 
-      lastSent <<- index
+      lastSent <- index
     }
 
     file.copy("~/Code/tractus/src/vis.html", file.path(tempdir(), "vis.html"))
     viewer <- getOption("viewer")
-    viewer(file.path(tempdir(), "vis"))
+    viewer(file.path(tempdir(), "vis.html"))
 
     # socket$close()
   })
