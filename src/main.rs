@@ -378,7 +378,10 @@ fn serve(conf: ServeConfig) -> Res {
                         update_and_broadcast(result);
                     }
                     Err(e) => {
-                        eprintln!("Error parsing input received via websocket:\n{}", e);
+                        eprintln!(
+                            "Error parsing input received via websocket:\n{}\nInput was:\n{}",
+                            e, stmt
+                        );
                     }
                 }
             }
