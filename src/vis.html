@@ -114,7 +114,8 @@
 
         .long-info {
             position: absolute;
-            display: none;
+            display: block;
+            visibility: hidden;
             white-space: pre;
             background: white;
             width: min-content;
@@ -124,7 +125,6 @@
         .expression:hover>.long-info {
             background-color: white;
             border: 1px solid black;
-            width: min-content;
             z-index: 1;
             pointer-events: none;
         }
@@ -141,6 +141,7 @@
         .hypothesis:hover>.long-info,
         .expression:hover>.long-info {
             display: inherit;
+            visibility: visible;
         }
 
         .hypothesis:hover>.long-info {
