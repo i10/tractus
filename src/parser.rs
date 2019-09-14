@@ -77,7 +77,7 @@ impl Display for Statement {
                 range,
                 display_lines(body)
             ),
-            Library(name) => write!(f, "{}", name),
+            Library(name) => write!(f, "library({})", name),
             Expression(exp) => write!(f, "{}", exp),
         }
     }
