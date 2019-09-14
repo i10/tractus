@@ -58,7 +58,7 @@
         .hypotheses {
             display: flex;
             align-items: flex-start;
-            padding-left: 0.75rem;
+            padding-left: 1rem;
         }
 
         .nodes {
@@ -148,6 +148,8 @@
 
         .long-info {
             position: absolute;
+            left: 0;
+            top: 100%;
             display: block;
             visibility: hidden;
             white-space: pre;
@@ -320,18 +322,19 @@
                 }
                 exp_container.classed("expression-container", true);
                 let exp_div = exp_container.append("div").classed("expression", true);
+                let short_info = exp_div.append("div").classed("short-info", true);
                 if (data.assigned_variables.length > 0) {
-                    exp_div.append("span").classed("variables", true).text(
+                    short_info.append("span").classed("variables", true).text(
                         `${data.assigned_variables.join(" <- ")}`
                     );
                 }
-                exp_div.append("span").text(d => {
+                short_info.append("span").text(d => {
                     if (data.function_name) {
                         return data.function_name + "(…)";
                     } else {
                         return truncate(data.statement, 25);
                     }
-                }).classed("short-info", true);
+                });
                 let longInfo = `${data.span.from}: ${data.statement}`;
                 if (data.meta && data.meta.result != "") {
                     longInfo += `\n${data.meta.result}`
