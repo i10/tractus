@@ -1,8 +1,6 @@
 #[macro_use]
 extern crate pest_derive;
 
-use std::ops::Deref;
-
 use serde::{Deserialize, Serialize};
 
 pub mod dependency_graph;
@@ -12,7 +10,7 @@ pub mod parser;
 
 pub use crate::dependency_graph::DependencyGraph;
 pub use crate::hypotheses_tree::HypothesisTree;
-pub use crate::parser::{Expression, LineSpan, Parsed, Statement};
+pub use crate::parser::{Expression, LineSpan, Parsed, RIdentifier, Statement};
 
 #[derive(Serialize, Deserialize, Default)]
 pub struct Tractus {
@@ -32,14 +30,7 @@ pub struct StatementMeta {
 
 impl StatementMeta {
     fn with(stmt: &Statement, span: LineSpan, meta: serde_json::Value) -> Self {
-        let assigned_variables = if let parser::Statement::Assignment(left, add, _) = stmt.deref() {
-            let mut vs = vec![format!("{}", left)];
-            let mut addition: Vec<String> = add.iter().map(|v| format!("{}", v)).collect();
-            vs.append(&mut addition);
-            vs
-        } else {
-            vec![]
-        };
+        let assigned_variables = extract_assigned_variables(stmt);
         let expression = stmt.expression();
         let function_name = expression.and_then(|exp| extract_function_name(exp));
         StatementMeta {
@@ -50,6 +41,26 @@ impl StatementMeta {
             function_name,
             meta,
         }
+    }
+}
+
+fn extract_assigned_variables(stmt: &Statement) -> Vec<RIdentifier> {
+    use Statement::*;
+    match stmt {
+        Assignment(left, add, _) => {
+            let mut vs = vec![format!("{}", left)];
+            let mut addition: Vec<String> = add.iter().map(|v| format!("{}", v)).collect();
+            vs.append(&mut addition);
+            vs
+        }
+        TailComment(inner, _) => extract_assigned_variables(inner),
+        Empty
+        | Comment(_)
+        | If(_, _, _)
+        | While(_, _)
+        | For(_, _, _)
+        | Library(_)
+        | Expression(_) => Vec::new(),
     }
 }
 
