@@ -110,6 +110,7 @@
         .expression {
             font-family: monospace;
             font-weight: bold;
+            display: inline;
         }
 
         .expression>* {
@@ -308,14 +309,23 @@
 
             nodes.each(function (d) {
                 let data = d.data.content;
-                let div = d3.select(this).append("div").classed("expression-container", true)
-                    .append("div").classed("expression", true);
+                console.log(d.children)
+                let node = d3.select(this);
+                let exp_container;
+                if (d.children && d.children.length > 0) {
+                    node = node.append("details").attr("open", "");
+                    exp_container = node.append("summary");
+                } else {
+                    exp_container = node.append("div");
+                }
+                exp_container.classed("expression-container", true);
+                let exp_div = exp_container.append("div").classed("expression", true);
                 if (data.assigned_variables.length > 0) {
-                    div.append("span").classed("variables", true).text(
+                    exp_div.append("span").classed("variables", true).text(
                         `${data.assigned_variables.join(" <- ")}`
                     );
                 }
-                div.append("span").text(d => {
+                exp_div.append("span").text(d => {
                     if (data.function_name) {
                         return data.function_name + "(…)";
                     } else {
@@ -326,11 +336,12 @@
                 if (data.meta && data.meta.result != "") {
                     longInfo += `\n${data.meta.result}`
                 }
-                div.append("div").classed("long-info", true).text(longInfo);
+                exp_div.append("div").classed("long-info", true).text(longInfo);
+
+                if (d.children && d.children.length > 0) {
+                    makeNestedListItems(node, hyp_map);
+                }
             });
-            if (!nodes.empty()) {
-                makeNestedListItems(nodes, hyp_map)
-            }
         }
 
         function get_children(item, hypotheses_map) {
