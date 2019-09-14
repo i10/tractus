@@ -48,8 +48,11 @@ fn extract_assigned_variables(stmt: &Statement) -> Vec<RIdentifier> {
     use Statement::*;
     match stmt {
         Assignment(left, add, _) => {
-            let mut vs = vec![format!("{}", left)];
-            let mut addition: Vec<String> = add.iter().map(|v| format!("{}", v)).collect();
+            let mut vs = vec![left.extract_variable_name().unwrap_or_else(|| left.to_string())];
+            let mut addition: Vec<String> = add
+                .iter()
+                .map(|v| v.extract_variable_name().unwrap_or_else(|| v.to_string()))
+                .collect();
             vs.append(&mut addition);
             vs
         }
