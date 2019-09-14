@@ -267,12 +267,14 @@
 
             let body = d3.select("body");
             let hyps = Object.values(data.hypotheses).filter(h => h.hypothesis.length > 0);
-            let legend = body.append("aside").append("details").attr("open", "").classed("legend", true);
-            legend.append("summary").text("Legend of all hypotheses");
-            legend_hyp = legend.append("ol").selectAll("li").data(hyps).join("li")
-                .style("border-color", d => d.color);
-            legend_hyp.append("div").classed("marker", true).style("background-color", d => d.color);
-            legend_hyp.append("span").text(d => d.hypothesis.join(", "));
+            if (hyps.length > 0) {
+                let legend = body.append("aside").append("details").attr("open", "").classed("legend", true);
+                legend.append("summary").text("Legend of all hypotheses");
+                legend_hyp = legend.append("ol").selectAll("li").data(hyps).join("li")
+                    .style("border-color", d => d.color);
+                legend_hyp.append("div").classed("marker", true).style("background-color", d => d.color);
+                legend_hyp.append("span").text(d => d.hypothesis.join(", "));
+            }
             let rootNode = body.append("main").selectAll("ol").data([root]).join("ol");
             makeNestedListItems(rootNode, data.hypotheses);
         }
