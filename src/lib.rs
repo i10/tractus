@@ -20,9 +20,10 @@ pub struct Tractus {
 
 #[derive(Serialize, Deserialize)]
 pub struct StatementMeta {
+    statement: String,
+    ast: serde_json::Value,
     expression: Option<String>,
     span: LineSpan,
-    statement: String,
     assigned_variables: Vec<String>,
     function_name: Option<String>,
     meta: serde_json::Value,
@@ -35,6 +36,7 @@ impl StatementMeta {
         let function_name = expression.and_then(|exp| extract_function_name(exp));
         StatementMeta {
             expression: expression.map(|exp| format!("{}", exp)),
+            ast: serde_json::to_value(stmt).unwrap(),
             span,
             statement: format!("{}", stmt),
             assigned_variables,
