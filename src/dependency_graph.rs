@@ -82,21 +82,20 @@ impl DependencyGraph {
         &mut self,
         input: impl Iterator<Item = StatementId>,
         stmts: &Statements<M>,
-    ) -> Vec<StatementId> {
-        input
-            .filter_map(|id| self.insert(id, &stmts[id].0))
-            .collect::<Vec<StatementId>>()
+    ) {
+        for id in input {
+            self.insert(id, &stmts[id].0)
+        }
     }
 
     /// Inserts a single `StatementId` into the graph.
     ///
     /// Requires that the statment corresponding to the id can be looked up in `stmts`.
-    pub fn insert(&mut self, id: StatementId, statement: &Statement) -> Option<StatementId> {
+    pub fn insert(&mut self, id: StatementId, statement: &Statement) {
         use Statement::*;
         match statement {
             Expression(expression) => {
                 self.register_dependencies(id, expression);
-                Some(id)
             }
             Assignment(left, additional, right) => {
                 let first = [left.clone()];
@@ -112,10 +111,16 @@ impl DependencyGraph {
                     ),
                     };
                 }
-                Some(id)
             }
             TailComment(statement, _) => self.insert(id, statement),
-            _ => None,
+            // The following cannot have dependencies
+            Empty => 
+                self.graph.add_node(id),
+            Comment(_) => self.graph.add_node(id),
+            If(_, _, _) => self.graph.add_node(id),
+            While(_, _) => self.graph.add_node(id),
+            For(_, _, _) => self.graph.add_node(id),
+            Library(_) => self.graph.add_node(id),
         }
     }
 
