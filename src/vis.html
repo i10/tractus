@@ -261,10 +261,11 @@
             };
             parsed.hypothesis_tree.hypotheses = color_hypotheses(parsed.hypothesis_tree.hypotheses);
             data = parsed;
+            document.getElementById("tree").remove(); // RStudio's viewer pane does not respect d3's removal, so we manually delete the entire tree.
             render(parsed);
         }
         socket.onerror = function (event) {
-            console.error(event);
+            console.error(JSON.stringify(event));
         }
         socket.onclose = function (event) {
             console.warn("Websocket closed.");
@@ -295,7 +296,7 @@
                 legend_hyp.append("div").classed("marker", true).style("background-color", d => d.color);
                 legend_hyp.append("span").text(d => d.hypothesis.join(", "));
             }
-            let rootNode = body.append("main").selectAll("ol").data([root]).join("ol");
+            let rootNode = body.append("main").attr("id", "tree").selectAll("ol").data([root]).join("ol");
             makeNestedListItems(rootNode, data.statements, hypothesis_tree.hypotheses, hypothesis_tree.blocks);
         }
 
@@ -428,6 +429,7 @@
         <p class="error">❌ Not connected to Tractus!</p>
         <p>Ensure that Tractus is running and reload this page.</p>
     </div>
+    <main id="tree"></main>
 </body>
 
 </html>
