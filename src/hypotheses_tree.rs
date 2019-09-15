@@ -5,23 +5,28 @@ use serde::{Deserialize, Serialize};
 
 use crate::dependency_graph;
 use crate::hypotheses::{detect_hypotheses, Hypotheses, Hypothesis};
-use crate::parser::{StatementId, Statements};
+use crate::parser::{Statement, StatementId, Statements};
 use dependency_graph::DependencyGraph;
 
 /// A tree grouping `Statement`s by their hypotheses.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct HypothesisTree<T> {
-    root: Branches<T>,
+    root: Branches<T, BlockId>,
     hypotheses: BTreeMap<HypothesesId, Hypotheses>,
+    blocks: Vec<Vec<StatementId>>,
 }
 
 /// The branches of a `HypothesisTree`, grouped by hypotheses.
 #[derive(Debug, Serialize, PartialEq, Eq, Deserialize)]
-pub struct Branches<C>(pub BTreeMap<HypothesesId, Vec<Node<C>>>);
+pub struct Branches<C, H>(pub BTreeMap<HypothesesId, Vec<Node<C, H>>>);
 
-impl<C> Branches<C> {
+impl<C, H> Branches<C, H> {
+    fn new() -> Self {
+        Branches(BTreeMap::new())
+    }
+
     /// Consume the `Branches` and return them with mapping applied to all `Node` contents.
-    fn into_map<N, F>(self, mapping: &mut F) -> Branches<N>
+    fn into_map<N, F>(self, mapping: &mut F) -> Branches<N, H>
     where
         F: FnMut(C) -> N,
     {
@@ -37,8 +42,8 @@ impl<C> Branches<C> {
     }
 }
 
-impl<C> FromIterator<(HypothesesId, Vec<Node<C>>)> for Branches<C> {
-    fn from_iter<I: IntoIterator<Item = (HypothesesId, Vec<Node<C>>)>>(other: I) -> Self {
+impl<C, H> FromIterator<(HypothesesId, Vec<Node<C, H>>)> for Branches<C, H> {
+    fn from_iter<I: IntoIterator<Item = (HypothesesId, Vec<Node<C, H>>)>>(other: I) -> Self {
         Branches(other.into_iter().collect())
     }
 }
@@ -46,31 +51,39 @@ impl<C> FromIterator<(HypothesesId, Vec<Node<C>>)> for Branches<C> {
 pub type HypothesesId = usize;
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Node<C> {
-    pub content: C,
-    pub children: Branches<C>,
+pub enum Node<C, H> {
+    Single {
+        content: C,
+        children: Branches<C, H>,
+    },
+    Group {
+        header: H,
+        elements: Vec<Node<C, H>>,
+    },
 }
 
-impl<C> Node<C> {
-    fn into_map<N, F>(self, mapping: &mut F) -> Node<N>
+impl<C, H> Node<C, H> {
+    fn new(content: C) -> Self {
+        Node::Single {
+            content,
+            children: Branches::new(),
+        }
+    }
+
+    fn into_map<N, F>(self, mapping: &mut F) -> Node<N, H>
     where
         F: FnMut(C) -> N,
     {
-        Node {
-            content: mapping(self.content),
-            children: self.children.into_map(mapping),
-        }
-    }
-}
-
-impl<T> HypothesisTree<T> {
-    pub fn map<F, M>(self, mut mapping: &mut F) -> HypothesisTree<M>
-    where
-        F: FnMut(T) -> M,
-    {
-        HypothesisTree {
-            root: self.root.into_map(&mut mapping),
-            hypotheses: self.hypotheses,
+        use Node::*;
+        match self {
+            Single { content, children } => Single {
+                content: mapping(content),
+                children: children.into_map(mapping),
+            },
+            Group { header, elements } => Group {
+                header,
+                elements: elements.into_iter().map(|n| n.into_map(mapping)).collect(),
+            },
         }
     }
 }
@@ -106,19 +119,52 @@ impl HypothesesMap {
     }
 }
 
-type NodeMap = HashMap<StatementId, (HypothesesId, HashMap<HypothesesId, Vec<StatementId>>)>;
+type NodeMap = HashMap<
+    StatementId,
+    (
+        HypothesesId,
+        HashMap<HypothesesId, Vec<RefNode>>,
+        Option<BlockId>,
+    ),
+>;
+
+type BlockId = usize;
+
+#[derive(Clone, Debug)]
+enum RefNode {
+    Statement(StatementId),
+    Group(BlockId, Vec<RefNode>),
+}
 
 impl HypothesisTree<StatementId> {
     /// Creates a new `HypothesisTree` based on the passed information.
     ///
     /// Requires all elements of `stmts` to be tracked in the `dependency_graph`.
     pub fn new<T>(stmts: &Statements<T>, dependency_graph: &DependencyGraph) -> Self {
-        let mut roots: HashMap<HypothesesId, Vec<StatementId>> = HashMap::new();
+        let mut roots: HashMap<HypothesesId, Vec<RefNode>> = HashMap::new();
         let mut hypotheses_map: HypothesesMap = HypothesesMap::new();
         let mut node_map: NodeMap = HashMap::new();
 
+        let mut blocks: Vec<Vec<StatementId>> = Vec::new();
+        let mut next_block_comment: Option<Vec<StatementId>> = None;
+        let mut block_index: Option<BlockId> = None;
+
         for (stmt_id, stmt, _) in stmts.iter() {
-            if let Some(_expression) = stmt.expression() {
+            if let Statement::Comment(_) = stmt {
+                next_block_comment
+                    .get_or_insert_with(Vec::new)
+                    .push(stmt_id);
+            } else if let Statement::Empty = stmt {
+                match &mut next_block_comment {
+                    Some(block) => block.push(stmt_id),
+                    None => block_index = None, // Prevent new statements from being added to block.
+                }
+            } else if let Some(_expression) = stmt.expression() {
+                if let Some(next) = next_block_comment.take() {
+                    blocks.push(next);
+                    block_index = Some(blocks.len() - 1);
+                }
+
                 let hyp_id = Self::collect_hypotheses(
                     stmt_id,
                     &node_map,
@@ -126,17 +172,56 @@ impl HypothesisTree<StatementId> {
                     &dependency_graph,
                     &stmts,
                 );
-                node_map.insert(stmt_id, (hyp_id, HashMap::new()));
+                node_map.insert(stmt_id, (hyp_id, HashMap::new(), block_index));
 
                 let mut parents: Vec<StatementId> = dependency_graph.parents(stmt_id);
                 parents.sort_unstable();
                 match parents.last() {
                     Some(parent_id) => {
-                        let parent = &mut node_map.get_mut(&parent_id).unwrap().1; // Parent has already been analyzed and is thus in node map.
-                        parent.entry(hyp_id).or_insert_with(Vec::new).push(stmt_id);
+                        let (_, parent_children, parent_block) =
+                            &mut node_map.get_mut(&parent_id).unwrap(); // Parent has already been analyzed and is thus in node map.
+
+                        let siblings = parent_children.entry(hyp_id).or_insert_with(Vec::new);
+                        if parent_block != &block_index {
+                            // If parent is in same block, we do not create a new one.
+                            if let Some(b_idx) = block_index {
+                                if !siblings.is_empty() {
+                                    let last_index = siblings.len() - 1;
+                                    let predecessor = &mut siblings[last_index];
+                                    if let RefNode::Group(b, others) = predecessor {
+                                        if b == &b_idx {
+                                            others.push(RefNode::Statement(stmt_id));
+                                        } else {
+                                            siblings.push(RefNode::Group(
+                                                b_idx,
+                                                vec![RefNode::Statement(stmt_id)],
+                                            ));
+                                        }
+                                    } else {
+                                        siblings.push(RefNode::Group(
+                                            b_idx,
+                                            vec![RefNode::Statement(stmt_id)],
+                                        ));
+                                    }
+                                } else {
+                                    siblings.push(RefNode::Group(
+                                        b_idx,
+                                        vec![RefNode::Statement(stmt_id)],
+                                    ));
+                                }
+                            }
+                        } else {
+                            siblings.push(RefNode::Statement(stmt_id));
+                        }
                     }
                     None => {
-                        roots.entry(hyp_id).or_insert_with(Vec::new).push(stmt_id);
+                        let node_id = match block_index {
+                            Some(block_idx) => {
+                                RefNode::Group(block_idx, vec![RefNode::Statement(stmt_id)])
+                            }
+                            None => RefNode::Statement(stmt_id),
+                        };
+                        roots.entry(hyp_id).or_insert_with(Vec::new).push(node_id);
                     }
                 }
             }
@@ -150,12 +235,13 @@ impl HypothesisTree<StatementId> {
                         hyp_id,
                         children
                             .into_iter()
-                            .map(|stmt_id| Self::flatten(stmt_id, &mut node_map))
+                            .map(|node| Self::flatten(node, &mut node_map))
                             .collect(),
                     )
                 })
                 .collect(),
             hypotheses: hypotheses_map.into_map(),
+            blocks,
         }
     }
 
@@ -189,22 +275,34 @@ impl HypothesisTree<StatementId> {
         hypotheses_map.insert(hypotheses)
     }
 
-    fn flatten(id: StatementId, node_map: &mut NodeMap) -> Node<StatementId> {
-        let branches = node_map.remove(&id).unwrap().1; // id has to be in map.
-        let children = branches
-            .into_iter()
-            .map(|(hyp_id, subs)| {
-                (
-                    hyp_id,
-                    subs.into_iter()
-                        .map(|child_id| Self::flatten(child_id, node_map))
-                        .collect(),
-                )
-            })
-            .collect();
-        Node {
-            content: id,
-            children,
+    fn flatten(node: RefNode, node_map: &mut NodeMap) -> Node<StatementId, BlockId> {
+        use RefNode::*;
+        match node {
+            Statement(stmt_id) => {
+                let branches = node_map.remove(&stmt_id).unwrap().1; // id has to be in map.
+                let children = branches
+                    .into_iter()
+                    .map(|(hyp_id, subs)| {
+                        (
+                            hyp_id,
+                            subs.into_iter()
+                                .map(|child| Self::flatten(child, node_map))
+                                .collect(),
+                        )
+                    })
+                    .collect();
+                Node::Single {
+                    content: stmt_id,
+                    children,
+                }
+            }
+            Group(block_id, elements) => Node::Group {
+                header: block_id,
+                elements: elements
+                    .into_iter()
+                    .map(|n| Self::flatten(n, node_map))
+                    .collect(),
+            },
         }
     }
 }
@@ -217,6 +315,7 @@ impl<T> HypothesisTree<T> {
         HypothesisTree {
             root: self.root.into_map(&mut mapping),
             hypotheses: self.hypotheses,
+            blocks: self.blocks,
         }
     }
 }
@@ -262,22 +361,22 @@ mod tests {
         let tree = HypothesisTree::new(&input, &dependency_graph);
 
         // Need to build from the inside out.
-        let n4 = Node {
+        let n4 = Node::Single {
             content: ids[3],
             children: Branches::from_iter(vec![]),
         };
-        let n3 = Node {
+        let n3 = Node::Single {
             content: ids[2],
             children: Branches::from_iter(vec![]),
         };
-        let n2 = Node {
+        let n2 = Node::Single {
             content: ids[1],
             children: Branches::from_iter(vec![
                 (find_hyp(&["Speed ~ Layout"], &tree), vec![n3]),
                 (find_hyp(&[], &tree), vec![n4]),
             ]),
         };
-        let n1 = Node {
+        let n1 = Node::Single {
             content: ids[0],
             children: Branches::from_iter(vec![(find_hyp(&[], &tree), vec![n2])]),
         };
@@ -314,11 +413,11 @@ mod tests {
         let tree = HypothesisTree::new(&input, &dependency_graph);
 
         // Need to build from the inside out.
-        let n2 = Node {
+        let n2 = Node::Single {
             content: ids[1],
             children: Branches::from_iter(vec![]),
         };
-        let n1 = Node {
+        let n1 = Node::Single {
             content: ids[0],
             children: Branches::from_iter(vec![(
                 find_hyp(&["dependent ~ independent"], &tree),
@@ -339,4 +438,6 @@ mod tests {
             .unwrap_or_else(|| panic!("Could not find hypotheses {:?} in actual tree.", hyp))
             .0
     }
+
+    // TODO: Test blocks/groups
 }

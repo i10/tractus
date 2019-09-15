@@ -299,14 +299,11 @@ impl<M> Statements<M> {
     where
         F: FnMut(StatementId, &Statement, &M) -> N,
     {
-            self
-                .stmts
-                .iter()
-                .enumerate()
-                .map(|(idx, (s, m))| {
-                    mapping(StatementId(idx), s, m)
-                })
-                .collect()
+        self.stmts
+            .iter()
+            .enumerate()
+            .map(|(idx, (s, m))| mapping(StatementId(idx), s, m))
+            .collect()
     }
 }
 
@@ -1410,7 +1407,6 @@ if (third)
 ";
             let mut parsed = Parsed::new();
             let inserted = parsed.append(code.lines().collect());
-            dbg!(&parsed);
             assert_eq!(3, inserted.len());
             assert_eq!(parsed.statements()[inserted[0]].0, comment!("# First"));
             assert_eq!(

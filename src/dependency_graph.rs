@@ -62,9 +62,17 @@ impl Graph {
     }
 
     fn serialize_edges(&self) -> Vec<(StatementId, StatementId, Variable)> {
-        self.graph.raw_edges().iter().map(|e|
-            (*self.graph.node_weight(e.source()).unwrap(), *self.graph.node_weight(e.target()).unwrap(), e.weight.clone())
-        ).collect()
+        self.graph
+            .raw_edges()
+            .iter()
+            .map(|e| {
+                (
+                    *self.graph.node_weight(e.source()).unwrap(),
+                    *self.graph.node_weight(e.target()).unwrap(),
+                    e.weight.clone(),
+                )
+            })
+            .collect()
     }
 }
 
@@ -125,8 +133,7 @@ impl DependencyGraph {
             }
             TailComment(statement, _) => self.insert(id, statement),
             // The following cannot have dependencies
-            Empty => 
-                self.graph.add_node(id),
+            Empty => self.graph.add_node(id),
             Comment(_) => self.graph.add_node(id),
             If(_, _, _) => self.graph.add_node(id),
             While(_, _) => self.graph.add_node(id),
@@ -255,9 +262,9 @@ impl DependencyGraph {
     }
 
     pub fn as_json(&self) -> serde_json::Value {
-        json!({ 
-            "nodes": self.graph.serialize_nodes(), 
-            "edges": self.graph.serialize_edges(), 
+        json!({
+            "nodes": self.graph.serialize_nodes(),
+            "edges": self.graph.serialize_edges(),
             "variables": self.variables
         })
     }

@@ -59,6 +59,17 @@
             cursor: pointer;
         }
 
+        .block {
+            padding-left: 1em;
+        }
+
+        .block>summary {
+            font-family: monospace;
+            white-space: pre-line;
+            list-style-position: outside;
+            color: darkgreen;
+        }
+
         .hypotheses {
             display: flex;
             align-items: flex-start;
@@ -239,7 +250,7 @@
             console.log("Received new data. (You can inspect it in the global variable `data`.)");
             let parsed = JSON.parse(event.data);
             parsed.hypothesis_tree.root = {
-                children: parsed.hypothesis_tree.root,
+                Single: { children: parsed.hypothesis_tree.root }
             };
             parsed.hypothesis_tree.hypotheses = color_hypotheses(parsed.hypothesis_tree.hypotheses);
             data = parsed;
@@ -278,10 +289,10 @@
                 legend_hyp.append("span").text(d => d.hypothesis.join(", "));
             }
             let rootNode = body.append("main").selectAll("ol").data([root]).join("ol");
-            makeNestedListItems(rootNode, data.statements, hypothesis_tree.hypotheses);
+            makeNestedListItems(rootNode, data.statements, hypothesis_tree.hypotheses, hypothesis_tree.blocks);
         }
 
-        function makeNestedListItems(rootNode, stmt_map, hyp_map) {
+        function makeNestedListItems(rootNode, stmt_map, hyp_map, block_map) {
             let hyps = rootNode.append('ol').classed("hypotheses", true)
                 .selectAll('li').data(d => {
                     return d.children || []
@@ -304,13 +315,25 @@
                 }
             });
             let nodes = hyps.append("ol").classed("nodes", true)
-                .selectAll("li").data(d => {
-                    return (d.children)
-                }).join("li");
+                .selectAll("li").data(d => d.children).join("li");
 
             nodes.each(function (d) {
-                let data = stmt_map[d.data.content];
-                let node = d3.select(this);
+                makeNode.call(this, d, stmt_map, hyp_map, block_map);
+            });
+        }
+
+        function makeNode(d, stmt_map, hyp_map, block_map) {
+            let node = d3.select(this);
+            if (d.data.Group) {
+                let data = d.data.Group;
+                let block = block_map[data.header].map(stmt_id => stmt_map[stmt_id].statement).join("\n");
+                let group = node.append("details").attr("open", "").classed("block", true);
+                group.append("summary").text(block);
+                group.append("ol").selectAll("li").data(d => d.children).join("li").each(function (d) {
+                    makeNode.call(this, d, stmt_map, hyp_map, block_map);
+                });
+            } else { // is statement
+                let data = stmt_map[d.data.Single.content];
                 let exp_container;
                 if (d.children && d.children.length > 0) {
                     node = node.append("details").attr("open", "");
@@ -340,16 +363,16 @@
                 exp_div.append("div").classed("long-info", true).text(longInfo);
 
                 if (d.children && d.children.length > 0) {
-                    makeNestedListItems(node, stmt_map, hyp_map);
+                    makeNestedListItems(node, stmt_map, hyp_map, block_map);
                 }
-            });
+            }
         }
 
         function get_children(item, hypotheses_map) {
             if (item.expressions) {
                 return item.expressions
-            } else if (item.children) {
-                const hyps = item.children;
+            } else if (item.Single) {
+                const hyps = item.Single.children;
                 const children = Object.keys(hyps).map(
                     key => {
                         return {
@@ -359,6 +382,8 @@
                     }
                 );
                 return children;
+            } else if (item.Group) {
+                return item.Group.elements;
             }
         }
 
