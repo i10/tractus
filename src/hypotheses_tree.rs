@@ -109,6 +109,9 @@ impl HypothesesMap {
 type NodeMap = HashMap<StatementId, (HypothesesId, HashMap<HypothesesId, Vec<StatementId>>)>;
 
 impl HypothesisTree<StatementId> {
+    /// Creates a new `HypothesisTree` based on the passed information.
+    ///
+    /// Requires all elements of `stmts` to be tracked in the `dependency_graph`.
     pub fn new<T>(stmts: &Statements<T>, dependency_graph: &DependencyGraph) -> Self {
         let mut roots: HashMap<HypothesesId, Vec<StatementId>> = HashMap::new();
         let mut hypotheses_map: HypothesesMap = HypothesesMap::new();
