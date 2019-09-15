@@ -281,7 +281,20 @@ fn extract_dependencies(expression: &Expression) -> Vec<RIdentifier> {
             .collect(),
         Column(left, _) => extract_dependencies(left),
         Index(left, _) => extract_dependencies(left),
-        _ => vec![],
+        ListIndex(left, _) => extract_dependencies(left),
+        Prefix(_, exp) => extract_dependencies(exp),
+        Infix(_, left, right) => {
+            let mut deps = extract_dependencies(left);
+            deps.append(&mut extract_dependencies(right));
+            deps
+        }
+        OneSidedFormula(exp) => extract_dependencies(exp),
+        TwoSidedFormula(left, right) => {
+            let mut deps = extract_dependencies(left);
+            deps.append(&mut extract_dependencies(right));
+            deps
+        }
+        Function(_, _) | Constant(_) => Vec::new(),
     }
 }
 
@@ -321,7 +334,7 @@ mod tests {
 
     use super::*;
     use crate::parser::{Expression, Statement};
-    use crate::{assignment, call, column, constant, expression, tail_comment, variable};
+    use crate::{assignment, call, column, constant, expression, infix, tail_comment, variable};
 
     impl Graph {
         fn from_ids(ids: impl Iterator<Item = StatementId>) -> Self {
@@ -518,6 +531,13 @@ mod tests {
         #[test]
         fn finds_index() {
             let expression = index!(variable!("x"), vec![Some(constant!("1"))]);
+            let result = extract_dependencies(&expression);
+            assert_eq!(vec!["x".to_string()], result);
+        }
+
+        #[test]
+        fn finds_infix() {
+            let expression = infix!("+", variable!("x"), constant!("10"));
             let result = extract_dependencies(&expression);
             assert_eq!(vec!["x".to_string()], result);
         }
