@@ -238,10 +238,10 @@
         socket.onmessage = function (event) {
             console.log("Received new data. (You can inspect it in the global variable `data`.)");
             let parsed = JSON.parse(event.data);
-            parsed.root = {
-                children: parsed.root,
+            parsed.hypothesis_tree.root = {
+                children: parsed.hypothesis_tree.root,
             };
-            parsed.hypotheses = color_hypotheses(parsed.hypotheses);
+            parsed.hypothesis_tree.hypotheses = color_hypotheses(parsed.hypothesis_tree.hypotheses);
             data = parsed;
             render(parsed);
         }
@@ -256,25 +256,19 @@
 
         let width = 1000;
 
-        function make_tree(data) {
-            const root = d3.hierarchy(data.root, item => get_children(item, data.hypotheses));
+        function make_tree(hypothesis_tree) {
+            const root = d3.hierarchy(hypothesis_tree.root, item => get_children(item, hypothesis_tree.hypotheses));
             root.dx = 100;
             root.dy = 25;
             return d3.tree().nodeSize([root.dx, root.dy])(root);
         }
 
         function render(data) {
-            const root = make_tree(data);
-
-            let x0 = Infinity;
-            let x1 = -x0;
-            root.each(d => {
-                if (d.x > x1) x1 = d.x;
-                if (d.x < x0) x0 = d.x;
-            });
+            let hypothesis_tree = data.hypothesis_tree;
+            const root = make_tree(hypothesis_tree);
 
             let body = d3.select("body");
-            let hyps = Object.values(data.hypotheses).filter(h => h.hypothesis.length > 0);
+            let hyps = Object.values(hypothesis_tree.hypotheses).filter(h => h.hypothesis.length > 0);
             if (hyps.length > 0) {
                 let legend = body.append("aside").append("details").attr("open", "").classed("legend", true);
                 legend.append("summary").text("Legend of all hypotheses");
@@ -284,10 +278,10 @@
                 legend_hyp.append("span").text(d => d.hypothesis.join(", "));
             }
             let rootNode = body.append("main").selectAll("ol").data([root]).join("ol");
-            makeNestedListItems(rootNode, data.hypotheses);
+            makeNestedListItems(rootNode, data.statements, hypothesis_tree.hypotheses);
         }
 
-        function makeNestedListItems(rootNode, hyp_map) {
+        function makeNestedListItems(rootNode, stmt_map, hyp_map) {
             let hyps = rootNode.append('ol').classed("hypotheses", true)
                 .selectAll('li').data(d => {
                     return d.children || []
@@ -315,7 +309,7 @@
                 }).join("li");
 
             nodes.each(function (d) {
-                let data = d.data.content;
+                let data = stmt_map[d.data.content];
                 let node = d3.select(this);
                 let exp_container;
                 if (d.children && d.children.length > 0) {
@@ -346,7 +340,7 @@
                 exp_div.append("div").classed("long-info", true).text(longInfo);
 
                 if (d.children && d.children.length > 0) {
-                    makeNestedListItems(node, hyp_map);
+                    makeNestedListItems(node, stmt_map, hyp_map);
                 }
             });
         }

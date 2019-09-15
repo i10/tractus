@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use petgraph;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 
 use crate::parser::{Expression, RIdentifier, Statement, StatementId, Statements};
 
@@ -54,6 +55,16 @@ impl Graph {
             .map(|node_id| self.graph.node_weight(node_id).unwrap())
             .cloned()
             .collect()
+    }
+
+    fn serialize_nodes(&self) -> Vec<StatementId> {
+        self.graph.raw_nodes().iter().map(|n| n.weight).collect()
+    }
+
+    fn serialize_edges(&self) -> Vec<(StatementId, StatementId, Variable)> {
+        self.graph.raw_edges().iter().map(|e|
+            (*self.graph.node_weight(e.source()).unwrap(), *self.graph.node_weight(e.target()).unwrap(), e.weight.clone())
+        ).collect()
     }
 }
 
@@ -241,6 +252,14 @@ impl DependencyGraph {
                 Box::new(self.inline_exp(right, stmt_id, stmts)),
             ),
         }
+    }
+
+    pub fn as_json(&self) -> serde_json::Value {
+        json!({ 
+            "nodes": self.graph.serialize_nodes(), 
+            "edges": self.graph.serialize_edges(), 
+            "variables": self.variables
+        })
     }
 }
 

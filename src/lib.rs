@@ -1,7 +1,10 @@
 #[macro_use]
 extern crate pest_derive;
 
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 
 pub mod dependency_graph;
 pub mod hypotheses;
@@ -10,7 +13,7 @@ pub mod parser;
 
 pub use crate::dependency_graph::DependencyGraph;
 pub use crate::hypotheses_tree::HypothesisTree;
-pub use crate::parser::{Expression, LineSpan, Parsed, RIdentifier, Statement};
+pub use crate::parser::{Expression, LineSpan, Parsed, RIdentifier, Statement, StatementId};
 
 #[derive(Serialize, Deserialize, Default)]
 pub struct Tractus {
@@ -50,7 +53,9 @@ fn extract_assigned_variables(stmt: &Statement) -> Vec<RIdentifier> {
     use Statement::*;
     match stmt {
         Assignment(left, add, _) => {
-            let mut vs = vec![left.extract_variable_name().unwrap_or_else(|| left.to_string())];
+            let mut vs = vec![left
+                .extract_variable_name()
+                .unwrap_or_else(|| left.to_string())];
             let mut addition: Vec<String> = add
                 .iter()
                 .map(|v| v.extract_variable_name().unwrap_or_else(|| v.to_string()))
@@ -107,11 +112,17 @@ impl Tractus {
         Ok(())
     }
 
-    pub fn hypotheses_tree(&self) -> HypothesisTree<StatementMeta> {
-        let tree = HypothesisTree::new(self.parsed.statements(), &self.dependency_graph);
-        tree.into_map(|stmt_id| {
-            let (statement, (span, meta)) = &self.parsed.statements()[stmt_id];
-            StatementMeta::with(&statement, span.clone(), meta.clone())
+    pub fn hypotheses_tree(&self) -> HypothesisTree<StatementId> {
+        HypothesisTree::new(self.parsed.statements(), &self.dependency_graph)
+    }
+
+    pub fn serialize(&self) -> serde_json::Value {
+        json!({
+            "statements": self.parsed.statements().as_map(
+                    &mut |id, stmt, (span, meta)| (id, StatementMeta::with(&stmt, span.clone(), meta.clone()))
+                ).into_iter().collect::<HashMap<StatementId, StatementMeta>>(),
+            "dependencies": self.dependency_graph.as_json(),
+            "hypothesis_tree": self.hypotheses_tree()
         })
     }
 }
