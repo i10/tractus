@@ -59,15 +59,22 @@
             cursor: pointer;
         }
 
-        .block {
-            padding-left: 1em;
+        .block>ol {
+            margin-left: 1em;
         }
 
-        .block>summary {
+        .block>summary>.short-info {
             font-family: monospace;
-            white-space: pre-line;
-            list-style-position: outside;
+            white-space: pre;
             color: darkgreen;
+            vertical-align: top;
+            max-width: var(--column-width);
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .block>summary:hover {
+            background-color: rgba(0, 0, 0, 0.05);
         }
 
         .hypotheses {
@@ -328,7 +335,7 @@
                 let data = d.data.Group;
                 let block = block_map[data.header].map(stmt_id => stmt_map[stmt_id].statement).join("\n");
                 let group = node.append("details").attr("open", "").classed("block", true);
-                group.append("summary").text(block);
+                group.append("summary").append("span").classed("short-info", true).text(block);
                 group.append("ol").selectAll("li").data(d => d.children).join("li").each(function (d) {
                     makeNode.call(this, d, stmt_map, hyp_map, block_map);
                 });
