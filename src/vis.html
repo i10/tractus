@@ -354,7 +354,9 @@
                 } else {
                     exp_container = node.append("div");
                 }
-                exp_container.on("click", function () {
+                exp_container.classed("expression-container", true);
+                let exp_div = exp_container.append("div").classed("expression", true);
+                exp_div.on("click", function () {
                     if (reproSelection != null) {
                         if (reproSelection.has(this)) {
                             reproSelection.delete(this);
@@ -367,8 +369,6 @@
                         d3.event.stopPropagation();
                     }
                 })
-                exp_container.classed("expression-container", true);
-                let exp_div = exp_container.append("div").classed("expression", true);
                 let short_info = exp_div.append("div").classed("short-info", true);
                 if (data.assigned_variables.length > 0) {
                     short_info.append("span").classed("variables", true).text(
