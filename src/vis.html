@@ -47,7 +47,7 @@
         }
 
         .legend>ol>li>.marker {
-            width: 0.2rem;
+            width: 5px;
             background-color: white;
         }
 
@@ -104,7 +104,7 @@
         .hypotheses>li {
             display: grid;
             grid-gap: 0.3em;
-            grid-template-columns: 0.2rem auto;
+            grid-template-columns: 5px auto;
             grid-template-areas:
                 "marker hypothesis"
                 "marker nodes";
@@ -118,7 +118,7 @@
             height: 100%;
             width: 100%;
             background-color: white;
-            border: 1px solid rgba(0, 0, 0, 0.2);
+            border-left: 1px dashed rgba(0, 0, 0, 0.2);
             border-top: none;
         }
 
@@ -270,7 +270,6 @@
             };
             parsed.hypothesis_tree.hypotheses = color_hypotheses(parsed.hypothesis_tree.hypotheses);
             data = parsed;
-            document.getElementById("tree").remove(); // RStudio's viewer pane does not respect d3's removal, so we manually delete the entire tree.
             render(parsed);
         }
         socket.onerror = function (event) {
@@ -302,10 +301,10 @@
                 legend.append("summary").text("Legend of all hypotheses");
                 legend_hyp = legend.append("ol").selectAll("li").data(hyps).join("li")
                     .style("border-color", d => d.color);
-                legend_hyp.append("div").classed("marker", true).style("background-color", d => d.color);
+                legend_hyp.append("div").classed("marker", true).style("background", d => d.color);
                 legend_hyp.append("span").text(d => d.hypothesis.join(", "));
             }
-            let rootNode = body.append("main").attr("id", "tree").selectAll("ol").data([root]).join("ol");
+            let rootNode = body.append("main").selectAll("ol").data([root]).join("ol");
             makeNestedListItems(rootNode, data.statements, hypothesis_tree.hypotheses, hypothesis_tree.blocks);
         }
 
@@ -389,7 +388,7 @@
                 });
                 let longInfo = `${data.span.from}: ${data.statement}`;
                 if (data.meta && data.meta.result != "") {
-                    longInfo += `\n${data.meta.result}`
+                    longInfo += `\n\n${data.meta.result}`
                 }
                 exp_div.append("div").classed("long-info", true).text(longInfo);
 
@@ -434,7 +433,7 @@
                     }
                 } else {
                     let hue = key * color_step;
-                    let color = `hsl(${hue}, 100%, 50%)`;
+                    let color = `hsl(${hue}, 90%, 60%)`;
                     hyps[key] = {
                         hypothesis: value,
                         color: color
@@ -505,7 +504,6 @@
             Select nodes for reproduction code
         </button>
     </aside>
-    <main id="tree"></main>
 </body>
 
 </html>
