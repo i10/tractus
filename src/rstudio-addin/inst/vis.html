@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title></title>
+    <meta name="description" content="">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <style>
+        :root {
+            --column-width: 12em;
+        }
+
+        ol {
+            padding: 0;
+            list-style: none;
+        }
+
+        .legend {
+            margin: 1em;
+            border: 1px solid rgba(0, 0, 0, 0.2);
+            padding: 0.3em;
+        }
+
+        .legend summary {
+            font-size: 1rem;
+            font-weight: bold;
+            margin: 0;
+        }
+
+        .legend>ol {
+            display: flex;
+            flex-direction: row;
+            flex-wrap: wrap;
+            margin: 0;
+        }
+
+        .legend>ol>li {
+            display: flex;
+            flex-direction: row;
+            align-items: stretch;
+            border: 1px solid;
+            margin: 0.5em;
+            font-size: 0.8rem;
+            font-style: italic;
+        }
+
+        .legend>ol>li>.marker {
+            width: 5px;
+            background-color: white;
+        }
+
+        .legend>ol>li>span {
+            margin: 0.3em;
+        }
+
+        summary {
+            cursor: pointer;
+        }
+
+        .block>ol {
+            margin-left: 1em;
+        }
+
+        .block>summary>.short-info {
+            font-family: monospace;
+            white-space: pre;
+            color: darkgreen;
+            vertical-align: top;
+            max-width: var(--column-width);
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .block>summary:hover {
+            background-color: rgba(0, 0, 0, 0.05);
+        }
+
+        .hypotheses {
+            display: flex;
+            align-items: flex-start;
+            padding-left: 1rem;
+        }
+
+        .nodes {
+            grid-area: nodes;
+            padding-left: 0.3rem;
+            display: grid;
+            grid-template-columns: auto;
+            grid-gap: 0.1em;
+        }
+
+        .hypothesis-container {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .selected {
+            border: 1px solid black;
+        }
+
+        .hypotheses>li {
+            display: grid;
+            grid-gap: 0.3em;
+            grid-template-columns: 5px auto;
+            grid-template-areas:
+                "marker hypothesis"
+                "marker nodes";
+            border-top: 1px solid rgba(0, 0, 0, 0.1);
+            margin-bottom: 0.5em;
+            padding-right: 1em;
+        }
+
+        .hypotheses>li>.marker {
+            grid-area: marker;
+            height: 100%;
+            width: 100%;
+            background-color: white;
+            border-left: 1px dashed rgba(0, 0, 0, 0.2);
+            border-top: none;
+        }
+
+        .hypothesis {
+            grid-area: hypothesis;
+            max-width: var(--column-width);
+            position: relative;
+            font-style: italic;
+            font-size: 0.8rem;
+        }
+
+        .expression-container {
+            max-width: var(--column-width);
+        }
+
+        .expression {
+            font-family: monospace;
+            font-weight: bold;
+            display: inline;
+        }
+
+        .expression>* {
+            display: inline-block;
+            overflow: hidden;
+        }
+
+        .variables {
+            font-weight: normal;
+            background-color: lightgray;
+        }
+
+        .assign {
+            margin-left: 0.3em;
+            margin-right: 0.3em;
+        }
+
+        .hypothesis,
+        .expression {
+            position: relative;
+        }
+
+        /*
+         *
+         * INFORMATION HOVER
+         *
+         */
+
+        .short-info {
+            position: relative;
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.925);
+            max-width: var(--column-width);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            z-index: -1;
+        }
+
+        .long-info {
+            position: absolute;
+            left: 0;
+            top: 100%;
+            display: block;
+            visibility: hidden;
+            white-space: pre;
+            background: white;
+            width: min-content;
+            padding: 0.3em;
+            border: 1px solid black;
+            z-index: 2;
+            pointer-events: none;
+        }
+
+        .hypothesis>.short-info {
+            padding: 0.3em;
+            border: 1px solid transparent;
+        }
+
+        .hypothesis>.long-info {
+            top: 0;
+        }
+
+        .expression:hover {
+            background-color: rgba(0, 0, 0, 0.05);
+        }
+
+        .hypothesis:hover>.long-info,
+        .expression:hover>.long-info {
+            display: inherit;
+            visibility: visible;
+        }
+
+        /*
+         *
+         * CONNECTION INDICATOR
+         *
+         */
+
+        #connected.show-error {
+            display: none;
+        }
+
+        #connection-lost {
+            display: none;
+        }
+
+        #connection-lost .error {
+            color: red;
+            font-weight: bold;
+        }
+
+        #connection-lost.show-error {
+            display: block;
+            animation-name: fadeIn;
+            animation-duration: 1s;
+            animation-delay: 0.25s;
+            animation-fill-mode: both;
+        }
+
+        @keyframes fadeIn {
+            0% {
+                opacity: 0;
+            }
+
+            100% {
+                opacity: 1;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <!--<script src="d3js/d3.min.js"></script>-->
+    <script src="https://d3js.org/d3.v5.min.js"></script>
+    <script>
+        var data;
+        var reproSelection = null;
+
+        let socket = new WebSocket("ws://127.0.0.1:2794", "tractus-websocket");
+        socket.onopen = function (event) {
+            document.getElementById("connection-lost").setAttribute("class", "");
+            document.getElementById("connected").setAttribute("class", "");
+        };
+        socket.onmessage = function (event) {
+            console.log("Received new data. (You can inspect it in the global variable `data`.)");
+            let parsed = JSON.parse(event.data);
+            parsed.hypothesis_tree.root = {
+                Single: { children: parsed.hypothesis_tree.root }
+            };
+            parsed.hypothesis_tree.hypotheses = color_hypotheses(parsed.hypothesis_tree.hypotheses);
+            data = parsed;
+            render(parsed);
+        }
+        socket.onerror = function (event) {
+            console.error(JSON.stringify(event));
+        }
+        socket.onclose = function (event) {
+            console.warn("Websocket closed.");
+            document.getElementById("connection-lost").setAttribute("class", "show-error");
+            document.getElementById("connected").setAttribute("class", "show-error");
+        }
+
+        let width = 1000;
+
+        function make_tree(hypothesis_tree) {
+            const root = d3.hierarchy(hypothesis_tree.root, item => get_children(item, hypothesis_tree.hypotheses));
+            root.dx = 100;
+            root.dy = 25;
+            return d3.tree().nodeSize([root.dx, root.dy])(root);
+        }
+
+        function render(data) {
+            let hypothesis_tree = data.hypothesis_tree;
+            const root = make_tree(hypothesis_tree);
+
+            let body = d3.select("body");
+            let hyps = Object.values(hypothesis_tree.hypotheses).filter(h => h.hypothesis.length > 0);
+            if (hyps.length > 0) {
+                let legend = body.append("aside").append("details").attr("open", "").classed("legend", true);
+                legend.append("summary").text("Legend of all hypotheses");
+                legend_hyp = legend.append("ol").selectAll("li").data(hyps).join("li")
+                    .style("border-color", d => d.color);
+                legend_hyp.append("div").classed("marker", true).style("background", d => d.color);
+                legend_hyp.append("span").text(d => d.hypothesis.join(", "));
+            }
+            let rootNode = body.append("main").selectAll("ol").data([root]).join("ol");
+            makeNestedListItems(rootNode, data.statements, hypothesis_tree.hypotheses, hypothesis_tree.blocks);
+        }
+
+        function makeNestedListItems(rootNode, stmt_map, hyp_map, block_map) {
+            let hyps = rootNode.append('ol').classed("hypotheses", true)
+                .selectAll('li').data(d => {
+                    return d.children || []
+                })
+                .join("li");
+            hyps.each(function (d) {
+                let hyp = hyp_map[d.data.hypothesis_id];
+                let hypColor = hyp.color || "white";
+                let li = d3.select(this);
+                li.style("border-top-color", hypColor == "white" ? "rgba(0, 0, 0, 0.1)" : hypColor);
+                li.append("div").classed("marker", true).style("background-color", hypColor);
+                if (hyp.hypothesis != "") {
+                    let div = d3.select(this).append("div").classed("hypothesis-container", true);
+                    let hypDisplay = hyp.hypothesis.join(", ");
+                    h = div.append("div").classed("hypothesis", true);
+                    h.append("span").text(hypDisplay).classed("short-info", true);
+                    if (hypDisplay != "") {
+                        h.append("div").classed("long-info", true).text(hypDisplay)
+                    }
+                }
+            });
+            let nodes = hyps.append("ol").classed("nodes", true)
+                .selectAll("li").data(d => d.children).join("li");
+
+            nodes.each(function (d) {
+                makeNode.call(this, d, stmt_map, hyp_map, block_map);
+            });
+        }
+
+        function makeNode(d, stmt_map, hyp_map, block_map) {
+            let node = d3.select(this);
+            if (d.data.Group) {
+                let data = d.data.Group;
+                let block = block_map[data.header].map(stmt_id => stmt_map[stmt_id].statement).join("\n");
+                let group = node.append("details").attr("open", "").classed("block", true);
+                group.append("summary").append("span").classed("short-info", true).text(block);
+                group.append("ol").selectAll("li").data(d => d.children).join("li").each(function (d) {
+                    makeNode.call(this, d, stmt_map, hyp_map, block_map);
+                });
+            } else { // is statement
+                let data = stmt_map[d.data.Single.content];
+                let exp_container;
+                if (d.children && d.children.length > 0) {
+                    node = node.append("details").attr("open", "");
+                    exp_container = node.append("summary");
+                } else {
+                    exp_container = node.append("div");
+                }
+                exp_container.classed("expression-container", true);
+                let exp_div = exp_container.append("div").classed("expression", true);
+                exp_div.on("click", function () {
+                    if (reproSelection != null) {
+                        if (reproSelection.has(this)) {
+                            reproSelection.delete(this);
+                            d3.select(this).classed("selected", false);
+                        } else {
+                            reproSelection.add(this);
+                            d3.select(this).classed("selected", true);
+                        }
+                        d3.event.preventDefault();
+                        d3.event.stopPropagation();
+                    }
+                })
+                let short_info = exp_div.append("div").classed("short-info", true);
+                if (data.assigned_variables.length > 0) {
+                    short_info.append("span").classed("variables", true).text(
+                        `${data.assigned_variables.join(" <- ")}`
+                    );
+                    short_info.append("span").classed("assign", true).text("<-");
+                }
+                short_info.append("span").text(d => {
+                    if (data.function_name) {
+                        return data.function_name + "(…)";
+                    } else {
+                        return truncate(data.statement, 25);
+                    }
+                });
+                let longInfo = `${data.span.from}: ${data.statement}`;
+                if (data.meta && data.meta.result != "") {
+                    longInfo += `\n\n${data.meta.result}`
+                }
+                exp_div.append("div").classed("long-info", true).text(longInfo);
+
+                if (d.children && d.children.length > 0) {
+                    makeNestedListItems(node, stmt_map, hyp_map, block_map);
+                }
+            }
+        }
+
+        function get_children(item, hypotheses_map) {
+            if (item.expressions) {
+                return item.expressions
+            } else if (item.Single) {
+                const hyps = item.Single.children;
+                const children = Object.keys(hyps).map(
+                    key => {
+                        return {
+                            hypothesis_id: key,
+                            expressions: hyps[key]
+                        };
+                    }
+                );
+                return children;
+            } else if (item.Group) {
+                return item.Group.elements;
+            }
+        }
+
+        function truncate(str, n) {
+            return str.substr(0, n - 1) + (str.length > n ? '…' : '');
+        }
+
+        function color_hypotheses(hyps) {
+            let number_of_hyps = Object.keys(hyps).length;
+            let color_step = 360 / (number_of_hyps - 1);
+
+            for (let [key, value] of Object.entries(hyps)) {
+                if (key == 0) {
+                    hyps[key] = {
+                        hypothesis: value,
+                        color: "white"
+                    }
+                } else {
+                    let hue = key * color_step;
+                    let color = `hsl(${hue}, 90%, 60%)`;
+                    hyps[key] = {
+                        hypothesis: value,
+                        color: color
+                    }
+                }
+            }
+
+            return hyps;
+        }
+
+        function selectNodes() {
+            let button = document.getElementById("repro");
+            if (reproSelection == null) {
+                button.textContent = "Copy reproduction code to clipboard";
+                reproSelection = new Set([]);
+            } else {
+                let dependencies = new Set([]);
+                for (n of reproSelection) {
+                    d3.select(n).classed("selected", false);
+                    let id = d3.select(n).datum().data.Single.content;
+                    for (a of ancestors(id)) {
+                        dependencies.add(a);
+                    }
+                }
+                dependencies = Array.from(dependencies);
+                dependencies.sort((l, r) => l - r);
+                let reproCode = dependencies.map(t => data.statements[t].statement).join("\n")
+                console.log(reproCode);
+                navigator.clipboard.writeText(reproCode);
+                button.textContent = "Select nodes for reproduction code";
+                reproSelection = null;
+            }
+        }
+
+        function ancestors(id) {
+            let a = new Set([id]);
+            let new_a;
+            do {
+                new_a = a;
+                for (id of a) {
+                    for (p_id of parents(id)) {
+                        new_a.add(p_id);
+                    }
+                }
+            } while (a != new_a)
+            return a;
+        }
+
+        function parents(id) {
+            let p = new Set([]);
+            for (edge of data.dependencies.edges) {
+                if (edge[1] == id) {
+                    p.add(edge[0]);
+                }
+            }
+            return p;
+        }
+    </script>
+    <div id="connected" class="show-error">
+        ✔️️ Connected to Tractus.
+    </div>
+    <div id="connection-lost" class="show-error">
+        <p class="error">❌ Not connected to Tractus!</p>
+        <p>Ensure that Tractus is running and reload this page.</p>
+    </div>
+    <aside id="control">
+        <button id="repro" onclick="selectNodes()">
+            Select nodes for reproduction code
+        </button>
+    </aside>
+</body>
+
+</html>

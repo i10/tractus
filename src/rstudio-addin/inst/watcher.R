@@ -18,7 +18,6 @@ update <- function() {
         for(index in c(nextLine:(length(history)))) {
             # Send the lines of code along with output
             statement = str_remove(history[index], "^\\d+:")
-            print(statement)
 
             # Capture result
             # Do not run install.packages statements
@@ -39,20 +38,18 @@ update <- function() {
             if (is.null(result)) {
                 JSONToSend = paste('{"statement": "', statement, '", "meta": { "result": {} } }', sep = "")
             } else {
-                output = paste(result, collapse = '')
+                output = paste(result, collapse = '\\n')
                 output = str_replace_all(output, '"', '\\\\"')
                 JSONToSend = paste('{"statement": "', statement, '", "meta": { "result": \"', output,'\" } }', sep = "")
             }
 
             # Send to websocket
             if (!isPluginExecution) {
-                print("Sending to socket")
+                print("Sending to websocket.")
                 print(JSONToSend)
                 socket$send(JSONToSend)
             }
-            print("updating nextline")
             nextLine <<- index + 1
-            print(nextLine)
         }
     }
 }
@@ -80,12 +77,12 @@ poll_until_connected <- function(ws, timeout = 5) {
   while (!connected && Sys.time() < end) {
     # Need to run the event loop for websocket to complete connection.
     later::run_now(0.1)
-    
+
     ready_state <- ws$readyState()
     if (ready_state == 0L) {
       # 0 means we're still trying to connect.
       # For debugging, indicate how many times we've done this.
-      cat(".")         
+      cat(".")
     } else if (ready_state == 1L) {
       connected <- TRUE
     } else {
