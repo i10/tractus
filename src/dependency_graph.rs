@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use petgraph;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 
 use crate::parser::{Expression, RIdentifier, Statement, StatementId, Statements};
 
@@ -53,6 +54,24 @@ impl Graph {
             .neighbors_directed(node_id, direction)
             .map(|node_id| self.graph.node_weight(node_id).unwrap())
             .cloned()
+            .collect()
+    }
+
+    fn serialize_nodes(&self) -> Vec<StatementId> {
+        self.graph.raw_nodes().iter().map(|n| n.weight).collect()
+    }
+
+    fn serialize_edges(&self) -> Vec<(StatementId, StatementId, Variable)> {
+        self.graph
+            .raw_edges()
+            .iter()
+            .map(|e| {
+                (
+                    *self.graph.node_weight(e.source()).unwrap(),
+                    *self.graph.node_weight(e.target()).unwrap(),
+                    e.weight.clone(),
+                )
+            })
             .collect()
     }
 }
@@ -114,8 +133,7 @@ impl DependencyGraph {
             }
             TailComment(statement, _) => self.insert(id, statement),
             // The following cannot have dependencies
-            Empty => 
-                self.graph.add_node(id),
+            Empty => self.graph.add_node(id),
             Comment(_) => self.graph.add_node(id),
             If(_, _, _) => self.graph.add_node(id),
             While(_, _) => self.graph.add_node(id),
@@ -242,6 +260,14 @@ impl DependencyGraph {
             ),
         }
     }
+
+    pub fn as_json(&self) -> serde_json::Value {
+        json!({
+            "nodes": self.graph.serialize_nodes(),
+            "edges": self.graph.serialize_edges(),
+            "variables": self.variables
+        })
+    }
 }
 
 /// Returns the names of the variables used in the `expression`.
@@ -255,7 +281,20 @@ fn extract_dependencies(expression: &Expression) -> Vec<RIdentifier> {
             .collect(),
         Column(left, _) => extract_dependencies(left),
         Index(left, _) => extract_dependencies(left),
-        _ => vec![],
+        ListIndex(left, _) => extract_dependencies(left),
+        Prefix(_, exp) => extract_dependencies(exp),
+        Infix(_, left, right) => {
+            let mut deps = extract_dependencies(left);
+            deps.append(&mut extract_dependencies(right));
+            deps
+        }
+        OneSidedFormula(exp) => extract_dependencies(exp),
+        TwoSidedFormula(left, right) => {
+            let mut deps = extract_dependencies(left);
+            deps.append(&mut extract_dependencies(right));
+            deps
+        }
+        Function(_, _) | Constant(_) => Vec::new(),
     }
 }
 
@@ -295,7 +334,7 @@ mod tests {
 
     use super::*;
     use crate::parser::{Expression, Statement};
-    use crate::{assignment, call, column, constant, expression, tail_comment, variable};
+    use crate::{assignment, call, column, constant, expression, infix, tail_comment, variable};
 
     impl Graph {
         fn from_ids(ids: impl Iterator<Item = StatementId>) -> Self {
@@ -492,6 +531,13 @@ mod tests {
         #[test]
         fn finds_index() {
             let expression = index!(variable!("x"), vec![Some(constant!("1"))]);
+            let result = extract_dependencies(&expression);
+            assert_eq!(vec!["x".to_string()], result);
+        }
+
+        #[test]
+        fn finds_infix() {
+            let expression = infix!("+", variable!("x"), constant!("10"));
             let result = extract_dependencies(&expression);
             assert_eq!(vec!["x".to_string()], result);
         }

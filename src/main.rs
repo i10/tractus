@@ -198,7 +198,7 @@ fn run(conf: RunConfig) -> Res {
                 offset = reader.seek(io::SeekFrom::Current(0))?; // Update offset for next run.
 
                 tractus.parse_lines(lines)?;
-                let result = serde_json::to_string(&tractus.hypotheses_tree())?;
+                let result = serde_json::to_string(&tractus.serialize())?;
                 write_result(&mut output, &result)
             };
 
@@ -303,7 +303,7 @@ fn serve(conf: ServeConfig) -> Res {
                     offset = reader.seek(io::SeekFrom::End(0))?; // Update offset for next run.
 
                     tractus.parse_lines(lines)?;
-                    let result = serde_json::to_string(&tractus.hypotheses_tree())?;
+                    let result = serde_json::to_string(&tractus.serialize())?;
                     Ok(result)
                 };
                 let mut update_and_broadcast = init_server(|_, _| {})?;
@@ -355,7 +355,7 @@ fn serve(conf: ServeConfig) -> Res {
                     });
                 })?;
             let mut clean_lines = get_cleaner(conf.clean);
-            update_and_broadcast(serde_json::to_string(&tractus.hypotheses_tree())?);
+            update_and_broadcast(serde_json::to_string(&tractus.serialize())?);
 
             println!("Waiting for input via websockets.");
             for (ip, stmt) in stmt_receiver {
@@ -373,7 +373,7 @@ fn serve(conf: ServeConfig) -> Res {
                             debug!("Updating store.");
                             std::fs::write(path, serde_json::to_string(&tractus)?)?;
                         }
-                        let result = serde_json::to_string(&tractus.hypotheses_tree())?;
+                        let result = serde_json::to_string(&tractus.serialize())?;
 
                         update_and_broadcast(result);
                     }
@@ -574,7 +574,7 @@ fn get_process(
         let lines = clean_lines(lines);
         let mut tractus = Tractus::new();
         tractus.parse_lines(lines)?;
-        let result = serde_json::to_string(&tractus.hypotheses_tree())?;
+        let result = serde_json::to_string(&tractus.serialize())?;
         Ok(result)
     })
 }
