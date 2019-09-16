@@ -10,6 +10,25 @@
     <style>
         :root {
             --column-width: 12em;
+            --border-color: rgba(0, 0, 0, 0.2);
+        }
+        
+        html {
+            height: 100%;
+        }
+
+        body {
+            font-family: sans-serif;
+            padding: 0;
+            margin: 0;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        main {
+            flex: 1;
+            overflow: auto;
         }
 
         ol {
@@ -17,10 +36,45 @@
             list-style: none;
         }
 
+        button {
+            border: 1px solid var(--border-color);
+            background: white;
+            padding: 0.2rem;
+            padding-left: 0.4rem;
+            padding-right: 0.4rem;
+        }
+
+        button:hover {
+            background: hsl(0, 0%, 95%);
+        }
+
+        .hypotheses-name {
+            font-size: 0.9rem;
+        }
+
+        #toolbar {
+            display: flex;
+            flex-direction: column;
+            padding: 1em;
+            padding-top: 0.5em;
+            background: white;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        #toolbar > * + * {
+            margin-top: 1em;
+        }
+
+        #connection-status > * {
+            display: inline-block;
+        }
+
         .legend {
-            margin: 1em;
+            flex: 1;
             border: 1px solid rgba(0, 0, 0, 0.2);
             padding: 0.3em;
+            overflow: auto;
+            max-height: 25vh;
         }
 
         .legend summary {
@@ -42,8 +96,6 @@
             align-items: stretch;
             border: 1px solid;
             margin: 0.5em;
-            font-size: 0.8rem;
-            font-style: italic;
         }
 
         .legend>ol>li>.marker {
@@ -118,7 +170,7 @@
             height: 100%;
             width: 100%;
             background-color: white;
-            border-left: 1px dashed rgba(0, 0, 0, 0.2);
+            border-left: 1px solid rgba(0, 0, 0, 0.075);
             border-top: none;
         }
 
@@ -126,8 +178,6 @@
             grid-area: hypothesis;
             max-width: var(--column-width);
             position: relative;
-            font-style: italic;
-            font-size: 0.8rem;
         }
 
         .expression-container {
@@ -136,8 +186,8 @@
 
         .expression {
             font-family: monospace;
-            font-weight: bold;
-            display: inline;
+            display: inline-block;
+            vertical-align: middle;
         }
 
         .expression>* {
@@ -146,8 +196,14 @@
         }
 
         .variables {
-            font-weight: normal;
-            background-color: lightgray;
+            font-weight: bold;
+            background-color: darkslategray;
+            color: white;
+            font-size: 0.8rem;
+            display: inline-block;
+            padding: 0.1rem;
+            padding-left: 0.2rem;
+            padding-right: 0.2rem;
         }
 
         .assign {
@@ -201,7 +257,7 @@
             top: 0;
         }
 
-        .expression:hover {
+        .expression-container:hover {
             background-color: rgba(0, 0, 0, 0.05);
         }
 
@@ -231,11 +287,20 @@
         }
 
         #connection-lost.show-error {
-            display: block;
+            display: inline-block;
             animation-name: fadeIn;
             animation-duration: 1s;
             animation-delay: 0.25s;
             animation-fill-mode: both;
+        }
+
+        .show-error {
+            vertical-align: top;
+        }
+        
+        .show-error p {
+            margin: 0;
+            margin-bottom: 0.5em;
         }
 
         @keyframes fadeIn {
@@ -259,6 +324,7 @@
 
         let socket = new WebSocket("ws://127.0.0.1:2794", "tractus-websocket");
         socket.onopen = function (event) {
+            document.getElementById("toolbar").setAttribute("open", "");
             document.getElementById("connection-lost").setAttribute("class", "");
             document.getElementById("connected").setAttribute("class", "");
         };
@@ -277,6 +343,7 @@
         }
         socket.onclose = function (event) {
             console.warn("Websocket closed.");
+            document.getElementById("toolbar").removeAttribute("open");
             document.getElementById("connection-lost").setAttribute("class", "show-error");
             document.getElementById("connected").setAttribute("class", "show-error");
         }
@@ -294,17 +361,14 @@
             let hypothesis_tree = data.hypothesis_tree;
             const root = make_tree(hypothesis_tree);
 
-            let body = d3.select("body");
             let hyps = Object.values(hypothesis_tree.hypotheses).filter(h => h.hypothesis.length > 0);
             if (hyps.length > 0) {
-                let legend = body.append("aside").append("details").attr("open", "").classed("legend", true);
-                legend.append("summary").text("Legend of all hypotheses");
-                legend_hyp = legend.append("ol").selectAll("li").data(hyps).join("li")
+                let legend_hyp = d3.select("#legend ol").selectAll("li").data(hyps).join("li")
                     .style("border-color", d => d.color);
                 legend_hyp.append("div").classed("marker", true).style("background", d => d.color);
-                legend_hyp.append("span").text(d => d.hypothesis.join(", "));
+                legend_hyp.append("span").classed("hypotheses-name", true).text(d => d.hypothesis.join(", "));
             }
-            let rootNode = body.append("main").selectAll("ol").data([root]).join("ol");
+            let rootNode = d3.select("#hypothesis-tree").data([root]);
             makeNestedListItems(rootNode, data.statements, hypothesis_tree.hypotheses, hypothesis_tree.blocks);
         }
 
@@ -324,7 +388,7 @@
                     let div = d3.select(this).append("div").classed("hypothesis-container", true);
                     let hypDisplay = hyp.hypothesis.join(", ");
                     h = div.append("div").classed("hypothesis", true);
-                    h.append("span").text(hypDisplay).classed("short-info", true);
+                    h.append("span").classed("hypotheses-name", true).text(hypDisplay).classed("short-info", true);
                     if (hypDisplay != "") {
                         h.append("div").classed("long-info", true).text(hypDisplay)
                     }
@@ -492,18 +556,29 @@
             return p;
         }
     </script>
-    <div id="connected" class="show-error">
-        ✔️️ Connected to Tractus.
-    </div>
-    <div id="connection-lost" class="show-error">
-        <p class="error">❌ Not connected to Tractus!</p>
-        <p>Ensure that Tractus is running and reload this page.</p>
-    </div>
-    <aside id="control">
-        <button id="repro" onclick="selectNodes()">
-            Select nodes for reproduction code
-        </button>
-    </aside>
+    <details id="toolbar">
+        <summary id="connection-status">
+            <div id="connected" class="show-error">
+                ✔️️ Connected to Tractus.
+            </div>
+            <div id="connection-lost" class="show-error">
+                <p class="error">❌ Not connected to Tractus!</p>
+                <p>Ensure that Tractus is running and reload this page.</p>
+            </div>
+        </summary>
+        <aside id="legend">
+            <details class="legend" open onclick="arguments[0].stopPropagation()">
+                <summary>Hypotheses explored</summary>
+                <ol></ol>
+            </details>
+        </aside>
+        <aside id="control">
+            <button id="repro" onclick="selectNodes()">
+                Select nodes for reproduction code
+            </button>
+        </aside>
+    </details>
+    <main id="hypothesis-tree"></main>
 </body>
 
 </html>
