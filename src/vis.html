@@ -97,6 +97,10 @@
             flex-direction: column;
         }
 
+        .selected {
+            border: 1px solid black;
+        }
+
         .hypotheses>li {
             display: grid;
             grid-gap: 0.3em;
@@ -247,6 +251,7 @@
     <script src="https://d3js.org/d3.v5.min.js"></script>
     <script>
         var data;
+        var reproSelection = null;
 
         let socket = new WebSocket("ws://127.0.0.1:2794", "tractus-websocket");
         socket.onopen = function (event) {
@@ -349,6 +354,19 @@
                 } else {
                     exp_container = node.append("div");
                 }
+                exp_container.on("click", function () {
+                    if (reproSelection != null) {
+                        if (reproSelection.has(this)) {
+                            reproSelection.delete(this);
+                            d3.select(this).classed("selected", false);
+                        } else {
+                            reproSelection.add(this);
+                            d3.select(this).classed("selected", true);
+                        }
+                        d3.event.preventDefault();
+                        d3.event.stopPropagation();
+                    }
+                })
                 exp_container.classed("expression-container", true);
                 let exp_div = exp_container.append("div").classed("expression", true);
                 let short_info = exp_div.append("div").classed("short-info", true);
@@ -421,6 +439,54 @@
 
             return hyps;
         }
+
+        function selectNodes() {
+            let button = document.getElementById("repro");
+            if (reproSelection == null) {
+                button.textContent = "Copy reproduction code to clipboard";
+                reproSelection = new Set([]);
+            } else {
+                let dependencies = new Set([]);
+                for (n of reproSelection) {
+                    d3.select(n).classed("selected", false);
+                    let id = d3.select(n).datum().data.Single.content;
+                    for (a of ancestors(id)) {
+                        dependencies.add(a);
+                    }
+                }
+                dependencies = Array.from(dependencies);
+                dependencies.sort((l, r) => l - r);
+                let reproCode = dependencies.map(t => data.statements[t].statement).join("\n")
+                console.log(reproCode);
+                navigator.clipboard.writeText(reproCode);
+                button.textContent = "Select nodes for reproduction code";
+                reproSelection = null;
+            }
+        }
+
+        function ancestors(id) {
+            let a = new Set([id]);
+            let new_a;
+            do {
+                new_a = a;
+                for (id of a) {
+                    for (p_id of parents(id)) {
+                        new_a.add(p_id);
+                    }
+                }
+            } while (a != new_a)
+            return a;
+        }
+
+        function parents(id) {
+            let p = new Set([]);
+            for (edge of data.dependencies.edges) {
+                if (edge[1] == id) {
+                    p.add(edge[0]);
+                }
+            }
+            return p;
+        }
     </script>
     <div id="connected" class="show-error">
         ✔️️ Connected to Tractus.
@@ -429,6 +495,11 @@
         <p class="error">❌ Not connected to Tractus!</p>
         <p>Ensure that Tractus is running and reload this page.</p>
     </div>
+    <aside id="control">
+        <button id="repro" onclick="selectNodes()">
+            Select nodes for reproduction code
+        </button>
+    </aside>
     <main id="tree"></main>
 </body>
 
