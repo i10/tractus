@@ -147,8 +147,12 @@
 
         .variables {
             font-weight: normal;
-            margin-right: 0.3em;
             background-color: lightgray;
+        }
+
+        .assign {
+            margin-left: 0.3em;
+            margin-right: 0.3em;
         }
 
         .hypothesis,
@@ -374,6 +378,7 @@
                     short_info.append("span").classed("variables", true).text(
                         `${data.assigned_variables.join(" <- ")}`
                     );
+                    short_info.append("span").classed("assign", true).text("<-");
                 }
                 short_info.append("span").text(d => {
                     if (data.function_name) {
