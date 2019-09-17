@@ -391,13 +391,12 @@
 
             let hyps = Object.entries(hypothesis_tree.hypotheses).filter((h) => h[1].hypothesis.length > 0);
             if (hyps.length > 0) {
-                let legend_hyp = d3.select(".legend ol").selectAll("li").data(hyps);
-                legend_hyp.enter().append("li").style("border-color", (d) => d[1].color)
-                    .append("span").classed("hypotheses-name", true).text((d) => d[1].hypothesis.join(", "))
+                let legend_hyp = d3.select(".legend ol").selectAll("li").data(hyps).join("li")
+                    .style("border-color", (d) => d[1].color)
+                    .join("span").classed("hypotheses-name", true).text((d) => d[1].hypothesis.join(", "))
                     .on("click", (d) => {
                         d3.selectAll(`.expression.hyp-id-${d[0]}`).each(function () { nodeClicked(this) });
                     });
-                legend_hyp.exit().remove();
             }
             let rootNode = d3.select("#hypothesis-tree").data([root]);
             makeNestedListItems(rootNode, data.statements, hypothesis_tree.hypotheses, hypothesis_tree.blocks);
@@ -537,8 +536,8 @@
                         color: "white"
                     }
                 } else {
-                    let hue = key * color_step;
-                    let color = `hsl(${hue}, 90%, 60%)`;
+                    let hue = (key - 1) * color_step;
+                    let color = `hsl(${hue}, 80%, 80%)`;
                     hyps[key] = {
                         hypothesis: value,
                         color: color
