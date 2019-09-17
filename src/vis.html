@@ -61,11 +61,11 @@
             border-bottom: 1px solid var(--border-color);
         }
 
-        #toolbar > * + * {
+        #toolbar>*+* {
             margin-top: 1em;
         }
 
-        #connection-status > * {
+        #connection-status>* {
             display: inline-block;
         }
 
@@ -132,7 +132,7 @@
         .hypotheses {
             display: flex;
             align-items: flex-start;
-            padding-left: 1rem;
+            padding-left: 1.1rem;
         }
 
         .nodes {
@@ -154,24 +154,9 @@
         }
 
         .hypotheses>li {
-            display: grid;
-            grid-gap: 0.3em;
-            grid-template-columns: 5px auto;
-            grid-template-areas:
-                "marker hypothesis"
-                "marker nodes";
-            border-top: 1px solid rgba(0, 0, 0, 0.1);
+            border-top: 5px solid rgba(0, 0, 0, 0.1);
             margin-bottom: 0.5em;
             padding-right: 1em;
-        }
-
-        .hypotheses>li>.marker {
-            grid-area: marker;
-            height: 100%;
-            width: 100%;
-            background-color: white;
-            border-left: 1px solid rgba(0, 0, 0, 0.075);
-            border-top: none;
         }
 
         .hypothesis {
