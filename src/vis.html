@@ -218,6 +218,14 @@
             vertical-align: middle;
         }
 
+        .expression .suppressed {
+            opacity: 0.4;
+        }
+
+        .expression-container:hover .suppressed {
+            opacity: 1;
+        }
+
         .expression:hover {
             cursor: pointer;
         }
@@ -492,7 +500,8 @@
                     );
                     short_info.append("span").classed("assign", true).text("<-");
                 }
-                short_info.append("code").classed("language-r", true).text(d => {
+                let isSuppressed = ["print", "cat"].includes(data.function_name);
+                short_info.append("code").classed("language-r", true).classed("suppressed", isSuppressed || null).text(d => {
                     if (data.function_name) {
                         return data.function_name + "(…)";
                     } else {
