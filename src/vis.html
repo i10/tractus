@@ -11,6 +11,7 @@
         :root {
             --column-width: 12em;
             --border-color: rgba(0, 0, 0, 0.2);
+            --color-hover-background: rgba(0, 0, 0, 0.05);
         }
 
         html {
@@ -36,11 +37,20 @@
             list-style: none;
         }
 
-        #control.empty {
-            display: none;
+        #control {
+            border: 1px solid rgba(0, 0, 0, 0.2);
+            padding: 0.3em;
         }
 
-        #replacements > h1 {
+        #control>*+* {
+            margin-top: 0.5em;
+        }
+
+        #control.empty summary::after {
+            content: " (currently nothing is selected)";
+        }
+
+        #replacements>h1 {
             font-size: 1rem;
             margin: 0;
         }
@@ -58,7 +68,7 @@
             align-items: flex-start;
         }
 
-        #replacements > * + * {
+        #replacements>*+* {
             margin-top: 0.5em;
         }
 
@@ -111,7 +121,6 @@
 
         .legend summary {
             font-size: 1rem;
-            font-weight: bold;
             margin: 0;
         }
 
@@ -126,17 +135,17 @@
             display: flex;
             flex-direction: row;
             align-items: stretch;
-            border: 1px solid;
+            border-top: 5px solid;
             margin: 0.5em;
         }
 
-        .legend>ol>li>.marker {
-            width: 5px;
-            background-color: white;
+        .legend>ol>li:hover {
+            background-color: var(--color-hover-background);
+            cursor: pointer;
         }
 
         .legend>ol>li>span {
-            margin: 0.3em;
+            margin: 0.2em;
         }
 
         summary {
@@ -158,7 +167,7 @@
         }
 
         .block>summary:hover {
-            background-color: rgba(0, 0, 0, 0.05);
+            background-color: var(--color-hover-background);
         }
 
         .hypotheses {
@@ -207,6 +216,10 @@
             vertical-align: middle;
         }
 
+        .expression:hover {
+            cursor: pointer;
+        }
+
         .expression>* {
             display: inline-block;
             overflow: hidden;
@@ -242,12 +255,10 @@
         .short-info {
             position: relative;
             display: inline-block;
-            background: rgba(255, 255, 255, 0.925);
             max-width: var(--column-width);
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            z-index: -1;
         }
 
         .long-info {
@@ -378,12 +389,15 @@
             let hypothesis_tree = data.hypothesis_tree;
             const root = make_tree(hypothesis_tree);
 
-            let hyps = Object.values(hypothesis_tree.hypotheses).filter(h => h.hypothesis.length > 0);
+            let hyps = Object.entries(hypothesis_tree.hypotheses).filter((h) => h[1].hypothesis.length > 0);
             if (hyps.length > 0) {
-                let legend_hyp = d3.select("#legend ol").selectAll("li").data(hyps).join("li")
-                    .style("border-color", d => d.color);
-                legend_hyp.append("div").classed("marker", true).style("background", d => d.color);
-                legend_hyp.append("span").classed("hypotheses-name", true).text(d => d.hypothesis.join(", "));
+                let legend_hyp = d3.select(".legend ol").selectAll("li").data(hyps);
+                legend_hyp.enter().append("li").style("border-color", (d) => d[1].color)
+                    .append("span").classed("hypotheses-name", true).text((d) => d[1].hypothesis.join(", "))
+                    .on("click", (d) => {
+                        d3.selectAll(`.expression.hyp-id-${d[0]}`).each(function () { nodeClicked(this) });
+                    });
+                legend_hyp.exit().remove();
             }
             let rootNode = d3.select("#hypothesis-tree").data([root]);
             makeNestedListItems(rootNode, data.statements, hypothesis_tree.hypotheses, hypothesis_tree.blocks);
@@ -405,7 +419,15 @@
                     let div = d3.select(this).append("div").classed("hypothesis-container", true);
                     let hypDisplay = hyp.hypothesis.join(", ");
                     h = div.append("div").classed("hypothesis", true);
-                    h.append("span").classed("hypotheses-name", true).text(hypDisplay).classed("short-info", true);
+                    h.append("span").classed("hypotheses-name", true).text(hypDisplay).classed("short-info", true)
+                        .on("click", function (d) {
+                            if (d3.event.target == this) {
+                                d3.event.stopPropagation();
+                                li.selectAll(`.hyp-id-${hyp_id}`).each(function () {
+                                    nodeClicked(this);
+                                })
+                            }
+                        });
                     if (hypDisplay != "") {
                         h.append("div").classed("long-info", true).text(hypDisplay)
                     }
@@ -426,7 +448,14 @@
                 let data = d.data.Group;
                 let block = block_map[data.header].map(stmt_id => stmt_map[stmt_id].statement).join("\n");
                 let group = node.append("details").attr("open", "").classed("block", true);
-                group.append("summary").append("span").classed("short-info", true).text(block);
+                group.append("summary").append("span").classed("short-info", true).text(block)
+                    .on("click", function () {
+                        d3.event.preventDefault();
+                        d3.event.stopPropagation();
+                        group.selectAll(`.hyp-id-${hyp_id}`).each(function () {
+                            nodeClicked(this);
+                        });
+                    });
                 group.append("ol").selectAll("li").data(d => d.children).join("li").each(function (d) {
                     makeNode.call(this, d, hyp_id, stmt_map, hyp_map, block_map);
                 });
@@ -440,7 +469,8 @@
                     exp_container = node.append("div");
                 }
                 exp_container.classed("expression-container", true);
-                let exp_div = exp_container.append("div").classed("expression", true);
+                let exp_div = exp_container.append("div").classed("expression", true)
+                    .classed(`hyp-id-${hyp_id}`, true);
                 exp_div.on("click", function () {
                     nodeClicked(this);
                     d3.event.preventDefault();
@@ -537,7 +567,7 @@
             let isSelectionEmpty = selection.size == 0;
             d3.selectAll("#repro, #replace").attr("disabled", isSelectionEmpty ? true : null);
             d3.select("#control").classed("empty", isSelectionEmpty);
-            
+
         }
 
         function reproCodeForSelected() {
@@ -642,15 +672,14 @@
                 <p>Ensure that Tractus is running and reload this page.</p>
             </div>
         </summary>
-        <aside id="legend">
-            <details class="legend" open onclick="arguments[0].stopPropagation()">
-                <summary>Hypotheses explored</summary>
-                <ol></ol>
-            </details>
-        </aside>
-        <aside id="control" class="empty">
+        <details class="legend" open onclick="arguments[0].stopPropagation()">
+            <summary>Hypotheses explored</summary>
+            <ol></ol>
+        </details>
+        <details id="control" class="empty">
+            <summary>Process selection</summary>
             <button id="repro" onclick="reproCodeForSelected()" disabled="true">
-                Copy repro code
+                Copy reproduction code
             </button>
             <form id="hyp-replace" onsubmit="doReplace(arguments[0])">
                 <details id="replacements" class="empty">
@@ -658,7 +687,8 @@
                 </details>
                 <input type="submit" id="replace" value="Copy with replaced hypotheses" disabled="true" />
             </form>
-        </aside>
+            </aside>
+        </details>
     </details>
     <main>
         <ol id="hypothesis-tree"></ol>
