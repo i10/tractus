@@ -36,16 +36,48 @@
             list-style: none;
         }
 
-        button {
+        #control.empty {
+            display: none;
+        }
+
+        #replacements > h1 {
+            font-size: 1rem;
+            margin: 0;
+        }
+
+        #replacements {
+            display: flex;
+            flex-direction: column;
+            margin-top: 1em;
+            margin-bottom: 0.5em;
+        }
+
+        #replacements label {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        #replacements > * + * {
+            margin-top: 0.5em;
+        }
+
+        #replacements.empty {
+            display: none;
+        }
+
+        button,
+        input[type="submit"] {
             border: 1px solid var(--border-color);
-            background: white;
+            background-color: white;
             padding: 0.2rem;
             padding-left: 0.4rem;
             padding-right: 0.4rem;
         }
 
-        button:hover {
-            background: hsl(0, 0%, 95%);
+        button:hover,
+        input[type="submit"]:hover {
+            background-color: hsl(0, 0%, 95%);
         }
 
         .hypotheses-name {
@@ -358,12 +390,13 @@
         }
 
         function makeNestedListItems(rootNode, stmt_map, hyp_map, block_map) {
-            let hyps = rootNode.append('ol').classed("hypotheses", true)
+            let hyps = rootNode.classed("hypotheses", true)
                 .selectAll('li').data(d => {
                     return d.children || []
                 })
                 .join("li");
             hyps.each(function (d) {
+                let hyp_id = d.data.hypothesis_id;
                 let hyp = hyp_map[d.data.hypothesis_id];
                 let hypColor = hyp.color || "white";
                 let li = d3.select(this);
@@ -377,24 +410,25 @@
                         h.append("div").classed("long-info", true).text(hypDisplay)
                     }
                 }
-            });
-            let nodes = hyps.append("ol").classed("nodes", true)
-                .selectAll("li").data(d => d.children).join("li");
+                let nodes = d3.select(this).append("ol").classed("nodes", true)
+                    .selectAll("li").data(d => d.children).join("li");
 
-            nodes.each(function (d) {
-                makeNode.call(this, d, stmt_map, hyp_map, block_map);
+                nodes.each(function (d) {
+                    makeNode.call(this, d, hyp_id, stmt_map, hyp_map, block_map);
+                });
             });
         }
 
-        function makeNode(d, stmt_map, hyp_map, block_map) {
+        function makeNode(d, hyp_id, stmt_map, hyp_map, block_map) {
             let node = d3.select(this);
+            d.data.hyp_id = hyp_id;
             if (d.data.Group) {
                 let data = d.data.Group;
                 let block = block_map[data.header].map(stmt_id => stmt_map[stmt_id].statement).join("\n");
                 let group = node.append("details").attr("open", "").classed("block", true);
                 group.append("summary").append("span").classed("short-info", true).text(block);
                 group.append("ol").selectAll("li").data(d => d.children).join("li").each(function (d) {
-                    makeNode.call(this, d, stmt_map, hyp_map, block_map);
+                    makeNode.call(this, d, hyp_id, stmt_map, hyp_map, block_map);
                 });
             } else { // is statement
                 let data = stmt_map[d.data.Single.content];
@@ -433,7 +467,8 @@
                 exp_div.append("div").classed("long-info", true).text(longInfo);
 
                 if (d.children && d.children.length > 0) {
-                    makeNestedListItems(node, stmt_map, hyp_map, block_map);
+                    let hyps = node.append("ol");
+                    makeNestedListItems(hyps, stmt_map, hyp_map, block_map);
                 }
             }
         }
@@ -494,23 +529,20 @@
                 n.classed("selected", true)
             }
 
+            updateSelectedHypotheses();
             updateButtons();
-            console.log(selection)
         }
 
         function updateButtons() {
-            let button = d3.select("#repro")
-            if (selection.size == 0) {
-                button.attr("disabled", true);
-            } else {
-                button.attr("disabled", null);
-            }
+            let isSelectionEmpty = selection.size == 0;
+            d3.selectAll("#repro, #replace").attr("disabled", isSelectionEmpty ? true : null);
+            d3.select("#control").classed("empty", isSelectionEmpty);
+            
         }
 
         function reproCodeForSelected() {
             let dependencies = new Set([]);
             for (n of selection) {
-                d3.select(n).classed("selected", false);
                 let id = d3.select(n).datum().data.Single.content;
                 for (a of ancestors(id)) {
                     dependencies.add(a);
@@ -521,7 +553,58 @@
             let reproCode = dependencies.map(t => data.statements[t].statement).join("\n")
             console.log(reproCode);
             navigator.clipboard.writeText(reproCode);
+
+            clearSelection();
+        }
+
+        function updateSelectedHypotheses() {
+            let hypIds = Array.from(new Set(Array.from(selection).map(n => d3.select(n).datum().data.hyp_id)));
+            hypIds.sort((a, b) => a - b);// Sort numerically.
+            let hyps = hypIds.map(id => data.hypothesis_tree.hypotheses[id].hypothesis)
+                .flatMap(hyps => hyps.map(hyp => hyp.match(/(.+) ~ (.+)/)));
+            let dependent = new Set([]);
+            //let independent = new Set([]);
+            for (hyp of hyps) {
+                dependent.add(hyp[1]);
+                dependent.add(hyp[2]);
+            }
+
+            d3.select("#replacements").selectAll("label").data(Array.from(dependent)).join("label")
+                .text(d => d).append("input").classed("hyp-replacement", true)
+                .attr("type", "text").attr("value", d => d).attr("name", d => d).attr("required", "true");
+
+            d3.select("#replacements").classed("empty", hyps.length == 0);
+        }
+
+        function doReplace(event) {
+            event.preventDefault();
+            let inputs = d3.selectAll("#replacements .hyp-replacement").nodes();
+            if (inputs.findIndex(n => n.value == "") != -1) {
+                console.warn("Submitted replace form with empty values.")
+            } else {
+                let code = Array.from(selection).map(n => d3.select(n).datum().data.Single.content);
+                code.sort((l, r) => l - r); // Sort numerically.
+                code = code.map(id => data.statements[id].statement);
+                for (n of inputs) {
+                    let previous = n.name;
+                    let replacement = n.value;
+                    code = code.map(line => line.replace(new RegExp(previous), replacement));
+                }
+                code = code.join("\n");
+                console.log(code);
+                navigator.clipboard.writeText(code);
+
+                clearSelection();
+            }
+        }
+
+        function clearSelection() {
+            for (n of selection) {
+                d3.select(n).classed("selected", false);
+            }
             selection = new Set([]);
+
+            updateSelectedHypotheses();
             updateButtons();
         }
 
@@ -565,13 +648,21 @@
                 <ol></ol>
             </details>
         </aside>
-        <aside id="control">
+        <aside id="control" class="empty">
             <button id="repro" onclick="reproCodeForSelected()" disabled="true">
                 Copy repro code
             </button>
+            <form id="hyp-replace" onsubmit="doReplace(arguments[0])">
+                <details id="replacements" class="empty">
+                    <summary>Variable replacements</summary>
+                </details>
+                <input type="submit" id="replace" value="Copy with replaced hypotheses" disabled="true" />
+            </form>
         </aside>
     </details>
-    <main id="hypothesis-tree"></main>
+    <main>
+        <ol id="hypothesis-tree"></ol>
+    </main>
 </body>
 
 </html>
