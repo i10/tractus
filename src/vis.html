@@ -7,6 +7,9 @@
     <meta name="description" content="">
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.17.1/themes/prism.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.17.1/plugins/line-numbers/prism-line-numbers.min.css" rel="stylesheet" />
+
     <style>
         :root {
             --column-width: 12em;
@@ -259,6 +262,7 @@
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            font-size: 0.9rem;
         }
 
         .long-info {
@@ -274,6 +278,7 @@
             border: 1px solid black;
             z-index: 2;
             pointer-events: none;
+            font-size: 0.9rem;
         }
 
         .hypothesis>.short-info {
@@ -344,8 +349,13 @@
 </head>
 
 <body>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.17.1/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.17.1/components/prism-r.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.17.1/plugins/line-numbers/prism-line-numbers.min.js"></script>
+
     <!--<script src="d3js/d3.min.js"></script>-->
     <script src="https://d3js.org/d3.v5.min.js"></script>
+
     <script>
         var data;
         var selection = new Set([]);
@@ -400,6 +410,8 @@
             }
             let rootNode = d3.select("#hypothesis-tree").data([root]);
             makeNestedListItems(rootNode, data.statements, hypothesis_tree.hypotheses, hypothesis_tree.blocks);
+
+            Prism.highlightAll();
         }
 
         function makeNestedListItems(rootNode, stmt_map, hyp_map, block_map) {
@@ -482,18 +494,19 @@
                     );
                     short_info.append("span").classed("assign", true).text("<-");
                 }
-                short_info.append("span").text(d => {
+                short_info.append("code").classed("language-r", true).text(d => {
                     if (data.function_name) {
                         return data.function_name + "(…)";
                     } else {
                         return truncate(data.statement, 25);
                     }
                 });
-                let longInfo = `${data.span.from}: ${data.statement}`;
+                let longInfo = exp_div.append("div").classed("long-info", true);
+                longInfo.append("pre").attr("data-start", data.span.from).append("code").classed("language-r", true)
+                    .classed("line-numbers", true).text(data.statement);
                 if (data.meta && data.meta.result != "") {
-                    longInfo += `\n\n${data.meta.result}`
+                    longInfo.append("span").classed("result").text(data.meta.result);
                 }
-                exp_div.append("div").classed("long-info", true).text(longInfo);
 
                 if (d.children && d.children.length > 0) {
                     let hyps = node.append("ol");
@@ -693,5 +706,4 @@
         <ol id="hypothesis-tree"></ol>
     </main>
 </body>
-
 </html>
