@@ -226,6 +226,10 @@
             opacity: 1;
         }
 
+        .expression .dataset {
+            color: blue;
+        }
+
         .expression:hover {
             cursor: pointer;
         }
@@ -469,7 +473,7 @@
                     .on("click", function () {
                         d3.event.preventDefault();
                         d3.event.stopPropagation();
-                        group.selectAll(`.hyp-id-${hyp_id}`).each(function () {
+                        group.selectAll(`.expression`).each(function () {
                             nodeClicked(this);
                         });
                     });
@@ -501,7 +505,9 @@
                     short_info.append("span").classed("assign", true).text("<-");
                 }
                 let isSuppressed = ["print", "cat"].includes(data.function_name);
-                short_info.append("code").classed("language-r", true).classed("suppressed", isSuppressed || null).text(d => {
+                let isDataset = ["read.csv"].includes(data.function_name);
+                short_info.append("code").classed("language-r", true).classed("suppressed", isSuppressed)
+                    .classed("dataset", isDataset).text(d => {
                     if (data.function_name) {
                         return data.function_name + "(…)";
                     } else {
