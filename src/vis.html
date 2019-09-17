@@ -12,7 +12,7 @@
             --column-width: 12em;
             --border-color: rgba(0, 0, 0, 0.2);
         }
-        
+
         html {
             height: 100%;
         }
@@ -282,7 +282,7 @@
         .show-error {
             vertical-align: top;
         }
-        
+
         .show-error p {
             margin: 0;
             margin-bottom: 0.5em;
@@ -305,7 +305,7 @@
     <script src="https://d3js.org/d3.v5.min.js"></script>
     <script>
         var data;
-        var reproSelection = null;
+        var selection = new Set([]);
 
         let socket = new WebSocket("ws://127.0.0.1:2794", "tractus-websocket");
         socket.onopen = function (event) {
@@ -367,8 +367,7 @@
                 let hyp = hyp_map[d.data.hypothesis_id];
                 let hypColor = hyp.color || "white";
                 let li = d3.select(this);
-                li.style("border-top-color", hypColor == "white" ? "rgba(0, 0, 0, 0.1)" : hypColor);
-                li.append("div").classed("marker", true).style("background-color", hypColor);
+                li.style("border-color", hypColor == "white" ? "rgba(0, 0, 0, 0.1)" : hypColor);
                 if (hyp.hypothesis != "") {
                     let div = d3.select(this).append("div").classed("hypothesis-container", true);
                     let hypDisplay = hyp.hypothesis.join(", ");
@@ -409,17 +408,9 @@
                 exp_container.classed("expression-container", true);
                 let exp_div = exp_container.append("div").classed("expression", true);
                 exp_div.on("click", function () {
-                    if (reproSelection != null) {
-                        if (reproSelection.has(this)) {
-                            reproSelection.delete(this);
-                            d3.select(this).classed("selected", false);
-                        } else {
-                            reproSelection.add(this);
-                            d3.select(this).classed("selected", true);
-                        }
-                        d3.event.preventDefault();
-                        d3.event.stopPropagation();
-                    }
+                    nodeClicked(this);
+                    d3.event.preventDefault();
+                    d3.event.stopPropagation();
                 })
                 let short_info = exp_div.append("div").classed("short-info", true);
                 if (data.assigned_variables.length > 0) {
@@ -493,28 +484,45 @@
             return hyps;
         }
 
-        function selectNodes() {
-            let button = document.getElementById("repro");
-            if (reproSelection == null) {
-                button.textContent = "Copy reproduction code to clipboard";
-                reproSelection = new Set([]);
+        function nodeClicked(node) {
+            let n = d3.select(node);
+            if (n.classed("selected")) {
+                selection.delete(node);
+                n.classed("selected", false);
             } else {
-                let dependencies = new Set([]);
-                for (n of reproSelection) {
-                    d3.select(n).classed("selected", false);
-                    let id = d3.select(n).datum().data.Single.content;
-                    for (a of ancestors(id)) {
-                        dependencies.add(a);
-                    }
-                }
-                dependencies = Array.from(dependencies);
-                dependencies.sort((l, r) => l - r);
-                let reproCode = dependencies.map(t => data.statements[t].statement).join("\n")
-                console.log(reproCode);
-                navigator.clipboard.writeText(reproCode);
-                button.textContent = "Select nodes for reproduction code";
-                reproSelection = null;
+                selection.add(node);
+                n.classed("selected", true)
             }
+
+            updateButtons();
+            console.log(selection)
+        }
+
+        function updateButtons() {
+            let button = d3.select("#repro")
+            if (selection.size == 0) {
+                button.attr("disabled", true);
+            } else {
+                button.attr("disabled", null);
+            }
+        }
+
+        function reproCodeForSelected() {
+            let dependencies = new Set([]);
+            for (n of selection) {
+                d3.select(n).classed("selected", false);
+                let id = d3.select(n).datum().data.Single.content;
+                for (a of ancestors(id)) {
+                    dependencies.add(a);
+                }
+            }
+            dependencies = Array.from(dependencies);
+            dependencies.sort((l, r) => l - r); // Sort numerically.
+            let reproCode = dependencies.map(t => data.statements[t].statement).join("\n")
+            console.log(reproCode);
+            navigator.clipboard.writeText(reproCode);
+            selection = new Set([]);
+            updateButtons();
         }
 
         function ancestors(id) {
@@ -558,8 +566,8 @@
             </details>
         </aside>
         <aside id="control">
-            <button id="repro" onclick="selectNodes()">
-                Select nodes for reproduction code
+            <button id="repro" onclick="reproCodeForSelected()" disabled="true">
+                Copy repro code
             </button>
         </aside>
     </details>
