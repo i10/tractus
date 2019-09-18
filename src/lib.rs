@@ -27,32 +27,32 @@ pub struct StatementMeta {
     ast: serde_json::Value,
     expression: Option<String>,
     span: LineSpan,
-    assigned_variables: Vec<String>,
-    function_name: Option<String>,
+    assignment: Option<(Vec<RIdentifier>, String)>,
+    function_call: Option<(String, Vec<RIdentifier>)>,
     meta: serde_json::Value,
 }
 
 impl StatementMeta {
     fn with(stmt: &Statement, span: LineSpan, meta: serde_json::Value) -> Self {
-        let assigned_variables = extract_assigned_variables(stmt);
+        let assignment = break_down_assignment(stmt);
         let expression = stmt.expression();
-        let function_name = expression.and_then(|exp| extract_function_name(exp));
+        let function_call = expression.and_then(|exp| extract_function_name(exp));
         StatementMeta {
             expression: expression.map(|exp| format!("{}", exp)),
             ast: serde_json::to_value(stmt).unwrap(),
             span,
             statement: format!("{}", stmt),
-            assigned_variables,
-            function_name,
+            assignment,
+            function_call,
             meta,
         }
     }
 }
 
-fn extract_assigned_variables(stmt: &Statement) -> Vec<RIdentifier> {
+fn break_down_assignment(stmt: &Statement) -> Option<(Vec<RIdentifier>, String)> {
     use Statement::*;
     match stmt {
-        Assignment(left, add, _) => {
+        Assignment(left, add, expression) => {
             let mut vs = vec![left
                 .extract_variable_name()
                 .unwrap_or_else(|| left.to_string())];
@@ -61,23 +61,26 @@ fn extract_assigned_variables(stmt: &Statement) -> Vec<RIdentifier> {
                 .map(|v| v.extract_variable_name().unwrap_or_else(|| v.to_string()))
                 .collect();
             vs.append(&mut addition);
-            vs
+            Some((vs, expression.to_string()))
         }
-        TailComment(inner, _) => extract_assigned_variables(inner),
+        TailComment(inner, _) => break_down_assignment(inner),
         Empty
         | Comment(_)
         | If(_, _, _)
         | While(_, _)
         | For(_, _, _)
         | Library(_)
-        | Expression(_) => Vec::new(),
+        | Expression(_) => None,
     }
 }
 
-fn extract_function_name(expression: &parser::Expression) -> Option<String> {
+fn extract_function_name(expression: &parser::Expression) -> Option<(String, Vec<RIdentifier>)> {
     use parser::Expression::*;
     match expression {
-        Call(name, _) => name.extract_variable_name(),
+        Call(name, args) => name.extract_variable_name().map(|name| {
+            let arg_vars = args.iter().flat_map(|(_, exp)| exp.extract_variable_name()).collect();
+            (name, arg_vars)
+        }),
         Column(left, _) => extract_function_name(&left),
         Index(left, _) => extract_function_name(&left),
         _ => None,

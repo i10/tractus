@@ -8,11 +8,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
     <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.17.1/themes/prism.css" rel="stylesheet" />
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.17.1/plugins/line-numbers/prism-line-numbers.min.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.17.1/plugins/line-numbers/prism-line-numbers.min.css"
+        rel="stylesheet" />
 
     <style>
         :root {
-            --column-width: 12em;
+            --column-width: 20em;
             --border-color: rgba(0, 0, 0, 0.2);
             --color-hover-background: rgba(0, 0, 0, 0.05);
         }
@@ -219,7 +220,7 @@
         }
 
         .expression .suppressed {
-            opacity: 0.4;
+            opacity: 0.2;
         }
 
         .expression-container:hover .suppressed {
@@ -232,6 +233,10 @@
 
         .expression:hover {
             cursor: pointer;
+        }
+
+        .expression pre {
+            margin: 0;
         }
 
         .expression>* {
@@ -362,7 +367,8 @@
 <body>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.17.1/prism.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.17.1/components/prism-r.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.17.1/plugins/line-numbers/prism-line-numbers.min.js"></script>
+    <script
+        src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.17.1/plugins/line-numbers/prism-line-numbers.min.js"></script>
 
     <script src="https://d3js.org/d3.v5.min.js"></script>
 
@@ -498,22 +504,28 @@
                     d3.event.stopPropagation();
                 })
                 let short_info = exp_div.append("div").classed("short-info", true);
-                if (data.assigned_variables.length > 0) {
+                let expression;
+                if (data.assignment) {
                     short_info.append("span").classed("variables", true).text(
-                        `${data.assigned_variables.join(" <- ")}`
+                        `${data.assignment[0].join(" <- ")}`
                     );
                     short_info.append("span").classed("assign", true).text("<-");
+                    expression = data.assignment[1];
+                } else {
+                    expression = data.statement;
                 }
                 let isSuppressed = ["print", "cat"].includes(data.function_name);
                 let isDataset = ["read.csv"].includes(data.function_name);
                 short_info.append("code").classed("language-r", true).classed("suppressed", isSuppressed)
                     .classed("dataset", isDataset).text(d => {
-                    if (data.function_name) {
-                        return data.function_name + "(…)";
-                    } else {
-                        return truncate(data.statement, 25);
-                    }
-                });
+                        if (data.function_call) {
+                            let vars = Array.from(new Set(data.function_call[1]));
+                            vars.push(""); // Provoke trailing "…".
+                            return data.function_call[0] + `(…${vars.join("…")})`;
+                        } else {
+                            return truncate(expression, 25);
+                        }
+                    });
                 let longInfo = exp_div.append("div").classed("long-info", true);
                 longInfo.append("pre").attr("data-start", data.span.from).append("code").classed("language-r", true)
                     .classed("line-numbers", true).text(data.statement);
@@ -719,4 +731,5 @@
         <ol id="hypothesis-tree"></ol>
     </main>
 </body>
+
 </html>
