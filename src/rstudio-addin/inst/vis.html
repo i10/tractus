@@ -618,7 +618,7 @@
                 longInfo.append("pre").attr("data-start", data.span.from).append("code").classed("language-r", true)
                     .classed("line-numbers", true).text(data.statement);
                 if (data.meta && data.meta.result != "") {
-                    longInfo.append("span").classed("result").text(data.meta.result);
+                    longInfo.append("span").classed("result", true).text(data.meta.result);
                 }
 
                 if (d.children && d.children.length > 0) {
