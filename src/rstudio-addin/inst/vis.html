@@ -619,7 +619,7 @@
                 } else {
                     expression = data.statement;
                 }
-                let isSuppressed = data.function_call && ["print", "cat", "sprintf", "Vie"].includes(data.function_call[0]);
+                let isSuppressed = data.function_call && ["print", "cat", "sprintf", "View"].includes(data.function_call[0]);
                 isSuppressed = isSuppressed || (data.ast.Expression && data.ast.Expression.Variable) ||
                     (data.ast.TailComment && data.ast.TailComment[0].Expression && data.ast.TailComment[0].Expression.Variable);
                 short_info.append("code").classed("language-r", true).classed("suppressed", isSuppressed)
