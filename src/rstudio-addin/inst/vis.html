@@ -15,7 +15,7 @@
         :root {
             --column-width: 20em;
             --border-color: rgba(0, 0, 0, 0.2);
-            --color-hover-background: rgba(0, 0, 0, 0.05);
+            --color-hover-background: hsl(0, 0%, 95%);
         }
 
         *:focus {
@@ -373,6 +373,22 @@
 
         .expression:hover {
             background-color: var(--color-hover-background);
+        }
+
+        .expression .long-info {
+            background: var(--color-hover-background);
+            padding: 0.5em;
+        }
+
+        .expression .long-info .result {
+            font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
+            margin-top: 1em;
+            display: block;
+        }
+
+        .expression .long-info pre {
+            padding: 0;
+            padding-left: 3em;
         }
 
         .block>summary>.short-info {
