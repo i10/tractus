@@ -27,6 +27,8 @@
         }
 
         body {
+            -webkit-user-select: none;
+            user-select: none;
             font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
             padding: 0;
             margin: 0;
@@ -108,8 +110,7 @@
         #toolbar {
             display: flex;
             flex-direction: column;
-            padding: 1em;
-            padding-top: 0.5em;
+            padding: 0.5em;
             background: hsl(0, 0%, 20%);
             color: white;
             border-bottom: 1px solid var(--border-color);
@@ -153,7 +154,6 @@
             flex-direction: row;
             align-items: stretch;
             border-top: 5px solid;
-            border-left: 1px solid;
             margin: 0.5em;
             padding: 0.2em;
             font-size: 1.1em;
@@ -184,7 +184,8 @@
             left: 17px;
         }
 
-        .block>summary::marker, .block>summary::-webkit-details-marker {
+        .block>summary::marker,
+        .block>summary::-webkit-details-marker {
             color: black;
         }
 
@@ -257,6 +258,10 @@
             font-size: 1.35em;
         }
 
+        .hypothesis:hover {
+            cursor: pointer;
+        }
+
         .expression-container {
             max-width: var(--column-width);
         }
@@ -284,6 +289,7 @@
 
         .expression code {
             white-space: pre !important;
+            background: none !important;
         }
 
         .expression>* {
@@ -293,7 +299,7 @@
 
         .variables {
             font-weight: bold;
-            background-color: darkslategray;
+            background-color: rgb(51, 51, 51);
             color: white;
             display: inline-block;
             padding: 0.1rem;
@@ -381,6 +387,17 @@
 
         #connected.show-error {
             display: none;
+        }
+
+        #connected, #connection-lost>.error {
+            display: inline-flex;
+            align-items: center;
+            white-space: nowrap;
+            vertical-align: top;
+        }
+
+        #connected>*+*, #connection-lost>.error>*+* {
+            margin-left: 0.2em;
         }
 
         #connection-lost {
@@ -572,13 +589,13 @@
                 } else {
                     expression = data.statement;
                 }
-                let isSuppressed = data.function_call && ["print", "cat"].includes(data.function_call[0]);
+                let isSuppressed = data.function_call && ["print", "cat", "sprintf", "Vie"].includes(data.function_call[0]);
+                isSuppressed = isSuppressed || (data.ast.Expression && data.ast.Expression.Variable) ||
+                    (data.ast.TailComment && data.ast.TailComment[0].Expression && data.ast.TailComment[0].Expression.Variable);
                 short_info.append("code").classed("language-r", true).classed("suppressed", isSuppressed)
                     .text(d => {
                         if (data.function_call) {
-                            let vars = Array.from(new Set(data.function_call[1]));
-                            vars.push(""); // Provoke trailing "…".
-                            return data.function_call[0] + `(…${vars.join("…")})`;
+                            return data.function_call[0] + `(…)`;
                         } else {
                             return truncate(expression, 25);
                         }
@@ -762,10 +779,20 @@
     <details id="toolbar">
         <summary id="connection-status">
             <div id="connected" class="show-error">
-                ✔️️ Connected to Tractus.
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" style="fill: green" viewBox="0 0 24 24">
+                    <path d="M0 0h24v24H0z" fill="none" />
+                    <path
+                        d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
+                </svg>️
+                <span>Connected to Tractus.</span>
             </div>
             <div id="connection-lost" class="show-error">
-                <p class="error">❌ Not connected to Tractus!</p>
+                <p class="error">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" style="fill: red;" viewBox="0 0 24 24">
+                        <path d="M0 0h24v24H0z" fill="none" />
+                        <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z" /></svg>
+                    <span>Not connected to Tractus!</span>
+                </p>
                 <p>Ensure that Tractus is running and reload this page.</p>
             </div>
         </summary>
@@ -776,13 +803,13 @@
         <details id="control" class="empty">
             <summary>Manage source code</summary>
             <button id="repro" onclick="reproCodeForSelected()" disabled="true">
-                Copy reproduction code
+                Copy reproduction code to clipboard
             </button>
             <form id="hyp-replace" onsubmit="doReplace(arguments[0])">
                 <div id="replacements" class="empty">
                     <h1>Variable replacements</h1>
                 </div>
-                <input type="submit" id="replace" value="Copy with replaced hypotheses" disabled="true" />
+                <input type="submit" id="replace" value="Copy with replaced variables to clipboard" disabled="true" />
             </form>
             </aside>
         </details>
