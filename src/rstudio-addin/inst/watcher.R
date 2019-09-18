@@ -40,6 +40,7 @@ update <- function() {
             } else {
                 output = paste(result, collapse = '\\n')
                 output = str_replace_all(output, '"', '\\\\"')
+                output = str_replace_all(output, '\t', '\\\\t')
                 JSONToSend = paste('{"statement": "', statement, '", "meta": { "result": \"', output,'\" } }', sep = "")
             }
 
