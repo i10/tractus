@@ -23,7 +23,7 @@
         }
 
         body {
-            font-family: sans-serif;
+            font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
             padding: 0;
             margin: 0;
             height: 100%;
@@ -42,7 +42,7 @@
         }
 
         #control {
-            border: 1px solid rgba(0, 0, 0, 0.2);
+            border: 1px solid hsla(0, 0%, 100%, 0.2);
             padding: 0.3em;
         }
 
@@ -80,18 +80,25 @@
             display: none;
         }
 
-        button,
-        input[type="submit"] {
+        #toolbar button,
+        #toolbar input[type="submit"] {
             border: 1px solid var(--border-color);
-            background-color: white;
+            background-color: hsl(0, 0%, 30%);
             padding: 0.2rem;
             padding-left: 0.4rem;
             padding-right: 0.4rem;
+            color: white;
+            font-size: 0.8em;
         }
 
-        button:hover,
-        input[type="submit"]:hover {
-            background-color: hsl(0, 0%, 95%);
+        #toolbar button:disabled,
+        #toolbar input[type="submit"]:disabled {
+            color: hsl(0, 0%, 50%)
+        }
+
+        #toolbar button:hover:not(:disabled),
+        #toolbar input[type="submit"]:hover:not(:disabled) {
+            background-color: hsl(0, 0%, 40%);
         }
 
         #toolbar {
@@ -99,8 +106,11 @@
             flex-direction: column;
             padding: 1em;
             padding-top: 0.5em;
-            background: white;
+            background: hsl(0, 0%, 20%);
+            color: white;
             border-bottom: 1px solid var(--border-color);
+            font-size: 1.2em;
+            box-shadow: 0 0 0.5em rgba(0, 0, 0, 0.3);
         }
 
         #toolbar>*+* {
@@ -111,9 +121,13 @@
             display: inline-block;
         }
 
+        #control > :not(summary) {
+            margin-left: 1rem;
+        }
+
         .legend {
             flex: 1;
-            border: 1px solid rgba(0, 0, 0, 0.2);
+            border: 1px solid hsla(0, 0%, 100%, 0.2);
             padding: 0.3em;
             overflow: auto;
             max-height: 25vh;
@@ -138,6 +152,7 @@
             border-left: 1px solid;
             margin: 0.5em;
             padding: 0.2em;
+            font-size: 1.2em;
         }
 
         .legend>ol>li:hover {
@@ -148,8 +163,6 @@
         summary {
             cursor: pointer;
             white-space: nowrap;
-            list-style-position: outside;
-            margin-left: 1.1rem;
         }
 
         .block>ol {
@@ -157,6 +170,8 @@
         }
 
         .block>summary {
+            list-style-position: outside;
+            margin-left: 1.1rem;
             font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
             color: darkgreen;
         }
@@ -203,6 +218,8 @@
             top: 0;
             background: rgba(255, 255, 255, 0.9);
             z-index: 1;
+            margin-left: 0.5em;
+            margin-top: 0.2em;
         }
 
         .expression {
@@ -215,6 +232,7 @@
         .selected {
             border-left: 5px solid transparent;
             border-color: black;
+            padding-left: 0.2em;
         }
 
         .hypotheses>li {
@@ -228,6 +246,7 @@
             grid-area: hypothesis;
             max-width: var(--column-width);
             position: relative;
+            font-size: 1.35em;
         }
 
         .expression-container {
@@ -312,7 +331,7 @@
             white-space: pre;
             background: white;
             width: min-content;
-            border: 1px solid black;
+            border: 1px solid transparent;
             z-index: 2;
             pointer-events: none;
         }
@@ -447,8 +466,8 @@
             let hyps = Object.entries(hypothesis_tree.hypotheses).filter((h) => h[1].hypothesis.length > 0);
             if (hyps.length > 0) {
                 let legend_hyp = d3.select(".legend ol").selectAll("li").data(hyps).join("li")
-                    .style("border-color", (d) => d[1].color)
-                    .join("span").classed("hypotheses-name", true).text((d) => d[1].hypothesis.join(", "))
+                    .style("border-color", (d) => `hsl(${d[1].hue}, 100%, 80%)`)
+                    .join("span").classed("hypotheses-name", true).classed("hypothesis", true).text((d) => d[1].hypothesis.join(", ")).style("color", d => `hsl(${d[1].hue}, 50%, 60%)`)
                     .on("click", (d) => {
                         d3.selectAll(`.expression.hyp-id-${d[0]}`).each(function () { nodeClicked(this) });
                     });
@@ -468,13 +487,12 @@
             hyps.each(function (d) {
                 let hyp_id = d.data.hypothesis_id;
                 let hyp = hyp_map[d.data.hypothesis_id];
-                let hypColor = hyp.color || "white";
                 let li = d3.select(this);
-                li.style("border-color", hypColor == "white" ? "rgba(0, 0, 0, 0.1)" : hypColor);
+                li.style("border-color", hyp.hue != null ? `hsl(${hyp.hue}, 100%, 80%)` : "rgba(0, 0, 0, 0.1)");
                 if (hyp.hypothesis != "") {
                     let div = d3.select(this).append("div").classed("hypothesis-container", true);
                     let hypDisplay = hyp.hypothesis.join(", ");
-                    h = div.append("div").classed("hypothesis", true);
+                    h = div.append("div").classed("hypothesis", true).style("color", `hsl(${hyp.hue}, 50%, 30%)`);
                     h.append("span").classed("hypotheses-name", true).text(hypDisplay).classed("short-info", true)
                         .on("click", function (d) {
                             if (d3.event.target == this) {
@@ -602,14 +620,13 @@
                 if (key == 0) {
                     hyps[key] = {
                         hypothesis: value,
-                        color: "white"
+                        hue: null
                     }
                 } else {
                     let hue = (key - 1) * color_step;
-                    let color = `hsl(${hue}, 80%, 80%)`;
                     hyps[key] = {
                         hypothesis: value,
-                        color: color
+                        hue: hue
                     }
                 }
             }
@@ -749,14 +766,14 @@
             <ol></ol>
         </details>
         <details id="control" class="empty">
-            <summary>Process selection</summary>
+            <summary>Manage source code</summary>
             <button id="repro" onclick="reproCodeForSelected()" disabled="true">
                 Copy reproduction code
             </button>
             <form id="hyp-replace" onsubmit="doReplace(arguments[0])">
-                <details id="replacements" class="empty">
-                    <summary>Variable replacements</summary>
-                </details>
+                <div id="replacements" class="empty">
+                    <h1>Variable replacements</h1>
+                </div>
                 <input type="submit" id="replace" value="Copy with replaced hypotheses" disabled="true" />
             </form>
             </aside>
