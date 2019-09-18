@@ -1,4 +1,4 @@
-Name: Execute code on console
-Description: Executes given code on to the console.
-Binding: executeCodeAddin
+Name: Tractus
+Description: Analyze code and show explorations.
+Binding: tractusAddin
 Interactive: true
