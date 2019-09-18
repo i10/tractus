@@ -175,7 +175,9 @@
 
         .block>summary {
             font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
-            color: darkgreen;
+            font-style: italic;
+            font-weight: bold;
+            color: hsl(0, 0%, 30%);
         }
 
         .block>summary .long-info {
@@ -265,15 +267,11 @@
         }
 
         .expression .suppressed {
-            opacity: 0.2;
+            opacity: 0.3;
         }
 
         .expression-container:hover .suppressed {
             opacity: 1;
-        }
-
-        .expression .dataset {
-            color: blue;
         }
 
         .expression:hover {
@@ -574,10 +572,9 @@
                 } else {
                     expression = data.statement;
                 }
-                let isSuppressed = ["print", "cat"].includes(data.function_name);
-                let isDataset = ["read.csv"].includes(data.function_name);
+                let isSuppressed = data.function_call && ["print", "cat"].includes(data.function_call[0]);
                 short_info.append("code").classed("language-r", true).classed("suppressed", isSuppressed)
-                    .classed("dataset", isDataset).text(d => {
+                    .text(d => {
                         if (data.function_call) {
                             let vars = Array.from(new Set(data.function_call[1]));
                             vars.push(""); // Provoke trailing "…".
