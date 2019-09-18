@@ -732,7 +732,15 @@
 
             d3.select("#replacements").selectAll("label").data(Array.from(dependent)).join("label")
                 .text(d => d).append("input").classed("hyp-replacement", true)
+                .attr("list", "replacement-list")
                 .attr("type", "text").attr("value", d => d).attr("name", d => d).attr("required", "true");
+            let all_hyps = new Set(Object.values(data.hypothesis_tree.hypotheses).flatMap(h => h.hypothesis.flatMap(
+                hyp => {
+                    let match = hyp.match(/(.+) ~ (.+)/);
+                    return [match[1], match[2]];
+                }
+            )));
+            d3.select("#replacement-list").selectAll("option").data(Array.from(all_hyps)).join("option").attr("value", d => d);
 
             d3.select("#replacements").classed("empty", hyps.length == 0);
         }
@@ -832,6 +840,7 @@
             </button><span id="repro-copied">Copied!</span>
             <form id="hyp-replace" onsubmit="doReplace(arguments[0])">
                 <div id="replacements" class="empty">
+                    <datalist id="replacement-list"></datalist>
                     <h1>Variable replacements</h1>
                 </div>
                 <input type="submit" id="replace" value="Copy with replaced variables to clipboard"
