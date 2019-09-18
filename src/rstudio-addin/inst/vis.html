@@ -707,7 +707,7 @@
             let reproCode = dependencies.map(t => data.statements[t].statement).join("\n")
             console.log(reproCode);
             if (navigator.clipboard) {
-                navigator.clipboard.writeText(reproCode);
+                navigator.clipboard.writeText(reproCode).catch(() => alert(reproCode));
                 let feedback = document.getElementById("repro-copied");
                 feedback.setAttribute("class", "show");
                 setTimeout(() => feedback.removeAttribute("class"), 2000);
@@ -762,7 +762,7 @@
                 code = code.join("\n");
                 console.log(code);
                 if (navigator.clipboard) {
-                    navigator.clipboard.writeText(code);
+                    navigator.clipboard.writeText(code).catch(() => alert(code));
                     let feedback = document.getElementById("replace-copied");
                     feedback.setAttribute("class", "show");
                     setTimeout(() => feedback.removeAttribute("class"), 2000);
