@@ -148,23 +148,36 @@
         summary {
             cursor: pointer;
             white-space: nowrap;
+            list-style-position: outside;
+            margin-left: 1.1rem;
         }
 
         .block>ol {
             margin-left: 1em;
         }
 
-        .block>summary>.short-info {
+        .block>summary {
             font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
-            white-space: pre;
             color: darkgreen;
+        }
+
+        .block>summary::marker {
+            color: black;
+        }
+
+        .block>summary>.short-info {
+            white-space: pre;
             vertical-align: top;
             max-width: var(--column-width);
             overflow: hidden;
             text-overflow: ellipsis;
         }
 
-        .block>summary:hover {
+        .block > summary{
+            position: relative;
+        }
+
+        .block>summary>.short-info:hover {
             background-color: var(--color-hover-background);
         }
 
@@ -291,14 +304,12 @@
             white-space: pre;
             background: white;
             width: min-content;
-            padding: 0.3em;
             border: 1px solid black;
             z-index: 2;
             pointer-events: none;
         }
 
         .hypothesis>.short-info {
-            padding: 0.3em;
             border: 1px solid transparent;
         }
 
@@ -310,6 +321,16 @@
             background-color: var(--color-hover-background);
         }
 
+        .block>summary>.short-info {
+            border: 1px solid transparent;
+        }
+
+        .block>summary>.long-info {
+            top: 0;
+            list-style: none;
+        }
+
+        .block>summary:hover>.long-info,
         .hypothesis:hover>.long-info,
         .expression:hover>.long-info {
             display: inherit;
@@ -475,7 +496,8 @@
                 let data = d.data.Group;
                 let block = block_map[data.header].map(stmt_id => stmt_map[stmt_id].statement).join("\n");
                 let group = node.append("details").attr("open", "").classed("block", true);
-                group.append("summary").append("span").classed("short-info", true).text(block)
+                let info = group.append("summary");
+                info.append("span").classed("short-info", true).text(block)
                     .on("click", function () {
                         d3.event.preventDefault();
                         d3.event.stopPropagation();
@@ -483,6 +505,7 @@
                             nodeClicked(this);
                         });
                     });
+                info.append("div").classed("long-info", true).text(block);
                 group.append("ol").selectAll("li").data(d => d.children).join("li").each(function (d) {
                     makeNode.call(this, d, hyp_id, stmt_map, hyp_map, block_map);
                 });
