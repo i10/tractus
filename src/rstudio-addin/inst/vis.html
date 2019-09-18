@@ -173,7 +173,7 @@
             text-overflow: ellipsis;
         }
 
-        .block > summary{
+        .block>summary {
             position: relative;
         }
 
@@ -205,8 +205,16 @@
             z-index: 1;
         }
 
+        .expression {
+            padding: 0.2em;
+            margin: 0.2em;
+            margin-left: 0;
+            padding-left: 0;
+        }
+
         .selected {
-            border: 1px solid black;
+            border-left: 5px solid transparent;
+            border-color: black;
         }
 
         .hypotheses>li {
@@ -642,7 +650,11 @@
             dependencies.sort((l, r) => l - r); // Sort numerically.
             let reproCode = dependencies.map(t => data.statements[t].statement).join("\n")
             console.log(reproCode);
-            navigator.clipboard.writeText(reproCode);
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(reproCode);
+            } else {
+                alert(reproCode);
+            }
 
             clearSelection();
         }
