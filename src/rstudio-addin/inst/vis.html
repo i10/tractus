@@ -147,6 +147,7 @@
 
         summary {
             cursor: pointer;
+            white-space: nowrap;
         }
 
         .block>ol {
@@ -237,6 +238,10 @@
             margin: 0;
         }
 
+        .expression code {
+            white-space: pre !important;
+        }
+
         .expression>* {
             display: inline-block;
             overflow: hidden;
@@ -301,8 +306,8 @@
             top: 0;
         }
 
-        .expression-container:hover {
-            background-color: rgba(0, 0, 0, 0.05);
+        .expression:hover {
+            background-color: var(--color-hover-background);
         }
 
         .hypothesis:hover>.long-info,
