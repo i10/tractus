@@ -121,7 +121,7 @@
             display: inline-block;
         }
 
-        #control > :not(summary) {
+        #control> :not(summary) {
             margin-left: 1rem;
         }
 
@@ -170,13 +170,15 @@
         }
 
         .block>summary {
-            list-style-position: outside;
-            margin-left: 1.1rem;
             font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
             color: darkgreen;
         }
 
-        .block>summary::marker {
+        .block>summary .long-info {
+            left: 17px;
+        }
+
+        .block>summary::marker, .block>summary::-webkit-details-marker {
             color: black;
         }
 
@@ -297,7 +299,8 @@
             padding-right: 0.2rem;
         }
 
-        .variables, .assign {
+        .variables,
+        .assign {
             font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
         }
 
@@ -364,7 +367,7 @@
         .block>summary:hover>.long-info,
         .hypothesis:hover>.long-info,
         .expression:hover>.long-info {
-            display: inherit;
+            display: block;
             visibility: visible;
         }
 
