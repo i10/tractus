@@ -86,6 +86,20 @@
             display: none;
         }
 
+        #repro-copied,
+        #replace-copied {
+            opacity: 0;
+            margin: 0;
+            padding: 0;
+            padding-left: 0.2em;
+            display: inline-block;
+        }
+
+        #repro-copied.show,
+        #replace-copied.show {
+            opacity: 1;
+        }
+
         #toolbar button,
         #toolbar input[type="submit"] {
             border: 1px solid var(--border-color);
@@ -389,14 +403,16 @@
             display: none;
         }
 
-        #connected, #connection-lost>.error {
+        #connected,
+        #connection-lost>.error {
             display: inline-flex;
             align-items: center;
             white-space: nowrap;
             vertical-align: top;
         }
 
-        #connected>*+*, #connection-lost>.error>*+* {
+        #connected>*+*,
+        #connection-lost>.error>*+* {
             margin-left: 0.2em;
         }
 
@@ -694,6 +710,9 @@
             console.log(reproCode);
             if (navigator.clipboard) {
                 navigator.clipboard.writeText(reproCode);
+                let feedback = document.getElementById("repro-copied");
+                feedback.setAttribute("class", "show");
+                setTimeout(() => feedback.removeAttribute("class"), 2000);
             } else {
                 alert(reproCode);
             }
@@ -736,7 +755,14 @@
                 }
                 code = code.join("\n");
                 console.log(code);
-                navigator.clipboard.writeText(code);
+                if (navigator.clipboard) {
+                    navigator.clipboard.writeText(code);
+                    let feedback = document.getElementById("replace-copied");
+                    feedback.setAttribute("class", "show");
+                    setTimeout(() => feedback.removeAttribute("class"), 2000);
+                } else {
+                    alert(code);
+                }
 
                 clearSelection();
             }
@@ -788,7 +814,8 @@
             </div>
             <div id="connection-lost" class="show-error">
                 <p class="error">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" style="fill: red;" viewBox="0 0 24 24">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" style="fill: red;"
+                        viewBox="0 0 24 24">
                         <path d="M0 0h24v24H0z" fill="none" />
                         <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z" /></svg>
                     <span>Not connected to Tractus!</span>
@@ -804,12 +831,13 @@
             <summary>Manage source code</summary>
             <button id="repro" onclick="reproCodeForSelected()" disabled="true">
                 Copy reproduction code to clipboard
-            </button>
+            </button><span id="repro-copied">Copied!</span>
             <form id="hyp-replace" onsubmit="doReplace(arguments[0])">
                 <div id="replacements" class="empty">
                     <h1>Variable replacements</h1>
                 </div>
-                <input type="submit" id="replace" value="Copy with replaced variables to clipboard" disabled="true" />
+                <input type="submit" id="replace" value="Copy with replaced variables to clipboard"
+                    disabled="true" /><span id="replace-copied">Copied!</span>
             </form>
             </aside>
         </details>
