@@ -34,7 +34,7 @@ infix_operator = { "<=" | ">=" | !"<-" ~ "<" | ">" | "==" | "!=" | "+" | "-" | "
 custom_infix_operator = { "%" ~ (!("%" | WHITESPACE | NEWLINE) ~ ANY)* ~ "%" }
 
 identifier = @{ "\"" ~ raw_identifier ~ "\"" | raw_identifier }
-raw_identifier = _{ !keyword ~ !(ASCII_DIGIT | "_" | "." ~ ASCII_DIGIT) ~ identifier_character+ ~ ("::" ~ ":"* ~ identifier)? }
+raw_identifier = _{ !(keyword ~ !(identifier_character)) ~ !(ASCII_DIGIT | "_" | "." ~ ASCII_DIGIT) ~ identifier_character+ ~ ("::" ~ ":"* ~ identifier)? }
 keyword = _{ "if" | "else" | "while" | "for" | "function" }
 identifier_character = _{ ASCII_ALPHANUMERIC | "." | "_" }
 
