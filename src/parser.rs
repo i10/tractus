@@ -1,173 +1,58 @@
 use std::borrow::Borrow;
 use std::fmt::{Display, Write};
-use std::hash::{Hash, Hasher};
 use std::iter::FromIterator;
-use std::rc::Rc;
+use std::ops::Index;
 
 use itertools::Itertools;
-use log::debug;
+use log::{debug, trace};
 use pest::Parser;
-use serde::{Deserialize, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 
 #[derive(Parser)]
 #[grammar = "r.pest"]
 struct RParser;
 
+/// An AST statement.
 #[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize)]
-pub enum RStatement<Meta> {
-    Empty(Meta),
-    Comment(String, Meta),
-    TailComment(Rc<RStatement<Meta>>, String, Meta),
-    Assignment(
-        Rc<RExpression<Meta>>,
-        Vec<Rc<RExpression<Meta>>>,
-        Rc<RExpression<Meta>>,
-        Meta,
-    ),
-    If(
-        Rc<RExpression<Meta>>,
-        Vec<Rc<RStatement<Meta>>>,
-        Option<Vec<Rc<RStatement<Meta>>>>,
-        Meta,
-    ),
-    While(Rc<RExpression<Meta>>, Vec<Rc<RStatement<Meta>>>, Meta),
-    For(
-        Rc<RExpression<Meta>>,
-        Rc<RExpression<Meta>>,
-        Vec<Rc<RStatement<Meta>>>,
-        Meta,
-    ),
-    Library(RIdentifier, Meta),
-    Expression(Rc<RExpression<Meta>>, Meta),
+pub enum Statement {
+    Empty,
+    Comment(String),
+    TailComment(Box<Statement>, String),
+    Assignment(Expression, Vec<Expression>, Expression),
+    If(Expression, Vec<Statement>, Option<Vec<Statement>>),
+    While(Expression, Vec<Statement>),
+    For(Expression, Expression, Vec<Statement>),
+    Library(RIdentifier),
+    Expression(Expression),
 }
 
-/*
-impl<T> std::fmt::Debug for RStatement<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "RStmt {{ {} }}", self)
-    }
-}
-*/
-
-impl<T> Hash for RStatement<T> {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        use RStatement::*;
+impl Statement {
+    /// Returns the expression contained in the statement, if it exists.
+    pub fn expression(&self) -> Option<&Expression> {
+        use Statement::*;
         match self {
-            Empty(_) => ().hash(state),
-            Comment(text, _) => text.hash(state),
-            TailComment(statement, text, _) => {
-                statement.hash(state);
-                text.hash(state);
-            }
-            Assignment(left, additional, right, _) => {
-                left.hash(state);
-                additional.hash(state);
-                right.hash(state);
-            }
-            If(cond, body, else_body, _) => {
-                cond.hash(state);
-                body.hash(state);
-                else_body.hash(state);
-            }
-            While(cond, body, _) => {
-                cond.hash(state);
-                body.hash(state);
-            }
-            For(var, range, body, _) => {
-                var.hash(state);
-                range.hash(state);
-                body.hash(state);
-            }
-            Library(name, _) => name.hash(state),
-            Expression(exp, _) => exp.hash(state),
-        }
-    }
-}
-
-pub type Statement = RStatement<Span>;
-
-impl<T> RStatement<T> {
-    pub fn map<F, U>(&self, mapping: &mut F) -> Rc<RStatement<U>>
-    where
-        F: FnMut(&T) -> U,
-    {
-        use RStatement::*;
-        Rc::new(match self {
-            Empty(m) => Empty(mapping(m)),
-            Comment(comment, m) => Comment(comment.clone(), mapping(m)),
-            TailComment(stmt, comment, m) => {
-                TailComment(stmt.map(mapping), comment.clone(), mapping(m))
-            }
-            Assignment(left, additional, right, m) => Assignment(
-                left.map(mapping),
-                additional.iter().map(|exp| exp.map(mapping)).collect(),
-                right.map(mapping),
-                mapping(m),
-            ),
-            If(exp, body, else_body, m) => If(
-                exp.map(mapping),
-                body.iter().map(|stmt| stmt.map(mapping)).collect(),
-                else_body
-                    .as_ref()
-                    .map(|b| b.iter().map(|stmt| stmt.map(mapping)).collect()),
-                mapping(m),
-            ),
-            While(condition, body, m) => While(
-                condition.map(mapping),
-                body.iter().map(|stmt| stmt.map(mapping)).collect(),
-                mapping(m),
-            ),
-            For(variable, range, body, m) => For(
-                variable.map(mapping),
-                range.map(mapping),
-                body.iter().map(|stmt| stmt.map(mapping)).collect(),
-                mapping(m),
-            ),
-            Library(id, m) => Library(id.clone(), mapping(m)),
-            Expression(exp, m) => Expression(exp.map(mapping), mapping(m)),
-        })
-    }
-
-    pub fn get_meta(&self) -> &T {
-        use RStatement::*;
-        match self {
-            Empty(m) => m,
-            Comment(comment, m) => m,
-            TailComment(stmt, comment, m) => m,
-            Assignment(left, additional, right, m) => m,
-            If(exp, body, else_body, m) => m,
-            While(condition, body, m) => m,
-            For(variable, range, body, m) => m,
-            Library(id, m) => m,
-            Expression(exp, m) => m,
-        }
-    }
-
-    pub fn expression(&self) -> Option<Rc<RExpression<T>>> {
-        use RStatement::*;
-        match self {
-            Assignment(_, _, expression, _) => Some(expression.clone()),
-            Expression(expression, _) => Some(expression.clone()),
-            TailComment(statement, _, _) => statement.expression(),
+            Assignment(_, _, expression) => Some(expression),
+            Expression(expression) => Some(expression),
+            TailComment(statement, _) => statement.expression(),
             // TODO: Check how to handle if, while, and for.
-            If(_, _, _, _) => None,
-            For(_, _, _, _) => None,
-            While(_, _, _) => None,
-            Empty(_) => None,
-            Comment(_, _) => None,
-            Library(_, _) => None,
+            If(_, _, _) => None,
+            For(_, _, _) => None,
+            While(_, _) => None,
+            Empty => None,
+            Comment(_) => None,
+            Library(_) => None,
         }
     }
 }
 
-impl<T> Display for RStatement<T> {
+impl Display for Statement {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use RStatement::*;
+        use Statement::*;
         match self {
-            Empty(_) => writeln!(f),
-            Comment(text, _) => write!(f, "{}", text),
-            TailComment(expression, text, _) => write!(f, "{} {}", expression, text),
-            Assignment(left, additional, right, _) => {
+            Empty => writeln!(f),
+            Comment(text) => write!(f, "{}", text),
+            TailComment(expression, text) => write!(f, "{} {}", expression, text),
+            Assignment(left, additional, right) => {
                 let mut assigned = vec![left];
                 assigned.append(&mut additional.iter().collect());
                 for variable in assigned.iter() {
@@ -175,235 +60,60 @@ impl<T> Display for RStatement<T> {
                 }
                 write!(f, "{}", right)
             }
-            If(condition, body, maybe_else_body, _) => {
-                write!(f, "if ({}) {{\n{}\n}}", condition, Lines::from(body))?;
+            If(condition, body, maybe_else_body) => {
+                write!(f, "if ({}) {{\n{}\n}}", condition, display_lines(body))?;
                 if let Some(else_body) = maybe_else_body {
-                    write!(f, "\nelse {{\n{}\n}}", Lines::from(else_body))?;
+                    write!(f, "\nelse {{\n{}\n}}", display_lines(else_body))?;
                 }
                 Ok(())
             }
-            While(condition, body, _) => {
-                write!(f, "while ({}) {{\n{}\n}}", condition, Lines::from(body))
+            While(condition, body) => {
+                write!(f, "while ({}) {{\n{}\n}}", condition, display_lines(body))
             }
-            For(variable, range, body, _) => write!(
+            For(variable, range, body) => write!(
                 f,
                 "for ({} in {}) {{\n{}\n}}",
                 variable,
                 range,
-                Lines::from(body)
+                display_lines(body)
             ),
-            Library(name, _) => write!(f, "{}", name),
-            Expression(exp, _) => write!(f, "{}", exp),
+            Library(name) => write!(f, "library({})", name),
+            Expression(exp) => write!(f, "{}", exp),
         }
     }
 }
 
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub struct Lines<'a, T>(&'a Vec<Rc<RStatement<T>>>);
-
-impl<'a, T> Display for Lines<'a, T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0.iter().join("\n"))
-    }
+/// Render lines with line breaks.
+fn display_lines(lines: &[Statement]) -> String {
+    lines.iter().map(|line| line.to_string()).join("\n")
 }
 
-impl<'a, T> From<&'a Vec<Rc<RStatement<T>>>> for Lines<'a, T> {
-    fn from(other: &'a Vec<Rc<RStatement<T>>>) -> Lines<T> {
-        Lines(other)
-    }
-}
-
+/// An AST expression.
 #[derive(PartialEq, Debug, Eq, Clone, Serialize, Deserialize)]
-pub enum RExpression<Meta> {
-    Constant(String, Meta),
-    Variable(RIdentifier, Meta),
-    Call(
-        Rc<RExpression<Meta>>,
-        Vec<(Option<RIdentifier>, Rc<RExpression<Meta>>)>,
-        Meta,
-    ),
-    Column(Rc<RExpression<Meta>>, Rc<RExpression<Meta>>, Meta),
-    Index(
-        Rc<RExpression<Meta>>,
-        Vec<Option<Rc<RExpression<Meta>>>>,
-        Meta,
-    ),
-    ListIndex(
-        Rc<RExpression<Meta>>,
-        Vec<Option<Rc<RExpression<Meta>>>>,
-        Meta,
-    ),
-    OneSidedFormula(Rc<RExpression<Meta>>, Meta),
-    TwoSidedFormula(Rc<RExpression<Meta>>, Rc<RExpression<Meta>>, Meta),
-    Function(
-        Vec<(RIdentifier, Option<Rc<RExpression<Meta>>>)>,
-        Vec<Rc<RStatement<Meta>>>,
-        Meta,
-    ),
-    Prefix(String, Rc<RExpression<Meta>>, Meta),
-    Infix(String, Rc<RExpression<Meta>>, Rc<RExpression<Meta>>, Meta),
+pub enum Expression {
+    Constant(String),
+    Variable(RIdentifier),
+    Call(Box<Expression>, Vec<(Option<RIdentifier>, Expression)>),
+    Column(Box<Expression>, Box<Expression>),
+    Index(Box<Expression>, Vec<Option<Expression>>),
+    ListIndex(Box<Expression>, Vec<Option<Expression>>),
+    OneSidedFormula(Box<Expression>),
+    TwoSidedFormula(Box<Expression>, Box<Expression>),
+    Function(Vec<(RIdentifier, Option<Expression>)>, Vec<Statement>),
+    Prefix(String, Box<Expression>),
+    Infix(String, Box<Expression>, Box<Expression>),
 }
 
-/*
-impl<T> fmt::Debug for RExpression<T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "RExp {{ {} }}", self)
-    }
-}
-*/
-impl<T> Hash for RExpression<T> {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        use RExpression::*;
-        match self {
-            Constant(value, _) => value.hash(state),
-            Variable(id, _) => id.hash(state),
-            Call(exp, args, _) => {
-                exp.hash(state);
-                args.hash(state);
-            }
-            Column(left, right, _) => {
-                left.hash(state);
-                right.hash(state);
-            }
-            Index(left, right, _) => {
-                left.hash(state);
-                right.hash(state);
-            }
-            ListIndex(left, right, _) => {
-                left.hash(state);
-                right.hash(state);
-            }
-            OneSidedFormula(exp, _) => exp.hash(state),
-            TwoSidedFormula(left, right, _) => {
-                left.hash(state);
-                right.hash(state);
-            }
-            Function(params, body, _) => {
-                params.hash(state);
-                body.hash(state);
-            }
-            Prefix(op, exp, _) => {
-                op.hash(state);
-                exp.hash(state);
-            }
-            Infix(op, left, right, _) => {
-                op.hash(state);
-                left.hash(state);
-                right.hash(state);
-            }
-        }
-    }
-}
-
-pub type RExp = RExpression<()>;
-pub type Expression = RExpression<Span>;
-
-impl RExp {
-    pub fn constant(content: &'static str) -> RExp {
-        RExpression::Constant(content.to_string(), ())
-    }
-
-    pub fn variable(content: &'static str) -> RExp {
-        RExpression::Variable(content.to_string(), ())
-    }
-
-    pub fn boxed_constant(content: impl Into<String>) -> Rc<RExp> {
-        Rc::new(RExpression::Constant(content.into(), ()))
-    }
-
-    pub fn boxed_variable(content: impl Into<String>) -> Rc<RExp> {
-        Rc::new(RExpression::Variable(content.into(), ()))
-    }
-}
-
-impl<T> RExpression<T> {
-    pub fn map<F, U>(&self, mapping: &mut F) -> Rc<RExpression<U>>
-    where
-        F: FnMut(&T) -> U,
-    {
-        use RExpression::*;
-        Rc::new(match self {
-            Constant(constant, m) => Constant(constant.clone(), mapping(m)),
-            Variable(id, m) => Variable(id.clone(), mapping(m)),
-            Call(exp, args, m) => Call(
-                exp.map(mapping),
-                args.iter()
-                    .map(|(name, exp)| (name.clone(), exp.map(mapping)))
-                    .collect(),
-                mapping(m),
-            ),
-            Column(left, right, m) => Column(left.map(mapping), right.map(mapping), mapping(m)),
-            Index(left, right, m) => Index(
-                left.map(mapping),
-                right
-                    .iter()
-                    .map(|maybe_exp| maybe_exp.as_ref().map(|exp| exp.map(mapping)))
-                    .collect(),
-                mapping(m),
-            ),
-            ListIndex(left, right, m) => ListIndex(
-                left.map(mapping),
-                right
-                    .iter()
-                    .map(|maybe_exp| maybe_exp.as_ref().map(|exp| exp.map(mapping)))
-                    .collect(),
-                mapping(m),
-            ),
-            OneSidedFormula(formula, m) => OneSidedFormula(formula.map(mapping), mapping(m)),
-            TwoSidedFormula(left, right, m) => {
-                TwoSidedFormula(left.map(mapping), right.map(mapping), mapping(m))
-            }
-            Function(args, body, m) => Function(
-                args.iter()
-                    .map(|(name, maybe_statement)| {
-                        (
-                            name.clone(),
-                            maybe_statement
-                                .as_ref()
-                                .map(|statement| statement.map(mapping)),
-                        )
-                    })
-                    .collect(),
-                body.iter()
-                    .map(|statement| statement.map(mapping))
-                    .collect(),
-                mapping(m),
-            ),
-            Prefix(operator, exp, m) => Prefix(operator.clone(), exp.map(mapping), mapping(m)),
-            Infix(operator, left, right, m) => Infix(
-                operator.clone(),
-                left.map(mapping),
-                right.map(mapping),
-                mapping(m),
-            ),
-        })
-    }
-
-    pub fn get_meta(&self) -> &T {
-        use RExpression::*;
-        match self {
-            Constant(constant, m) => m,
-            Variable(id, m) => m,
-            Call(exp, args, m) => m,
-            Column(left, right, m) => m,
-            Index(left, right, m) => m,
-            ListIndex(left, right, m) => m,
-            OneSidedFormula(formula, m) => m,
-            TwoSidedFormula(left, right, m) => m,
-            Function(args, body, m) => m,
-            Prefix(operator, exp, m) => m,
-            Infix(operator, left, right, m) => m,
-        }
-    }
-
+impl Expression {
+    /// If the expression contains a unique variable, return its name.
     pub fn extract_variable_name(&self) -> Option<RIdentifier> {
-        use RExpression::*;
+        use Expression::*;
         match self {
-            Variable(name, _) => Some(name.to_string()),
-            Column(left, _, _) => left.extract_variable_name(),
-            Index(left, _, _) => left.extract_variable_name(),
-            ListIndex(left, _, _) => left.extract_variable_name(),
-            Call(_, args, _) => {
+            Variable(name) => Some(name.to_string()),
+            Column(left, _) => left.extract_variable_name(),
+            Index(left, _) => left.extract_variable_name(),
+            ListIndex(left, _) => left.extract_variable_name(),
+            Call(_, args) => {
                 // `colnames(variable) <- c("a", "b", "c")` is valid R.
                 if args.len() == 1 {
                     let (_, exp) = &args[0];
@@ -417,13 +127,13 @@ impl<T> RExpression<T> {
     }
 }
 
-impl<T> Display for RExpression<T> {
+impl Display for Expression {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use RExpression::*;
+        use Expression::*;
         match self {
-            Constant(constant, _) => write!(f, "{}", constant),
-            Variable(name, _) => write!(f, "{}", name),
-            Call(name, args, _) => {
+            Constant(constant) => write!(f, "{}", constant),
+            Variable(name) => write!(f, "{}", name),
+            Call(name, args) => {
                 let arguments = args
                     .iter()
                     .map(|(maybe_name, expression)| {
@@ -438,8 +148,8 @@ impl<T> Display for RExpression<T> {
                     .join(", ");
                 write!(f, "{}({})", name, arguments)
             }
-            Column(left, right, _) => write!(f, "{}${}", left, right),
-            Index(left, right, _) => {
+            Column(left, right) => write!(f, "{}${}", left, right),
+            Index(left, right) => {
                 let indices = right
                     .iter()
                     .map(|maybe_expression| match maybe_expression {
@@ -450,7 +160,7 @@ impl<T> Display for RExpression<T> {
                     .join(", ");
                 write!(f, "{}[{}]", left, indices)
             }
-            ListIndex(left, right, _) => {
+            ListIndex(left, right) => {
                 let indices = right
                     .iter()
                     .map(|maybe_expression| match maybe_expression {
@@ -461,9 +171,9 @@ impl<T> Display for RExpression<T> {
                     .join(", ");
                 write!(f, "{}[[{}]]", left, indices)
             }
-            OneSidedFormula(formula, _) => write!(f, "~ {}", formula),
-            TwoSidedFormula(left, right, _) => write!(f, "{} ~ {}", left, right),
-            Function(params, body, _) => {
+            OneSidedFormula(formula) => write!(f, "~ {}", formula),
+            TwoSidedFormula(left, right) => write!(f, "{} ~ {}", left, right),
+            Function(params, body) => {
                 let parameters = params
                     .iter()
                     .map(|(name, maybe_default)| {
@@ -476,126 +186,266 @@ impl<T> Display for RExpression<T> {
                     })
                     .collect::<Result<Vec<String>, std::fmt::Error>>()?
                     .join(", ");
-                write!(f, "function ({}) {{\n{}\n}}", parameters, Lines::from(body))
+                write!(
+                    f,
+                    "function ({}) {{\n{}\n}}",
+                    parameters,
+                    display_lines(body)
+                )
             }
-            Prefix(op, exp, _) => write!(f, "{}{}", op, exp),
-            Infix(op, left, right, _) => write!(f, "{} {} {}", left, op, right),
-        }
-    }
-}
-
-pub struct LineDisplay<'a, P>(&'a P)
-where
-    &'a P: Extract<Span> + Display;
-
-impl<'a, P> From<&'a P> for LineDisplay<'a, P>
-where
-    &'a P: Extract<Span> + Display,
-{
-    fn from(other: &'a P) -> Self {
-        LineDisplay(other)
-    }
-}
-
-impl<'a, P> Display for LineDisplay<'a, P>
-where
-    &'a P: Extract<Span> + Display,
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let expression = self.0.borrow();
-        let span = expression.extract();
-        write!(f, "{}", span.from.line)?;
-        if span.to.line > span.from.line {
-            write!(f, "-{}", span.to.line)?;
-        }
-        write!(f, ": {}", self.0)
-    }
-}
-
-impl<'a, P> Serialize for LineDisplay<'a, P>
-where
-    &'a P: Extract<Span> + Display,
-{
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.serialize_str(&self.to_string())
-    }
-}
-
-pub trait Extract<T> {
-    fn extract(&self) -> &T;
-}
-
-impl<T> Extract<T> for &Rc<RStatement<T>> {
-    fn extract(&self) -> &T {
-        use RStatement::*;
-        match &***self {
-            Empty(m) => m,
-            Comment(_, m) => m,
-            TailComment(_, _, m) => m,
-            Assignment(_, _, _, m) => m,
-            If(_, _, _, m) => m,
-            While(_, _, m) => m,
-            For(_, _, _, m) => m,
-            Library(_, m) => m,
-            Expression(_, m) => m,
-        }
-    }
-}
-
-impl<T> Extract<T> for &Rc<RExpression<T>> {
-    fn extract(&self) -> &T {
-        use RExpression::*;
-        match &***self {
-            Constant(_, m) => m,
-            Variable(_, m) => m,
-            Call(_, _, m) => m,
-            Column(_, _, m) => m,
-            Index(_, _, m) => m,
-            ListIndex(_, _, m) => m,
-            OneSidedFormula(_, m) => m,
-            TwoSidedFormula(_, _, m) => m,
-            Function(_, _, m) => m,
-            Prefix(_, _, m) => m,
-            Infix(_, _, _, m) => m,
+            Prefix(op, exp) => write!(f, "{}{}", op, exp),
+            Infix(op, left, right) => write!(f, "{} {} {}", left, op, right),
         }
     }
 }
 
 pub type RIdentifier = String;
 
-#[derive(PartialEq, Eq, Debug, Clone, Deserialize, Hash, Serialize)]
-pub struct Span {
-    from: Position,
-    to: Position,
+pub type Error = pest::error::Error<Rule>;
+
+/// A collections of `Statement`s with associated `Meta`-data.
+#[derive(Debug, Deserialize, Default, Serialize, Clone)]
+pub struct Statements<Meta> {
+    stmts: Vec<(Statement, Meta)>,
 }
 
-impl<'i, P: Borrow<pest::iterators::Pair<'i, Rule>>> From<P> for Span {
-    fn from(other: P) -> Self {
-        let span = other.borrow().as_span();
-        Span {
-            from: Position::from(&span.start_pos()),
-            to: Position::from(&span.end_pos()),
+impl<M> FromIterator<(Statement, M)> for Statements<M> {
+    fn from_iter<I: IntoIterator<Item = (Statement, M)>>(other: I) -> Self {
+        Statements {
+            stmts: other.into_iter().collect(),
         }
     }
 }
 
-#[derive(PartialEq, Eq, Deserialize, Debug, Clone, Hash, Serialize)]
-pub struct Position {
-    line: usize,
-    column: usize,
-}
-
-impl<'i> From<&pest::Position<'i>> for Position {
-    fn from(other: &pest::Position) -> Self {
-        let (line, column) = other.line_col();
-        Position { line, column }
+impl FromIterator<Statement> for Statements<()> {
+    fn from_iter<I: IntoIterator<Item = Statement>>(other: I) -> Self {
+        Statements::from_iter(other.into_iter().map(|s| (s, ())))
     }
 }
 
-pub type Error = pest::error::Error<Rule>;
+impl<M> IntoIterator for Statements<M> {
+    type Item = (Statement, M);
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.stmts.into_iter()
+    }
+}
+
+/// An id used for indexing `Statements`.
+#[derive(
+    Hash, PartialEq, PartialOrd, Default, Eq, Debug, Clone, Serialize, Deserialize, Copy, Ord,
+)]
+pub struct StatementId(usize);
+
+impl<S, M> Index<S> for Statements<M>
+where
+    S: Borrow<StatementId>,
+{
+    type Output = (Statement, M);
+
+    fn index(&self, id: S) -> &Self::Output {
+        let idx = id.borrow().0;
+        &self.stmts[idx]
+    }
+}
+
+impl<M> Statements<M> {
+    pub fn new() -> Self {
+        Self { stmts: Vec::new() }
+    }
+
+    /// Append a statement with its meta-data to the collection.
+    pub fn append(&mut self, stmt: Statement, meta: M) -> StatementId {
+        self.concat(Statements::from_iter(vec![(stmt, meta)]))[0]
+    }
+
+    /// Concatenate the passed statements to this collection. Returns the ids of the statements added.
+    pub fn concat(&mut self, mut stmts: Statements<M>) -> Vec<StatementId> {
+        let first_index = self.stmts.len();
+        self.stmts.append(&mut stmts.stmts);
+        let last_index = self.stmts.len();
+
+        let id_range = first_index..last_index;
+        id_range.map(StatementId).collect()
+    }
+
+    /// Returns an iterator over the items with their ids.
+    pub fn iter(&self) -> impl Iterator<Item = (StatementId, &Statement, &M)> {
+        self.stmts
+            .iter()
+            .enumerate()
+            .map(|(idx, (s, m))| (StatementId(idx), s, m))
+    }
+
+    /// Consumes this collection and returns a new collection with mapped entries.
+    pub fn into_map<F, N>(self, mapping: &mut F) -> Statements<N>
+    where
+        F: FnMut(&Statement, M) -> N,
+    {
+        Statements {
+            stmts: self
+                .stmts
+                .into_iter()
+                .map(|(s, m)| {
+                    let mapped = mapping(&s, m);
+                    (s, mapped)
+                })
+                .collect(),
+        }
+    }
+
+    pub fn as_map<F, N>(&self, mapping: &mut F) -> Vec<N>
+    where
+        F: FnMut(StatementId, &Statement, &M) -> N,
+    {
+        self.stmts
+            .iter()
+            .enumerate()
+            .map(|(idx, (s, m))| mapping(StatementId(idx), s, m))
+            .collect()
+    }
+}
+
+/// A stateful collection to which new lines can be added continuously.
+#[derive(Debug, Serialize, Default, Deserialize, Clone)]
+pub struct Parsed<M = LineSpan> {
+    statements: Statements<M>,
+    unparsed: Vec<String>,
+    line_count: usize,
+}
+
+impl Parsed<LineSpan> {
+    /// Convenience function.
+    pub fn append<S>(&mut self, lines: Vec<S>) -> Vec<StatementId>
+    where
+        S: AsRef<str>,
+    {
+        self.append_with_meta(lines, &mut |_, m| m)
+    }
+}
+
+impl<M: std::fmt::Debug> Parsed<M> {
+    pub fn new() -> Self {
+        Parsed {
+            statements: Statements::new(),
+            unparsed: Vec::new(),
+            line_count: 0,
+        }
+    }
+
+    /// Parses `lines` and appends all resulting statments to this collection,
+    /// while transforming the meta-data according to the `mapping` closure.
+    pub fn append_with_meta<S, F>(&mut self, lines: Vec<S>, mapping: &mut F) -> Vec<StatementId>
+    where
+        S: AsRef<str>,
+        F: FnMut(&Statement, LineSpan) -> M,
+    {
+        let mut added_ids = Vec::new();
+        for line in lines.iter() {
+            self.line_count += 1;
+            self.unparsed.push(line.as_ref().to_string()); // Push to unparsed, such that all currently unparsed lines are treated together.
+
+            let to_parse = &self.unparsed.join("\n");
+            let parse_result = parse_statements(to_parse);
+
+            match parse_result {
+                Ok(stmts) => {
+                    let stmts = stmts.into_map(&mut |stmt, span| {
+                        let first_unparsed_line = self.line_count - self.unparsed.len() + 1; // +1 because unparsed always contains the current line.
+                        let shifted_span = span.shifted(first_unparsed_line);
+                        mapping(&stmt, shifted_span)
+                    });
+                    let mut new_ids = self.statements.concat(stmts);
+                    self.unparsed.clear(); // We have parsed everything successfully.
+                    added_ids.append(&mut new_ids);
+                }
+                Err(e) => {
+                    // If the parsing error occurred at the very last symbol,
+                    // we assume that it is simply incomplete and will try again when we have more input.
+                    trace!("Encountered error while parsing {}:\n{}", to_parse, e);
+                    if let pest::error::InputLocation::Pos(pos) = e.location {
+                        trace!(
+                            "Error position is {}, last position is {}.",
+                            pos,
+                            to_parse.len()
+                        );
+                        if pos == to_parse.len() {
+                            debug!("Will retry with more input.");
+                            continue; // Current line is already pushed to self.unparsed, so it will be retried on next iteration.
+                        }
+                    }
+                    debug!("Skipping this input.");
+                    self.unparsed.clear(); // We determined that there is an error in the currently unparsed code.
+                }
+            }
+        }
+
+        added_ids
+    }
+
+    /// Returns this collection's `Statements` by reference.
+    pub fn statements(&self) -> &Statements<M> {
+        &self.statements
+    }
+
+    /// Consumes this collection and returns its `Statements`.
+    pub fn into_statements(self) -> Statements<M> {
+        self.statements
+    }
+}
+
+/// Parses `code` into a collection of `Statements` associated with their `LineSpan` information.
+/// If the parser fails, the parsing error is returned instead.
+pub fn parse_statements(code: &str) -> Result<Statements<LineSpan>, Error> {
+    let parsed = RParser::parse(Rule::r_code, code)?;
+
+    let new_statements: Vec<(Statement, LineSpan)> = parsed
+        .filter_map(|token| match token.as_rule() {
+            Rule::EOI => None,
+            _ => {
+                // parse_line handles all other cases.
+                let line_span = LineSpan::from(token.as_span());
+                Some((parse_line(token), line_span))
+            }
+        })
+        .collect();
+
+    Ok(Statements::from_iter(new_statements))
+}
+
+/// Information on which source code lines a statement spans.
+#[derive(Debug, Serialize, PartialEq, Eq, Default, Deserialize, Clone)]
+pub struct LineSpan {
+    /// First line number the statement occupies.
+    from: usize,
+    /// Last line number the statement occupies.
+    to: usize,
+}
+
+impl LineSpan {
+    /// Shift this span's line numbers such that it starts at the `new_start`.
+    pub fn shifted(self, new_start: usize) -> Self {
+        let offset = new_start - 1; // Minus one, because line count starts at one.
+        Self {
+            from: self.from + offset,
+            to: self.to + offset,
+        }
+    }
+}
+
+impl<'a, S> From<S> for LineSpan
+where
+    S: Borrow<pest::Span<'a>>,
+{
+    fn from(other: S) -> Self {
+        let span = other.borrow();
+        Self {
+            from: span.start_pos().line_col().0,
+            to: span.end_pos().line_col().0,
+        }
+    }
+}
 
 /// Helper macro for use instead of `unreachable!()` that outputs more information.
 macro_rules! unexpected_rule {
@@ -608,77 +458,26 @@ macro_rules! unexpected_rule {
     };
 }
 
-#[derive(Debug, Default)]
-pub struct Parsed(Vec<Rc<Statement>>);
-
-impl Parsed {
-    pub fn new() -> Self {
-        Parsed(vec![])
-    }
-
-    pub fn parse(code: &str) -> Result<Self, Error> {
-        let mut parsed = Self::new();
-        parsed.append(code)?;
-        Ok(parsed)
-    }
-
-    pub fn append(&mut self, code: &str) -> Result<&[Rc<Statement>], Error> {
-        debug!("Pest parsing...");
-        let parsed = RParser::parse(Rule::r_code, code)?;
-
-        debug!("Assembling AST...");
-        let mut new_statements: Vec<Rc<Statement>> = parsed
-            .filter_map(|token| match token.as_rule() {
-                Rule::EOI => None,
-                _ => Some(parse_line(token)),
-            })
-            .collect();
-
-        let added = new_statements.len();
-        self.0.append(&mut new_statements);
-        let len = self.0.len();
-        Ok(&self.0[len - added..])
-    }
-
-    pub fn iter(&self) -> impl Iterator<Item = &Rc<Statement>> {
-        self.0.iter()
-    }
-}
-
-impl FromIterator<Statement> for Parsed {
-    fn from_iter<I: IntoIterator<Item = Statement>>(iter: I) -> Self {
-        Parsed(iter.into_iter().map(Rc::new).collect())
-    }
-}
-
-impl IntoIterator for Parsed {
-    type Item = Rc<Statement>;
-    type IntoIter = std::vec::IntoIter<Self::Item>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.0.into_iter()
-    }
-}
-
-fn parse_line(line_pair: pest::iterators::Pair<Rule>) -> Rc<Statement> {
-    Rc::new(match line_pair.as_rule() {
-        Rule::empty => RStatement::Empty(line_pair.into()),
+/// Parses a token representing a single line of code.
+///
+/// # Panics
+///
+/// This function panics if the token does not represent a line.
+fn parse_line(line_pair: pest::iterators::Pair<Rule>) -> Statement {
+    match line_pair.as_rule() {
+        Rule::empty => Statement::Empty,
         Rule::line => {
             let mut line = line_pair.into_inner();
             let first_pair = line.next().unwrap(); // A line always contains at least a statement or a comment.
-            let first_pair_span = Span::from(&first_pair);
             let first: Statement = match first_pair.as_rule() {
                 Rule::statement => {
                     let statement = first_pair.into_inner().next().unwrap(); // Take statement out of line.
-                    let statement_span = Span::from(&statement);
                     match statement.as_rule() {
-                        Rule::expression => {
-                            RStatement::Expression(parse_expression(statement), statement_span)
-                        }
+                        Rule::expression => Statement::Expression(parse_expression(statement)),
                         Rule::assignment => {
                             // Can be multiple assignment, e. g. a=b=c=1. We want to extract the right-most expression,
-                            // wich is assigned to all others, and the left-most one, which prevents an empty left side.
-                            let mut elements: Vec<Rc<Expression>> =
+                            // which is assigned to all others.
+                            let mut elements: Vec<Expression> =
                                 statement.into_inner().map(parse_expression).collect();
                             let error = "Assignment did not have enough elements.";
                             let right = elements.pop().expect(error);
@@ -687,7 +486,7 @@ fn parse_line(line_pair: pest::iterators::Pair<Rule>) -> Rc<Statement> {
                             }
                             let left = elements.remove(0);
                             let additional = elements;
-                            RStatement::Assignment(left, additional, right, statement_span)
+                            Statement::Assignment(left, additional, right)
                         }
                         Rule::if_statement => {
                             let mut elements = statement.into_inner();
@@ -697,16 +496,16 @@ fn parse_line(line_pair: pest::iterators::Pair<Rule>) -> Rc<Statement> {
                                 panic!("If statement did not have enough elements.");
                             };
                             let body = elements.next().unwrap().into_inner(); // If statement always has a body.
-                            let body: Vec<Rc<Statement>> = body.map(parse_line).collect();
+                            let body: Vec<Statement> = body.map(parse_line).collect();
 
                             let else_body = elements.next().map(|else_body| {
                                 else_body
                                     .into_inner()
                                     .map(parse_line)
-                                    .collect::<Vec<Rc<Statement>>>()
+                                    .collect::<Vec<Statement>>()
                             });
 
-                            RStatement::If(condition, body, else_body, statement_span)
+                            Statement::If(condition, body, else_body)
                         }
                         Rule::while_statement => {
                             let mut elements = statement.into_inner();
@@ -716,8 +515,8 @@ fn parse_line(line_pair: pest::iterators::Pair<Rule>) -> Rc<Statement> {
                                 panic!("While statement did not have enough elements.");
                             };
                             let body = elements.next().unwrap().into_inner(); // For statement always has a body.
-                            let body: Vec<Rc<Statement>> = body.map(parse_line).collect();
-                            RStatement::While(condition, body, statement_span)
+                            let body: Vec<Statement> = body.map(parse_line).collect();
+                            Statement::While(condition, body)
                         }
                         Rule::for_statement => {
                             let mut elements = statement.into_inner();
@@ -729,63 +528,57 @@ fn parse_line(line_pair: pest::iterators::Pair<Rule>) -> Rc<Statement> {
                                 panic!("For statement did not have enough elements.");
                             };
                             let body = elements.next().unwrap().into_inner(); // For statement always has a body.
-                            let body: Vec<Rc<Statement>> = body.map(parse_line).collect();
-                            RStatement::For(pattern, range, body, statement_span)
+                            let body: Vec<Statement> = body.map(parse_line).collect();
+                            Statement::For(pattern, range, body)
                         }
                         Rule::library => {
                             let name = statement.into_inner().next().unwrap(); // Library name always exists.
-                            RStatement::Library(name.as_str().into(), statement_span)
+                            Statement::Library(name.as_str().into())
                         }
                         r => unexpected_rule!(r, statement),
                     }
                 }
-                Rule::comment => {
-                    RStatement::Comment(first_pair.as_str().to_string(), first_pair_span)
-                }
+                Rule::comment => Statement::Comment(first_pair.as_str().to_string()),
                 r => unexpected_rule!(r, first_pair),
             };
 
             let maybe_comment = line.next();
             if let Some(comment) = maybe_comment {
-                // Second line component has to be a comment.
-                let comment_span = Span::from(&comment);
-                RStatement::TailComment(Rc::new(first), comment.as_str().to_string(), comment_span)
+                // Only two-part structure is a tail comment.
+                Statement::TailComment(Box::new(first), comment.as_str().to_string())
             } else {
                 first
             }
         }
         r => unexpected_rule!(r, line_pair),
-    })
+    }
 }
 
-fn parse_expression(expression_pair: pest::iterators::Pair<Rule>) -> Rc<Expression> {
+/// Parses a token representing an expression.
+///
+/// # Panics
+///
+/// This function panics if the token does not represent an expression.
+fn parse_expression(expression_pair: pest::iterators::Pair<Rule>) -> Expression {
     let mut whole_expression = expression_pair.into_inner();
     let expression = whole_expression.next().unwrap(); // Expression is always non-empty.
-    let expression_span = Span::from(&expression);
-    let mut rexp: Rc<Expression> = Rc::new(match expression.as_rule() {
-        Rule::constant => {
-            RExpression::Constant(expression.as_str().to_string(), (&expression).into())
-        }
-        Rule::identifier => {
-            RExpression::Variable(expression.as_str().to_string(), (&expression).into())
-        }
+    let mut rexp: Expression = match expression.as_rule() {
+        Rule::constant => Expression::Constant(expression.as_str().to_string()),
+        Rule::identifier => Expression::Variable(expression.as_str().to_string()),
         Rule::prefix => {
             let mut prefix_expression = expression.into_inner();
             let operator = prefix_expression.next().unwrap(); // Prefix always has operator.
             let exp = prefix_expression.next().unwrap(); // Prefix always has expression.
-            RExpression::Prefix(
+            Expression::Prefix(
                 operator.as_str().to_string(),
-                parse_expression(exp),
-                expression_span,
+                Box::new(parse_expression(exp)),
             )
         }
-        Rule::formula => {
-            RExpression::OneSidedFormula(parse_expression(expression), expression_span)
-        }
+        Rule::formula => Expression::OneSidedFormula(Box::new(parse_expression(expression))),
         Rule::function_definition => {
             let mut function = expression.into_inner();
             let args = function.next().unwrap(); // Function always has (possibly empty) arguments.
-            let args: Vec<(RIdentifier, Option<Rc<Expression>>)> = args
+            let args: Vec<(RIdentifier, Option<Expression>)> = args
                 .into_inner()
                 .map(|arg| {
                     match arg.as_rule() {
@@ -799,19 +592,19 @@ fn parse_expression(expression_pair: pest::iterators::Pair<Rule>) -> Rc<Expressi
                 })
                 .collect();
             let body = function.next().unwrap().into_inner(); // Function always has a body.
-            let body: Vec<Rc<Statement>> = body.map(parse_line).collect();
-            RExpression::Function(args, body, expression_span)
+            let body: Vec<Statement> = body.map(parse_line).collect();
+            Expression::Function(args, body)
         }
-        Rule::expression => Rc::try_unwrap(parse_expression(expression)).unwrap(), // We are the sole owners.
+        Rule::expression => parse_expression(expression),
         r => unexpected_rule!(r, expression),
-    });
+    };
 
-    // Process all indexing expressions that follow.
+    // Process all binary operators that follow.
+    // This process is due to the workaround for preventing left-recursion for these binary operators in the parser.
     for infix in whole_expression {
-        let infix_span = Span::from(&infix);
-        rexp = Rc::new(match infix.as_rule() {
+        rexp = match infix.as_rule() {
             Rule::function_call => parse_function_expression(rexp, infix),
-            Rule::column => RExpression::Column(rexp, parse_expression(infix), infix_span),
+            Rule::column => Expression::Column(Box::new(rexp), Box::new(parse_expression(infix))),
             Rule::index => {
                 let indices = infix
                     .into_inner()
@@ -821,7 +614,7 @@ fn parse_expression(expression_pair: pest::iterators::Pair<Rule>) -> Rc<Expressi
                         _ => unreachable!(),
                     })
                     .collect();
-                RExpression::Index(rexp, indices, infix_span)
+                Expression::Index(Box::new(rexp), indices)
             }
             Rule::list_index => {
                 let indices = infix
@@ -832,37 +625,40 @@ fn parse_expression(expression_pair: pest::iterators::Pair<Rule>) -> Rc<Expressi
                         _ => unreachable!(),
                     })
                     .collect();
-                RExpression::ListIndex(rexp, indices, infix_span)
+                Expression::ListIndex(Box::new(rexp), indices)
             }
             Rule::infix => {
                 let mut infix_operator = infix.into_inner();
                 let operator = infix_operator.next().unwrap(); // Operator is always present.
                 let right = infix_operator.next().unwrap(); // Infix operator always has right-hand side.
-                RExpression::Infix(
+                Expression::Infix(
                     operator.as_str().into(),
-                    rexp,
-                    parse_expression(right),
-                    infix_span,
+                    Box::new(rexp),
+                    Box::new(parse_expression(right)),
                 )
             }
             Rule::formula => {
-                RExpression::TwoSidedFormula(rexp, parse_expression(infix), infix_span)
+                Expression::TwoSidedFormula(Box::new(rexp), Box::new(parse_expression(infix)))
             }
             r => unexpected_rule!(r, infix),
-        });
+        };
     }
 
     rexp
 }
 
+/// Parse a token representing a function expression.
+///
+/// # Panics
+///
+/// This function panics if the token does not represent function expression.
 fn parse_function_expression(
-    expression: Rc<Expression>,
+    expression: Expression,
     function_pair: pest::iterators::Pair<Rule>,
 ) -> Expression {
-    let function_span = Span::from(&function_pair);
     let mut function = function_pair.into_inner();
     let maybe_arguments = function.next();
-    let args: Vec<(Option<RIdentifier>, Rc<Expression>)> = match maybe_arguments {
+    let args: Vec<(Option<RIdentifier>, Expression)> = match maybe_arguments {
         Some(args) => {
             args.into_inner()
                 .map(|arg| {
@@ -886,7 +682,7 @@ fn parse_function_expression(
         }
         None => vec![],
     };
-    RExpression::Call(expression, args, function_span)
+    Expression::Call(Box::new(expression), args)
 }
 
 #[cfg(test)]
@@ -894,151 +690,186 @@ mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
 
+    // Helper macros for succinctly defining expected ASTs.
+
     #[macro_export]
     macro_rules! empty {
         () => {
-            Rc::new(RStatement::Empty(()).into())
+            Statement::Empty
         };
     }
 
     #[macro_export]
     macro_rules! comment {
         ($text: literal) => {
-            Rc::new(RStatement::Comment($text.to_string(), ()).into())
+            Statement::Comment($text.to_string())
         };
     }
 
     #[macro_export]
     macro_rules! tail_comment {
         ($exp: expr, $text: literal) => {
-            Rc::new(RStatement::TailComment($exp, $text.to_string(), ()).into())
+            Statement::TailComment(Box::new($exp), $text.to_string())
         };
     }
 
     #[macro_export]
     macro_rules! assignment {
         ($left: expr, $additional: expr, $right: expr) => {
-            Rc::new(RStatement::Assignment($left, $additional, $right, ()).into())
+            Statement::Assignment($left, $additional, $right)
         };
     }
 
     #[macro_export]
     macro_rules! if_stmt {
         ($cond: expr, $body: expr, $else_body: expr) => {
-            Rc::new(RStatement::If($cond, $body, $else_body, ()).into())
+            Statement::If($cond, $body, $else_body)
         };
     }
 
     #[macro_export]
     macro_rules! while_stmt {
         ($cond:expr, $body: expr) => {
-            Rc::new(RStatement::While($cond, $body, ()).into())
+            Statement::While($cond, $body)
         };
     }
 
     #[macro_export]
     macro_rules! for_stmt {
         ($pattern:expr, $range:expr, $body:expr) => {
-            Rc::new(RStatement::For($pattern, $range, $body, ()).into())
+            Statement::For($pattern, $range, $body)
         };
     }
 
     #[macro_export]
     macro_rules! library {
         ($name:literal) => {
-            Rc::new(RStatement::Library($name.to_string(), ()).into())
+            Statement::Library($name.to_string())
         };
     }
 
     #[macro_export]
     macro_rules! expression {
         ($exp: expr) => {
-            Rc::new(RStatement::Expression($exp, ()).into())
+            Statement::Expression($exp)
         };
     }
 
     #[macro_export]
     macro_rules! constant {
         ($value: literal) => {
-            Rc::new(RExpression::Constant($value.to_string(), ()).into())
+            Expression::Constant($value.to_string())
         };
     }
 
     #[macro_export]
     macro_rules! variable {
         ($name: literal) => {
-            Rc::new(RExpression::Variable($name.to_string(), ()).into())
+            Expression::Variable($name.to_string())
         };
     }
 
     #[macro_export]
     macro_rules! call {
         ($exp: expr, $args: expr) => {
-            Rc::new(RExpression::Call($exp, $args, ()).into())
+            Expression::Call(Box::new($exp), $args)
         };
     }
 
     #[macro_export]
     macro_rules! column {
         ($left:expr, $right:expr) => {
-            Rc::new(RExpression::Column($left, $right, ()).into())
+            Expression::Column(Box::new($left), Box::new($right))
         };
     }
 
     #[macro_export]
     macro_rules! index {
         ($left:expr,$right:expr) => {
-            Rc::new(RExpression::Index($left, $right, ()).into())
+            Expression::Index(Box::new($left), $right)
         };
     }
 
     #[macro_export]
     macro_rules! list_index {
         ($left:expr, $right:expr) => {
-            Rc::new(RExpression::ListIndex($left, $right, ()).into())
+            Expression::ListIndex(Box::new($left), $right)
         };
     }
 
     #[macro_export]
     macro_rules! one_sided_formula {
         ($exp:expr) => {
-            Rc::new(RExpression::OneSidedFormula($exp, ()).into())
+            Expression::OneSidedFormula(Box::new($exp))
         };
     }
 
     #[macro_export]
     macro_rules! two_sided_formula {
         ($left:expr,$right:expr) => {
-            Rc::new(RExpression::TwoSidedFormula($left, $right, ()).into())
+            Expression::TwoSidedFormula(Box::new($left), Box::new($right))
         };
     }
 
     #[macro_export]
     macro_rules! function {
         ($params:expr, $body:expr) => {
-            Rc::new(RExpression::Function($params, $body, ()).into())
+            Expression::Function($params, $body)
         };
     }
 
     #[macro_export]
     macro_rules! prefix {
         ($op:literal,$exp:expr) => {
-            Rc::new(RExpression::Prefix($op.to_string(), $exp, ()).into())
+            Expression::Prefix($op.to_string(), Box::new($exp))
         };
     }
 
     #[macro_export]
     macro_rules! infix {
         ($op:literal, $left:expr,$right:expr) => {
-            Rc::new(RExpression::Infix($op.to_string(), $left, $right, ()).into())
+            Expression::Infix($op.to_string(), Box::new($left), Box::new($right))
         };
     }
 
-    fn assert_matches(code: &'static str, expected: Vec<Rc<RStatement<()>>>) {
-        let parsed = Parsed::parse(code).unwrap_or_else(|e| panic!("{}", e));
-        let actual: Vec<Rc<RStatement<()>>> =
-            parsed.iter().map(|stmt| stmt.map(&mut |_| ())).collect();
-        assert_eq!(expected, actual);
+    /// Assert that the parsed result of `code` matches the `expected` AST.
+    fn assert_matches(code: &'static str, expected: Vec<Statement>) {
+        let actual: Vec<Statement> = parse_statements(code)
+            .unwrap_or_else(|e| panic!("{}", e))
+            .into_iter()
+            .map(|(stmt, _)| stmt)
+            .collect();
+        assert_eq!(expected, actual, "Failed using parse_statements");
+
+        let mut parsed = Parsed::new();
+        parsed.append(code.lines().collect());
+        let actual_parsed: Vec<Statement> = parsed
+            .into_statements()
+            .into_iter()
+            .map(|(stmt, _)| stmt)
+            .collect();
+        let expected: Vec<Statement> = expected.into_iter().flat_map(clean_for_parsed).collect();
+        assert_eq!(expected, actual_parsed, "Failed using Parsed.");
+    }
+
+    /// The line-by-line nature of `Parsed` leads to a slightly different AST without empty statements and without else statements.
+    /// This functions takes a statement and returns a collection of statement that satisfies these constraints.
+    fn clean_for_parsed(stmt: Statement) -> Vec<Statement> {
+        use Statement::*;
+        match stmt {
+            Empty => vec![],
+            If(condition, body, maybe_else_body) => {
+                if let Some(else_body) = maybe_else_body {
+                    let mut broken = vec![If(condition, body, None)];
+                    let mut else_body = else_body.into_iter().flat_map(clean_for_parsed).collect();
+                    broken.append(&mut else_body);
+                    broken
+                } else {
+                    vec![If(condition, body, None)]
+                }
+            }
+            _ => vec![stmt],
+        }
     }
 
     #[test]
@@ -1548,43 +1379,99 @@ while (TRUE)
         assert_matches(code, expected);
     }
 
+    mod ids {
+        use super::*;
+        use pretty_assertions::assert_eq;
+
+        #[test]
+        fn iter_ids_match_statement() {
+            let code = "\
+# First
+second <- 2
+third(second)";
+            let stmts =
+                parse_statements(code).unwrap_or_else(|e| panic!("Could not parse code:\n{}", e));
+            for (id, stmt, meta) in stmts.iter() {
+                let by_id = &stmts[id];
+                assert_eq!((&by_id.0, &by_id.1), (stmt, meta));
+            }
+        }
+
+        #[test]
+        fn batch_insert_ids_correspond_to_lines() {
+            let code = "\
+# First
+second <- 2
+if (third)
+    fourth()
+";
+            let mut parsed = Parsed::new();
+            let inserted = parsed.append(code.lines().collect());
+            assert_eq!(3, inserted.len());
+            assert_eq!(parsed.statements()[inserted[0]].0, comment!("# First"));
+            assert_eq!(
+                parsed.statements()[inserted[1]].0,
+                assignment!(variable!("second"), vec![], constant!("2"))
+            );
+            assert_eq!(
+                parsed.statements()[inserted[2]].0,
+                if_stmt!(
+                    variable!("third"),
+                    vec![expression!(call!(variable!("fourth"), vec![]))],
+                    None
+                )
+            );
+
+            let more_code = "\
+# Fifth
+sixth()";
+            let inserted = parsed.append(more_code.lines().collect());
+            assert_eq!(parsed.statements()[inserted[0]].0, comment!("# Fifth"));
+            assert_eq!(
+                parsed.statements()[inserted[1]].0,
+                expression!(call!(variable!("sixth"), vec![]))
+            );
+        }
+    }
+
     mod extracts_variable_name {
         use super::*;
         use pretty_assertions::assert_eq;
 
-        fn assert_matches(expected: Option<RIdentifier>, actual: Rc<RExpression<()>>) {
+        fn assert_matches(expected: Option<&'static str>, actual: Expression) {
             let actual_name = actual.extract_variable_name();
+            let expected = expected.map(|s| s.to_string());
             assert_eq!(expected, actual_name);
         }
 
         #[test]
         fn from_variable() {
             let name = variable!("x");
-            assert_matches(Some("x".to_string()), name);
+            assert_matches(Some("x"), name);
         }
 
         #[test]
         fn from_column() {
             let name = column!(variable!("x"), variable!("a"));
-            assert_matches(Some("x".to_string()), name);
+            assert_matches(Some("x"), name);
         }
 
         #[test]
         fn from_index() {
             let name = index!(variable!("x"), vec![Some(variable!("a"))]);
-            assert_matches(Some("x".to_string()), name);
+            assert_matches(Some("x"), name);
         }
 
         #[test]
         fn from_list_index() {
             let name = list_index!(variable!("x"), vec![Some(variable!("a"))]);
-            assert_matches(Some("x".to_string()), name);
+            assert_matches(Some("x"), name);
         }
 
         #[test]
         fn from_colnames() {
             let name = call!(variable!("colnames"), vec![(None, variable!("x"))]);
-            assert_matches(Some("x".to_string()), name);
+            assert_matches(Some("x"), name);
         }
 
         #[test]
@@ -1597,6 +1484,69 @@ while (TRUE)
         fn rejects_constant_in_column() {
             let name = column!(constant!("x"), variable!("a"));
             assert_matches(None, name);
+        }
+    }
+
+    mod line_span {
+        use super::*;
+        use pretty_assertions::assert_eq;
+
+        #[test]
+        fn associates_correct_line_number() {
+            let code = "\
+# First
+second <- 2
+if (third)
+    fourth()
+";
+            let stmts =
+                parse_statements(code).unwrap_or_else(|e| panic!("Failed to parse code:\n{}", e));
+            let spans: Vec<LineSpan> = stmts.into_iter().map(|(_, span)| span).collect();
+            assert_eq!(
+                vec![
+                    LineSpan { from: 1, to: 1 },
+                    LineSpan { from: 2, to: 2 },
+                    LineSpan { from: 3, to: 4 }
+                ],
+                spans
+            );
+        }
+
+        #[test]
+        fn successive_appends_remember_line_number() {
+            let code = "\
+# First
+second <- 2
+if (third)
+    fourth()
+";
+            let mut parsed = Parsed::new();
+            let inserted = parsed.append(code.lines().collect());
+            let spans: Vec<LineSpan> = inserted
+                .iter()
+                .map(|id| parsed.statements()[id].1.clone())
+                .collect();
+            assert_eq!(
+                vec![
+                    LineSpan { from: 1, to: 1 },
+                    LineSpan { from: 2, to: 2 },
+                    LineSpan { from: 3, to: 4 }
+                ],
+                spans
+            );
+
+            let more_code = "\
+# Fifth
+sixth()";
+            let inserted = parsed.append(more_code.lines().collect());
+            let spans: Vec<LineSpan> = inserted
+                .iter()
+                .map(|id| parsed.statements()[id].1.clone())
+                .collect();
+            assert_eq!(
+                vec![LineSpan { from: 5, to: 5 }, LineSpan { from: 6, to: 6 },],
+                spans
+            );
         }
     }
 }

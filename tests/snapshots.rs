@@ -4,7 +4,7 @@ use std::fs;
 use std::io::prelude::*;
 use std::path;
 
-use insta::assert_debug_snapshot_matches;
+use insta::assert_debug_snapshot;
 
 #[test]
 fn snapshots() {
@@ -64,7 +64,7 @@ fn test_snapshot(snapshot_path: &path::PathBuf, maybe_prefix: Option<&'static st
     let mut code = String::new();
     file.read_to_string(&mut code).unwrap();
 
-    let parsed = tractus::Parsed::parse(&code)
+    let parsed = tractus::parser::parse_statements(&code)
         .unwrap_or_else(|e| panic!("Parsing failed on file {}: {}", snapshot_path.display(), e));
     let file_stem = snapshot_path
         .as_path()
@@ -74,10 +74,11 @@ fn test_snapshot(snapshot_path: &path::PathBuf, maybe_prefix: Option<&'static st
     let snapshot_name = maybe_prefix
         .map(|prefix| format!("{}-{}", prefix, file_stem))
         .unwrap_or_else(|| file_stem.into_owned());
-    assert_debug_snapshot_matches!(format!("{}-parsed", snapshot_name), parsed);
-    let dependency_graph = tractus::DependencyGraph::from_input(parsed.iter().cloned());
-    assert_debug_snapshot_matches!(
+    assert_debug_snapshot!(format!("{}-parsed", snapshot_name), parsed);
+    let dependency_graph = tractus::DependencyGraph::from_input(&parsed);
+    let tree = tractus::HypothesisTree::new(&parsed, &dependency_graph);
+    assert_debug_snapshot!(
         format!("{}-dependencies", snapshot_name),
-        tractus::parse_hypothesis_tree(&dependency_graph)
+        tree.into_map(&mut |stmt_id| parsed[stmt_id].clone())
     );
 }

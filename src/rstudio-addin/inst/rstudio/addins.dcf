@@ -1,0 +1,4 @@
+Name: Tractus
+Description: Analyze code and show explorations.
+Binding: tractusAddin
+Interactive: true
