@@ -73,5 +73,7 @@ As a research prototype, unfortuntely Tractus currently comes with some caveats.
 - The custom R parser does not correctly handle all possible R code.
   - With `serve`, multi-line statements like typical `if`-`else` statements are not correctly detected.
   - Comments nested inside of statements are not supported. Only proper tail comments are supported. (E. g. `if (isOk()) # sanity check {...`)
+  - Nesting `if`-statements too deeply degrades performance considerably.
 - The websocket server does not close connections properly and might be inefficient.
 - RStudio does not offer access to the console, so the addin detects executed statements via the `history_database` file which might not always work correctly.
+- There is a bug in code block detection, where newlines do not create a new block.
