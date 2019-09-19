@@ -77,7 +77,7 @@ impl Display for Statement {
                 range,
                 display_lines(body)
             ),
-            Library(name) => write!(f, "{}", name),
+            Library(name) => write!(f, "library({})", name),
             Expression(exp) => write!(f, "{}", exp),
         }
     }
@@ -294,6 +294,17 @@ impl<M> Statements<M> {
                 .collect(),
         }
     }
+
+    pub fn as_map<F, N>(&self, mapping: &mut F) -> Vec<N>
+    where
+        F: FnMut(StatementId, &Statement, &M) -> N,
+    {
+        self.stmts
+            .iter()
+            .enumerate()
+            .map(|(idx, (s, m))| mapping(StatementId(idx), s, m))
+            .collect()
+    }
 }
 
 /// A stateful collection to which new lines can be added continuously.
@@ -343,7 +354,7 @@ impl<M: std::fmt::Debug> Parsed<M> {
                     let stmts = stmts.into_map(&mut |stmt, span| {
                         let first_unparsed_line = self.line_count - self.unparsed.len() + 1; // +1 because unparsed always contains the current line.
                         let shifted_span = span.shifted(first_unparsed_line);
-                        mapping(stmt, shifted_span)
+                        mapping(&stmt, shifted_span)
                     });
                     let mut new_ids = self.statements.concat(stmts);
                     self.unparsed.clear(); // We have parsed everything successfully.
@@ -1396,7 +1407,6 @@ if (third)
 ";
             let mut parsed = Parsed::new();
             let inserted = parsed.append(code.lines().collect());
-            dbg!(&parsed);
             assert_eq!(3, inserted.len());
             assert_eq!(parsed.statements()[inserted[0]].0, comment!("# First"));
             assert_eq!(

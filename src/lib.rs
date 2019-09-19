@@ -1,9 +1,10 @@
 #[macro_use]
 extern crate pest_derive;
 
-use std::ops::Deref;
+use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 
 pub mod dependency_graph;
 pub mod hypotheses;
@@ -12,7 +13,7 @@ pub mod parser;
 
 pub use crate::dependency_graph::DependencyGraph;
 pub use crate::hypotheses_tree::HypothesisTree;
-pub use crate::parser::{Expression, LineSpan, Parsed, Statement};
+pub use crate::parser::{Expression, LineSpan, Parsed, RIdentifier, Statement, StatementId};
 
 #[derive(Serialize, Deserialize, Default)]
 pub struct Tractus {
@@ -22,41 +23,64 @@ pub struct Tractus {
 
 #[derive(Serialize, Deserialize)]
 pub struct StatementMeta {
+    statement: String,
+    ast: serde_json::Value,
     expression: Option<String>,
     span: LineSpan,
-    statement: String,
-    assigned_variables: Vec<String>,
-    function_name: Option<String>,
+    assignment: Option<(Vec<RIdentifier>, String)>,
+    function_call: Option<(String, Vec<RIdentifier>)>,
     meta: serde_json::Value,
 }
 
 impl StatementMeta {
     fn with(stmt: &Statement, span: LineSpan, meta: serde_json::Value) -> Self {
-        let assigned_variables = if let parser::Statement::Assignment(left, add, _) = stmt.deref() {
-            let mut vs = vec![format!("{}", left)];
-            let mut addition: Vec<String> = add.iter().map(|v| format!("{}", v)).collect();
-            vs.append(&mut addition);
-            vs
-        } else {
-            vec![]
-        };
+        let assignment = break_down_assignment(stmt);
         let expression = stmt.expression();
-        let function_name = expression.and_then(|exp| extract_function_name(exp));
+        let function_call = expression.and_then(|exp| extract_function_name(exp));
         StatementMeta {
             expression: expression.map(|exp| format!("{}", exp)),
+            ast: serde_json::to_value(stmt).unwrap(),
             span,
             statement: format!("{}", stmt),
-            assigned_variables,
-            function_name,
+            assignment,
+            function_call,
             meta,
         }
     }
 }
 
-fn extract_function_name(expression: &parser::Expression) -> Option<String> {
+fn break_down_assignment(stmt: &Statement) -> Option<(Vec<RIdentifier>, String)> {
+    use Statement::*;
+    match stmt {
+        Assignment(left, add, expression) => {
+            let mut vs = vec![left
+                .extract_variable_name()
+                .unwrap_or_else(|| left.to_string())];
+            let mut addition: Vec<String> = add
+                .iter()
+                .map(|v| v.extract_variable_name().unwrap_or_else(|| v.to_string()))
+                .collect();
+            vs.append(&mut addition);
+            Some((vs, expression.to_string()))
+        }
+        TailComment(inner, _) => break_down_assignment(inner),
+        Empty
+        | Comment(_)
+        | If(_, _, _)
+        | While(_, _)
+        | For(_, _, _)
+        | Library(_)
+        | Expression(_) => None,
+    }
+}
+
+fn extract_function_name(expression: &parser::Expression) -> Option<(String, Vec<RIdentifier>)> {
     use parser::Expression::*;
     match expression {
-        Call(name, _) => name.extract_variable_name(),
+        Call(name, args) => name.extract_variable_name().map(|name| {
+            let arg_vars = args.iter().flat_map(|(_, exp)| exp.extract_variable_name()).collect();
+            (name, arg_vars)
+        }),
         Column(left, _) => extract_function_name(&left),
         Index(left, _) => extract_function_name(&left),
         _ => None,
@@ -91,11 +115,17 @@ impl Tractus {
         Ok(())
     }
 
-    pub fn hypotheses_tree(&self) -> HypothesisTree<StatementMeta> {
-        let tree = HypothesisTree::new(self.parsed.statements(), &self.dependency_graph);
-        tree.into_map(|stmt_id| {
-            let (statement, (span, meta)) = &self.parsed.statements()[stmt_id];
-            StatementMeta::with(&statement, span.clone(), meta.clone())
+    pub fn hypotheses_tree(&self) -> HypothesisTree<StatementId> {
+        HypothesisTree::new(self.parsed.statements(), &self.dependency_graph)
+    }
+
+    pub fn serialize(&self) -> serde_json::Value {
+        json!({
+            "statements": self.parsed.statements().as_map(
+                    &mut |id, stmt, (span, meta)| (id, StatementMeta::with(&stmt, span.clone(), meta.clone()))
+                ).into_iter().collect::<HashMap<StatementId, StatementMeta>>(),
+            "dependencies": self.dependency_graph.as_json(),
+            "hypothesis_tree": self.hypotheses_tree()
         })
     }
 }

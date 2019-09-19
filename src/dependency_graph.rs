@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use petgraph;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 
 use crate::parser::{Expression, RIdentifier, Statement, StatementId, Statements};
 
@@ -55,6 +56,24 @@ impl Graph {
             .cloned()
             .collect()
     }
+
+    fn serialize_nodes(&self) -> Vec<StatementId> {
+        self.graph.raw_nodes().iter().map(|n| n.weight).collect()
+    }
+
+    fn serialize_edges(&self) -> Vec<(StatementId, StatementId, Variable)> {
+        self.graph
+            .raw_edges()
+            .iter()
+            .map(|e| {
+                (
+                    *self.graph.node_weight(e.source()).unwrap(),
+                    *self.graph.node_weight(e.target()).unwrap(),
+                    e.weight.clone(),
+                )
+            })
+            .collect()
+    }
 }
 
 impl DependencyGraph {
@@ -82,21 +101,20 @@ impl DependencyGraph {
         &mut self,
         input: impl Iterator<Item = StatementId>,
         stmts: &Statements<M>,
-    ) -> Vec<StatementId> {
-        input
-            .filter_map(|id| self.insert(id, &stmts[id].0))
-            .collect::<Vec<StatementId>>()
+    ) {
+        for id in input {
+            self.insert(id, &stmts[id].0)
+        }
     }
 
     /// Inserts a single `StatementId` into the graph.
     ///
     /// Requires that the statment corresponding to the id can be looked up in `stmts`.
-    pub fn insert(&mut self, id: StatementId, statement: &Statement) -> Option<StatementId> {
+    pub fn insert(&mut self, id: StatementId, statement: &Statement) {
         use Statement::*;
         match statement {
             Expression(expression) => {
                 self.register_dependencies(id, expression);
-                Some(id)
             }
             Assignment(left, additional, right) => {
                 let first = [left.clone()];
@@ -112,10 +130,15 @@ impl DependencyGraph {
                     ),
                     };
                 }
-                Some(id)
             }
             TailComment(statement, _) => self.insert(id, statement),
-            _ => None,
+            // The following cannot have dependencies
+            Empty => self.graph.add_node(id),
+            Comment(_) => self.graph.add_node(id),
+            If(_, _, _) => self.graph.add_node(id),
+            While(_, _) => self.graph.add_node(id),
+            For(_, _, _) => self.graph.add_node(id),
+            Library(_) => self.graph.add_node(id),
         }
     }
 
@@ -237,6 +260,14 @@ impl DependencyGraph {
             ),
         }
     }
+
+    pub fn as_json(&self) -> serde_json::Value {
+        json!({
+            "nodes": self.graph.serialize_nodes(),
+            "edges": self.graph.serialize_edges(),
+            "variables": self.variables
+        })
+    }
 }
 
 /// Returns the names of the variables used in the `expression`.
@@ -250,7 +281,20 @@ fn extract_dependencies(expression: &Expression) -> Vec<RIdentifier> {
             .collect(),
         Column(left, _) => extract_dependencies(left),
         Index(left, _) => extract_dependencies(left),
-        _ => vec![],
+        ListIndex(left, _) => extract_dependencies(left),
+        Prefix(_, exp) => extract_dependencies(exp),
+        Infix(_, left, right) => {
+            let mut deps = extract_dependencies(left);
+            deps.append(&mut extract_dependencies(right));
+            deps
+        }
+        OneSidedFormula(exp) => extract_dependencies(exp),
+        TwoSidedFormula(left, right) => {
+            let mut deps = extract_dependencies(left);
+            deps.append(&mut extract_dependencies(right));
+            deps
+        }
+        Function(_, _) | Constant(_) => Vec::new(),
     }
 }
 
@@ -290,7 +334,7 @@ mod tests {
 
     use super::*;
     use crate::parser::{Expression, Statement};
-    use crate::{assignment, call, column, constant, expression, tail_comment, variable};
+    use crate::{assignment, call, column, constant, expression, infix, tail_comment, variable};
 
     impl Graph {
         fn from_ids(ids: impl Iterator<Item = StatementId>) -> Self {
@@ -487,6 +531,13 @@ mod tests {
         #[test]
         fn finds_index() {
             let expression = index!(variable!("x"), vec![Some(constant!("1"))]);
+            let result = extract_dependencies(&expression);
+            assert_eq!(vec!["x".to_string()], result);
+        }
+
+        #[test]
+        fn finds_infix() {
+            let expression = infix!("+", variable!("x"), constant!("10"));
             let result = extract_dependencies(&expression);
             assert_eq!(vec!["x".to_string()], result);
         }
