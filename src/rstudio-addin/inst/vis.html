@@ -531,6 +531,7 @@
             }
             let rootNode = d3.select("#hypothesis-tree").data([root]);
             makeNestedListItems(rootNode, data.statements, hypothesis_tree.hypotheses, hypothesis_tree.blocks);
+            updateSelectedHypotheses();
 
             Prism.highlightAll();
         }
