@@ -1,17 +1,15 @@
 # Tractus
-Dependency analyzer for R code that visualizes the decisions taken during exploratory programming.
-
-> Please note that this project is a research protoype. We focused on showcasing a broad range of features instead of fleshing out individual features. Nonetheless, we expect Tractus to work for common analyses.
+Tractus can analyze dependencies in R code and parse through source code to identify experiments and group them into hypotheses. It has three components: An RStudio addin, a parser, and a web app that visualizes the results of the parser. 
 
 # Usage
 ## Installation
-Currently, we do not provide prebuilt binaries. To build Tractus yourself, clone this repository, install [Rust](https://www.rust-lang.org/) using [rustup](https://rustup.rs/), and then from inside the folder of this README run:
+Currently, we do not provide prebuilt binaries. To build Tractus yourself, clone this repository, install [Rust](https://www.rust-lang.org/) using [rustup](https://rustup.rs/). Then, from the folder where this README file is, run the following bash command:
 ```
 cargo build --release
 ```
-The Tractus binary will be available at `./target/release/tractus`. You can copy it to a location of your pleasing and add it to your `PATH` such that it is available as simply `tractus`, as the following instructions assume.
+The Tractus binary will be available at `./target/release/tractus`. You can copy it to a location you find convenient, and add it to your `PATH` so that it is available as `tractus`. Note: The following instructions are based on the assumption that you have done this. 
 
-To install the RStudio addin, open the `./src/rstudio-addin/tractusAddin.Rproj` in RStudio and execute the menu entry `Build > Load All`. The addin should be available in the toolbar under `Addins` and called `Tractus`.
+To install the RStudio addin, open the `./src/rstudio-addin/tractusAddin.Rproj` in RStudio and execute the menu entry `Build > Load All`. The addin should then be available in the toolbar under `Addins` and called `Tractus`.
 
 ## Quickstart
 To watch the RStudio console, start Tractus in a terminal:
@@ -25,7 +23,7 @@ Then start the Tractus addin in RStudio by selecting in in the toolbar under `Ad
 > historyDatabaseOverride <- "<path to history_database>"
 > ```
 
-Starting the addin will open the job pane, but you can switch back to the console and begin executing code there. Note that the visualization shown in the viewer loads its dependencies from the web, so an internet connection is required.
+Starting the addin will open the job pane, but you can switch back to the console and begin executing code there. (We cannot instruct RStudio to do this automatically.) Note that the visualization shown in the viewer loads its dependencies from the web, so an internet connection is required.
 
 > If you want to restart Tractus, make sure that the addin's old job is stopped, by going to the job pane's overview. (In case you only see the addin's output, then click on the back arrow in the top left to get to the overview, where you can stop the old job.)
 
@@ -45,7 +43,7 @@ Further information with extended detail is available by running `tractus help`.
 
 # Development
 ## Integrate with Tractus
-To explain how to integrate new tools with Tractus, we explain how the provided RStudio addin interacts with Tractus.
+Here we explain how you can integrate new tools into Tractus. This requires how the RStudio addin interacts with Tractus.
 
 When Tractus is started using `tractus serve`, it starts a websocket server that listens on `ws://127.0.0.1:2794`. The RStudio addin starts a websocket client that connects to that address.
 
@@ -56,9 +54,10 @@ Whenever the RStudio addin detects that a new statement was executed in the cons
     "meta": { "result": "[1] Hello, World!" }
 }
 ```
-Since Tractus keeps the `meta` field associated to the statement, it will be available in the hypothesis tree, where the visualization can access it.
 
-The `meta` field can be filled with whatever data you like, and you can provide a custom visualization that uses your custom `meta` information. In this way, you can extend Tractus to work in a variety of environments.
+We refer to this as a hypothesis tree. Since Tractus keeps the `meta` field associated to the statement, it will be available in the hypothesis tree, where the visualization can access it.
+
+The `meta` field can be filled with whatever data you like (e.g., a special tag by the user), and you can provide a custom visualization that uses your custom `meta` information. In this way, you can extend Tractus to work in a variety of environments.
 
 ## Testing
 ```
@@ -68,12 +67,14 @@ cargo test
 [insta](https://docs.rs/insta/) is used for snapshot testing and is installed with `cargo install cargo-insta`. To [update the snapshots](https://docs.rs/insta/0.8.2/insta/#snapshot-updating), run `cargo insta test --review`.
 
 # Limitations
-As a research prototype, unfortuntely Tractus currently comes with some caveats.
+We developed Tractus to work for most R files, but not all. Also, there are some hard limitations imposed by the RStudio environment. This means, Tractus has some caveats:
 
-- The custom R parser does not correctly handle all possible R code.
+- The parser does not correctly handle R code with the following properties:
   - With `serve`, multi-line statements like typical `if`-`else` statements are not correctly detected.
-  - Comments nested inside of statements are not supported. Only proper tail comments are supported. (E. g. `if (isOk()) # sanity check {...`)
-  - Nesting `if`-statements too deeply degrades performance considerably.
-- The websocket server does not close connections properly and might be inefficient.
-- RStudio does not offer access to the console, so the addin detects executed statements via the `history_database` file which might not always work correctly.
-- There is a bug in code block detection, where newlines do not create a new block.
+  - Comments nested inside of statements are not supported. Only proper tail comments are supported. (E.g., `if (isOk()) # sanity check {...` is not supported.)
+  - Nesting `if`-statements too deeply works, but degrades performance immensely.
+- The websocket server may occasionally not close connections completely, and might be inefficient.
+- RStudio does not offer access to the console, so the addin detects executed statements via the `history_database` file which might not always work correctly. E.g., if there's a second RStudio, it won't always detect all the R code in the session. 
+- Code blocks are detected correctly when the comment is followed by one or more lines of code. But when a new line is interspersed into the lines of code, or between the comment and the lines of code, the detection is faulty. 
+- RStudio's viewer pane has certain limitations: It does not support autocomplete of HTML text boxes and doesn't allow copying text to clipboard.
+- We also made a design decision for the visualization in Tractus: In situations where there are multiple parent dependencies, we pick the chronologically recent parent to retain a tree structure. A directed acyclic graph reflects the multiple dependencies more precisely, but our tree representation is simpler, and reflects the source code more precisely.
