@@ -675,7 +675,7 @@ fn parse_function_expression(
                             let value = parse_expression(value);
                             (None, value)
                         }
-                        _ => unreachable!(),
+                        r => unexpected_rule!(r, arg),
                     }
                 })
                 .collect()
