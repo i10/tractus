@@ -69,12 +69,17 @@ cargo test
 # Limitations
 We developed Tractus to work for most R files, but not all. Also, there are some hard limitations imposed by the RStudio environment. This means, Tractus has some caveats:
 
+- Tractus currently does not capture graphic output. This is because RStudio does not provide an easy way to access graphic outputs. Doing this would require storing the output on the user's hard disk, retrieving it, and displaying it in the web app.
 - The parser does not correctly handle R code with the following properties:
   - With `serve`, multi-line statements like typical `if`-`else` statements are not correctly detected.
   - Comments nested inside of statements are not supported. Only proper tail comments are supported. (E.g., `if (isOk()) # sanity check {...` is not supported.)
   - Nesting `if`-statements too deeply works, but degrades performance immensely.
+  - Tractus detects a few ways of subsetting and selecting data, but not all ways. This is a tradeoff we made to be able to build the app in a reasonable time, and used the results of the parser validation to identify the prominent ways to subset and select data.
 - The websocket server may occasionally not close connections completely, and might be inefficient.
-- RStudio does not offer access to the console, so the addin detects executed statements via the `history_database` file which might not always work correctly. E.g., if there's a second RStudio, it won't always detect all the R code in the session. 
-- Code blocks are detected correctly when the comment is followed by one or more lines of code. But when a new line is interspersed into the lines of code, or between the comment and the lines of code, the detection is faulty. 
+- RStudio does not offer access to the console, so the addin detects executed statements via the `history_database` file which might not always work correctly. E.g., if there's a second RStudio, it won't always detect all the R code in the session.
+- Navigating the R code using the visualization, i.e., clicking on a node in the visualization to select the corresponding statement in R script file, is not possible in this version of Tractus. This is because (a) selecting statements in an R script file that is open on RStudio requires using rstudioapi via the RStudio addin, (b) the RStudio addin should be run asynchronously for it to not block the R session, and (c) we cannot run the RStudio addin asynchronously because it needs to listen to the websocket for input.
+  - In the previous version of Tractus, attached as a supplement, navigation is possible, but the R session is blocked when the addin is running. 
+- Code blocks are detected correctly when the comment is followed by one or more lines of code. But when a new line is interspersed into the lines of code, or between the comment and the lines of code, the detection is faulty.
+- Tractus visualizes blocks even if the entire block is commented out, since it currently does not detect if the entire block is a block comment for the next block or if it just code that is commented out.
 - RStudio's viewer pane has certain limitations: It does not support autocomplete of HTML text boxes and doesn't allow copying text to clipboard.
 - We also made a design decision for the visualization in Tractus: In situations where there are multiple parent dependencies, we pick the chronologically recent parent to retain a tree structure. A directed acyclic graph reflects the multiple dependencies more precisely, but our tree representation is simpler, and reflects the source code more precisely.
