@@ -13,8 +13,9 @@ assignment = { (expression ~ ("<-" | "<<-" | "=") ~ NEWLINE*)+ ~ expression}
 if_statement = { "if" ~ "(" ~ expression ~ ")" ~ block ~ (NEWLINE* ~ "else" ~ block)? }
 while_statement = { "while" ~ "(" ~ expression ~ ")" ~ block }
 for_statement = { "for" ~ "(" ~ expression ~ "in" ~ expression ~ ")" ~ block }
-block = { NEWLINE* ~ ("{" ~ NEWLINE* ~ lines ~ NEWLINE* ~ "}" | "(" ~ NEWLINE* ~ line ~ NEWLINE* ~ ")" | line) }
+block = { BREAK* ~ ("{" ~ NEWLINE* ~ lines ~ NEWLINE* ~ "}" | "(" ~ NEWLINE* ~ line ~ NEWLINE* ~ ")" | line) }
 
+interior_comment = _{ "#" ~ character* ~ NEWLINE }
 comment = @{ "#" ~ character* }
 character = _{ !NEWLINE ~ ANY }
 empty = @{ "" }
@@ -25,11 +26,11 @@ non_recursive = _{ function_definition | prefix | formula | constant | identifie
 recursive = _{ infix | indexing | formula | function_call }
 indexing = _{ (column | index | list_index) }
 column = { "$" ~ identifier }
-index = { "[" ~ (expression | empty) ~ ("," ~ (expression | empty))* ~ "]" }
+index = { "[" ~ (expression | empty) ~ ("," ~ (expression | empty))* ~ BREAK* ~ "]" }
 list_index = { "[[" ~ (expression | empty) ~ ("," ~ (expression | empty))* ~ "]]" }
 prefix = { prefix_character ~ expression }
 prefix_character = { "!" | "-" | "+" }
-infix = { infix_operator ~ NEWLINE* ~ expression }
+infix = { infix_operator ~ BREAK* ~ expression }
 infix_operator = { "<=" | ">=" | !"<-" ~ "<" | ">" | "==" | "!=" | "+" | "-" | "*" | "/" | "^" | "&&" | "||" | "&" | "|" | ":" | custom_infix_operator }
 custom_infix_operator = { "%" ~ (!("%" | WHITESPACE | NEWLINE) ~ ANY)* ~ "%" }
 
@@ -48,8 +49,9 @@ parameter = _{ parameter_with_default | required_parameter }
 required_parameter = { identifier }
 parameter_with_default = { identifier ~ "=" ~ expression }
 
-function_call = { "(" ~ NEWLINE* ~ arguments ~ NEWLINE* ~ ")" }
-arguments = { argument? ~ (NEWLINE* ~ "," ~ NEWLINE* ~ argument)* }
+BREAK = _{ NEWLINE | interior_comment }
+function_call = { "(" ~ BREAK* ~ arguments? ~ BREAK* ~ ")" }
+arguments = { argument ~ (BREAK* ~ "," ~ BREAK* ~ argument)* }
 argument = _{ named_argument | unnamed_argument }
 named_argument = { identifier ~ "=" ~ expression }
 unnamed_argument = { expression }
@@ -57,4 +59,4 @@ unnamed_argument = { expression }
 library = { "library(" ~ identifier ~ ")"}
 
 formula = { "~" ~ formula_right_side }
-formula_right_side = _{ expression ~ (infix_operator ~ expression)* }
+formula_right_side = _{BREAK* ~ expression ~ (BREAK* ~ infix_operator ~ expression)* }
