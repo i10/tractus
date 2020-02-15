@@ -49,11 +49,16 @@ fn test_snapshots_in(
         .collect();
     assert!(!snapshot_files.is_empty(), "No snapshot files were found!");
 
+    let mut failures = Vec::new();
     for snapshot_file in snapshot_files {
         let result = std::panic::catch_unwind(|| test_snapshot(&snapshot_file, maybe_prefix));
         if result.is_err() {
-            panic!("File {} failed.", snapshot_file.display())
+            failures.push(snapshot_file.display().to_string());
         }
+        }
+
+    if !failures.is_empty() {
+        panic!("{} files failed:\n{}", failures.len(), failures.join(", "));
     }
 
     Ok(())

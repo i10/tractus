@@ -3,8 +3,12 @@ library(foreach)
 library(stringr)
 
 read <- function() {
+    historyPath <- "~/.rstudio-desktop/history_database"
+    if (exists("historyDatabaseOverride")) {
+        historyPath <- historyDatabaseOverride
+    }
     # Read the current history database
-    history <- read.delim("~/.rstudio-desktop/history_database", header = FALSE, sep = "\r", quote=NULL)
+    history <- read.delim(historyPath, header = FALSE, sep = "\r", quote=NULL)
     history$V1
 }
 
