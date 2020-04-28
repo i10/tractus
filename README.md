@@ -7,7 +7,7 @@ Currently, we do not provide prebuilt binaries. To build Tractus yourself, clone
 ```
 cargo build --release
 ```
-The Tractus binary will be available at `./target/release/tractus`. You can copy it to a location you find convenient, and add it to your `PATH` so that it is available as `tractus`. Note: The following instructions are based on the assumption that you have done this. 
+The Tractus binary will be available at `./target/release/tractus`. You can copy it to a location you find convenient, and add it to your `PATH` so that it is available as `tractus`. Note: The following instructions assume you have done this and that the binary is available in the terminal as `tractus`.
 
 To install the RStudio addin, open the `./src/rstudio-addin/tractusAddin.Rproj` in RStudio and execute the menu entry `Build > Load All`. The addin should then be available in the toolbar under `Addins` and called `Tractus`.
 
