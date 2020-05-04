@@ -68,6 +68,11 @@
             margin-top: 0.5rem;
         }
 
+        #replacements>h2 {
+            font-size: 1rem;
+            margin-top: 1rem;
+        }
+
         #replacements {
             display: flex;
             flex-direction: column;
@@ -79,6 +84,10 @@
             display: flex;
             flex-direction: column;
             align-items: flex-start;
+        }
+
+        #replacements label+label {
+            margin-top: 1em;
         }
 
         #replacements>*+* {
@@ -752,11 +761,11 @@
             }
 
             d3.select("#replacements-dependent").selectAll("label").data(Array.from(dependent)).join("label")
-                .text(d => d).append("input").classed("hyp-replacement", true)
+                .text(d => "Replace \"" + d + "\" with").append("input").classed("hyp-replacement", true)
                 .attr("list", "replacement-list")
                 .attr("type", "text").attr("value", d => d).attr("name", d => d).attr("required", "true");
             d3.select("#replacements-independent").selectAll("label").data(Array.from(independent)).join("label")
-                .text(d => d).append("input").classed("hyp-replacement", true)
+                .text(d => "Replace \"" + d + "\" with").append("input").classed("hyp-replacement", true)
                 .attr("list", "replacement-list")
                 .attr("type", "text").attr("value", d => d).attr("name", d => d).attr("required", "true");
             let all_hyps = new Set(Object.values(data.hypothesis_tree.hypotheses).flatMap(h => h.hypothesis.flatMap(
