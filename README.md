@@ -1,6 +1,8 @@
 # Tractus
 Tractus can analyze dependencies in R code and parse through source code to identify experiments and group them into hypotheses. It has three components: An RStudio addin, a parser, and a web app that visualizes the results of the parser. 
 
+![][image-1]
+
 # Usage
 ## Installation
 Currently, we do not provide prebuilt binaries. To build Tractus yourself, clone this repository, install [Rust](https://www.rust-lang.org/) using [rustup](https://rustup.rs/). Then, from the folder where this README file is, run the following bash command:
@@ -83,3 +85,5 @@ We developed Tractus to work for most R files, but not all. Also, there are some
 - Tractus visualizes blocks even if the entire block is commented out, since it currently does not detect if the entire block is a block comment for the next block or if it just code that is commented out.
 - RStudio's viewer pane has certain limitations: It does not support autocomplete of HTML text boxes and doesn't allow copying text to clipboard.
 - We also made a design decision for the visualization in Tractus: In situations where there are multiple parent dependencies, we pick the chronologically recent parent to retain a tree structure. A directed acyclic graph reflects the multiple dependencies more precisely, but our tree representation is simpler, and reflects the source code more precisely.
+
+[image-1]: https://github.com/i10/tractus/blob/master/interface-blank-full.jpg "TRACTUS"
