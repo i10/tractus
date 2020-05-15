@@ -61,22 +61,37 @@
             content: " (currently nothing is selected)";
         }
 
-        #replacements>h1 {
+        #replacements>h1,
+        #replacements>h2 {
             font-size: 1.2rem;
             margin: 0;
+            margin-top: 0.5rem;
+        }
+
+        #replacements>h2 {
+            font-size: 1rem;
+            margin-top: 1.5rem;
+        }
+
+        #replacements>h1+h2 {
+            margin-top: 1rem;
         }
 
         #replacements {
             display: flex;
             flex-direction: column;
             margin-top: 1em;
-            margin-bottom: 0.5em;
+            margin-bottom: 1.5em;
         }
 
         #replacements label {
             display: flex;
             flex-direction: column;
             align-items: flex-start;
+        }
+
+        #replacements label+label {
+            margin-top: 1em;
         }
 
         #replacements>*+* {
@@ -742,14 +757,19 @@
             let hyps = hypIds.map(id => data.hypothesis_tree.hypotheses[id].hypothesis)
                 .flatMap(hyps => hyps.map(hyp => hyp.match(/(.+) ~ (.+)/)));
             let dependent = new Set([]);
+            let independent = new Set([]);
             //let independent = new Set([]);
             for (hyp of hyps) {
                 dependent.add(hyp[1]);
-                dependent.add(hyp[2]);
+                independent.add(hyp[2]);
             }
 
-            d3.select("#replacements").selectAll("label").data(Array.from(dependent)).join("label")
-                .text(d => d).append("input").classed("hyp-replacement", true)
+            d3.select("#replacements-dependent").selectAll("label").data(Array.from(dependent)).join("label")
+                .text(d => "Replace \"" + d + "\" with").append("input").classed("hyp-replacement", true)
+                .attr("list", "replacement-list")
+                .attr("type", "text").attr("value", d => d).attr("name", d => d).attr("required", "true");
+            d3.select("#replacements-independent").selectAll("label").data(Array.from(independent)).join("label")
+                .text(d => "Replace \"" + d + "\" with").append("input").classed("hyp-replacement", true)
                 .attr("list", "replacement-list")
                 .attr("type", "text").attr("value", d => d).attr("name", d => d).attr("required", "true");
             let all_hyps = new Set(Object.values(data.hypothesis_tree.hypotheses).flatMap(h => h.hypothesis.flatMap(
@@ -860,6 +880,10 @@
                 <div id="replacements" class="empty">
                     <datalist id="replacement-list"></datalist>
                     <h1>Variable replacements</h1>
+                    <h2>Dependent</h2>
+                    <div id="replacements-dependent"></div>
+                    <h2>Independent</h2>
+                    <div id="replacements-independent"></div>
                 </div>
                 <input type="submit" id="replace" value="Copy with replaced variables to clipboard"
                     disabled="true" /><span id="replace-copied">Copied!</span>
