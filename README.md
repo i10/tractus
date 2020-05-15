@@ -16,7 +16,19 @@ To install the RStudio addin, open the `./src/rstudio-addin/tractusAddin.Rproj` 
 ## Quickstart
 To watch the RStudio console, start Tractus in a terminal:
 ```
-tractus serve --store ./tractus
+tractus serve
+```
+
+The above command will watch the R session in a non-persistent manner, i.e., only program statements executed in the current R session will be parsed and visualized. If you want to use Tractus in a persistent manner, use the following command instead:
+
+```
+tractus serve  --store ./tractus
+```
+
+For more options, check out the command-line help for Tractus:
+
+```
+tractus --help
 ```
 
 Then start the Tractus addin in RStudio by selecting in in the toolbar under `Addins > Tractus`.
